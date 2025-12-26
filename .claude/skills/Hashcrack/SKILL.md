@@ -89,15 +89,13 @@ hashcrack teardown
 
 ## Attack Strategy
 
-The skill runs attacks in phases, from quick wins to comprehensive:
+The skill runs attacks in phases automatically:
 
-1. **Quick Wins** - rockyou.txt + best64.rule
-2. **Expanded Wordlist** - SecLists common passwords
-3. **Heavy Rules** - OneRuleToRuleThemAll
-4. **Mask Attacks** - Common patterns (?u?l?l?l?d?d?d?d)
-5. **Extended Masks** - Up to 8-10 characters mixed
+1. **Dictionary Attack** - rockyou.txt wordlist
+2. **Rules Attacks** - best66, dive, leetspeak, d3ad0ne rules
+3. **Brute Force** - Incremental masks up to 12 characters
 
-**Important**: True 24-character brute-force is computationally infeasible. Strategy focuses on intelligent wordlist/rule combinations.
+**Note**: Full 12+ character brute-force with full charset is impractical. Strategy uses intelligent patterns and limited charsets for longer passwords.
 
 ## Security
 

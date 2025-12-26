@@ -1,100 +1,103 @@
 # Teardown Workflow
 
-Destroy all Hashcrack infrastructure to save resources.
+Destroy Hashcrack infrastructure in stages when the user is satisfied.
 
 ## Trigger
 
-- "destroy"
-- "cleanup"
+- "destroy workers"
+- "destroy server"
 - "teardown hashcrack"
-- "delete infrastructure"
+- "cleanup"
 
-## Warning
+## Two-Stage Teardown Process
 
-**This action is irreversible!**
+**Stage 1: Destroy Workers** - When user is satisfied with cracking results
+**Stage 2: Destroy Server** - When user is satisfied after viewing results in Hashtopolis UI
 
-Teardown will:
-- Destroy all worker VMs
-- Destroy Hashtopolis server VM
-- Delete all data on those VMs
-- Remove Terraform state
+This allows the user to review results in the web UI before destroying everything.
 
-## Pre-Teardown Checklist
+---
 
-Before teardown, ensure:
+## Stage 1: Destroy Worker VMs
 
-- [ ] All jobs are complete
-- [ ] Results have been retrieved (`hashcrack results`)
-- [ ] Results are backed up if needed
-- [ ] User has approved destruction
+### When to Execute
+- All attack phases have completed
+- User confirms they are satisfied with cracking results
 
-## Execution Steps
+### Pre-Destroy Checklist
+- [ ] All tasks show 100% complete
+- [ ] User has reviewed cracked hashes count
+- [ ] User confirms: "destroy workers" or "I'm satisfied, destroy workers"
 
-### Step 1: Check for Active Jobs
-
-```bash
-hashcrack status
-```
-
-If jobs are in progress, warn user.
-
-### Step 2: Confirm with User
-
-```
-⚠ WARNING: This will destroy ALL hashcrack VMs and data!
-
-Resources to be destroyed:
-  - hashcrack-server (192.168.99.101)
-  - hashcrack-worker-1 (192.168.99.102)
-  - hashcrack-worker-2 (192.168.99.103)
-  - hashcrack-worker-3 (192.168.99.104)
-
-Continue? (yes/no)
-```
-
-### Step 3: Destroy Infrastructure
+### Execution
 
 ```bash
 cd ~/.claude/skills/Hashcrack/terraform
+
+# Set worker count to 0 and apply
+export TF_VAR_worker_count=0
+terraform apply -auto-approve
+```
+
+### Verify
+```bash
+terraform output worker_count
+# Should show: 0
+```
+
+**Server remains running** - User can still access Hashtopolis UI at http://<server-ip>:4200
+
+---
+
+## Stage 2: Destroy Hashtopolis Server
+
+### When to Execute
+- User has logged into Hashtopolis UI
+- User has viewed/exported cracked passwords
+- User confirms: "destroy server" or "I'm done, destroy everything"
+
+### Pre-Destroy Checklist
+- [ ] User has accessed Hashtopolis UI
+- [ ] User has viewed results in Lists → Show Cracked
+- [ ] User confirms they have what they need
+
+### Execution
+
+```bash
+cd ~/.claude/skills/Hashcrack/terraform
+
+# Full destroy
 terraform destroy -auto-approve
 ```
 
-### Step 4: Clean Environment Variables
+### Clean Environment Variables
 
 Remove from `.claude/.env`:
 - `HASHCRACK_SERVER_URL`
 - `HASHCRACK_API_KEY`
 - `HASHCRACK_ADMIN_PASSWORD`
 - `HASHCRACK_VOUCHER`
-- `HASHCRACK_CURRENT_HASHLIST`
-- `HASHCRACK_CURRENT_JOB`
 
-### Step 5: Verify Destruction
+### Verify
 
 ```bash
-# Confirm VMs are gone
 terraform show
 # Should show: No state
 ```
 
-## CLI Usage
+---
 
-```bash
-hashcrack teardown
-```
+## Quick Reference
 
-## Partial Teardown
+| User Says | Action |
+|-----------|--------|
+| "destroy workers" | Stage 1: Remove workers, keep server |
+| "I'm satisfied with cracking" | Stage 1: Remove workers, keep server |
+| "destroy server" | Stage 2: Remove server (full teardown) |
+| "I'm done viewing results" | Stage 2: Remove server (full teardown) |
+| "teardown everything" | Both stages in sequence |
 
-To keep the server but remove workers (cost savings):
-
-```bash
-hashcrack scale --workers 0
-```
-
-To pause workers without destroying:
-```bash
-# In Hashtopolis UI: Deactivate agents
-```
+---
 
 ## Recovery
 
@@ -103,18 +106,3 @@ If you accidentally teardown:
 1. Run `hashcrack deploy` again
 2. Re-submit hash jobs
 3. Previous results in `.env` are preserved
-
-## Cost Considerations
-
-**Pause vs Teardown:**
-
-| Action | Cost | Data |
-|--------|------|------|
-| Teardown | $0 | Lost (VMs deleted) |
-| Scale to 0 | Server only | Preserved |
-| Pause agents | Full infra | Preserved |
-
-Recommendation:
-- Short break (hours): Pause agents
-- Long break (days): Scale to 0
-- Job complete: Teardown

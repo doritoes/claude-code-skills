@@ -144,67 +144,77 @@ hashcat -a 7 -m 1000 hashes.txt ?d?d?d rockyou.txt
 
 ## Attack Strategy Phases
 
-The Hashcrack skill runs attacks in phases, from quick to comprehensive:
+The Hashcrack skill runs attacks in phases. **All phases run automatically in sequence.**
 
-### Phase 1: Quick Wins (5-30 min)
+### Phase 1: Dictionary Attack
 
-Fast attacks to catch low-hanging fruit.
+Straight rockyou.txt wordlist - catches common passwords.
 
 ```
 #HL# -a 0 rockyou.txt
-#HL# -a 0 -r best64.rule rockyou.txt
 ```
 
-**Expected Results**: 30-50% of weak passwords
+**Catches**: `P@$$w0rd`, `password123`, common leaked passwords
 
-### Phase 2: Expanded Wordlists (30 min - 2 hr)
+---
 
-Larger wordlists from SecLists.
+### Phase 2: Rules Attacks
 
-```
-#HL# -a 0 10-million-password-list-top-1000000.txt
-#HL# -a 0 -r best64.rule xato-net-10-million-passwords.txt
-```
-
-**Expected Results**: Additional 10-20%
-
-### Phase 3: Heavy Rules (2-8 hr)
-
-Comprehensive rule mutations.
+Comprehensive rule-based mutations to catch variations.
 
 ```
-#HL# -a 0 -r rockyou-30000.rule rockyou.txt
-#HL# -a 0 -r OneRuleToRuleThemAll.rule rockyou.txt
+# Best66 rules - fast, effective mutations
+#HL# -a 0 -r rules/best66.rule rockyou.txt
+
+# Dive rules - deep comprehensive mutations
+#HL# -a 0 -r rules/dive.rule rockyou.txt
+
+# Leetspeak rules - character substitutions
+#HL# -a 0 -r rules/leetspeak.rule rockyou.txt
+
+# d3ad0ne rules - aggressive mutations
+#HL# -a 0 -r rules/d3ad0ne.rule rockyou.txt
 ```
 
-**Expected Results**: Additional 5-15%
+**Catches**: `Butterfly123!`, `J@sonHouse`, `mi$tyHelp55`, `January2022`
 
-### Phase 4: Common Masks (1-4 hr)
+---
 
-Target common password patterns.
+### Phase 3: Brute Force (up to 12 characters)
 
-```
-# Company2024!
-#HL# -a 3 ?u?l?l?l?l?l?l?d?d?d?d?s
-
-# Password1
-#HL# -a 3 ?u?l?l?l?l?l?l?l?d
-
-# Summer2024
-#HL# -a 3 ?u?l?l?l?l?l?d?d?d?d
-```
-
-### Phase 5: Extended Brute Force (Days)
-
-Last resort - limited character sets.
+Incremental mask attacks from 1 to 12 characters.
 
 ```
-# 8 character lowercase
-#HL# -a 3 ?l?l?l?l?l?l?l?l
+# Incremental lowercase (1-12 chars)
+#HL# -a 3 --increment --increment-min=1 --increment-max=12 ?l?l?l?l?l?l?l?l?l?l?l?l
 
-# 8 character mixed (very slow)
-#HL# -a 3 ?a?a?a?a?a?a?a?a
+# Common patterns
+#HL# -a 3 ?u?l?l?l?l?l?l?d?d?d?d      # Ullllldddd (Summer2024)
+#HL# -a 3 ?l?l?l?l?l?l?l?l?d?d        # lllllllldd (password99)
+#HL# -a 3 ?u?l?l?l?l?l?l?l?l?d        # Ulllllllld (Password1)
+
+# Mixed alphanumeric incremental
+#HL# -a 3 --increment --increment-min=1 --increment-max=8 ?a?a?a?a?a?a?a?a
 ```
+
+**Catches**: `Ewug4`, `ieMuth6`, `covidsucks`, `returnofthejedi`, `sillywombat11`
+
+---
+
+### Phase 4: Hybrid Attacks (Optional)
+
+Combine wordlists with masks for compound passwords.
+
+```
+# Wordlist + 2-4 digits appended
+#HL# -a 6 rockyou.txt ?d?d
+#HL# -a 6 rockyou.txt ?d?d?d?d
+
+# Digits + wordlist prepended
+#HL# -a 7 ?d?d?d?d rockyou.txt
+```
+
+**Catches**: Passwords like `password2024`, `1234monkey`
 
 ## Keyspace Reality Check
 
