@@ -1,0 +1,66 @@
+---
+# Wordlists role - Download common wordlists and rules
+
+- name: Create wordlists directory
+  file:
+    path: "{{ wordlists_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Create rules directory
+  file:
+    path: "{{ rules_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Download rockyou.txt
+  get_url:
+    url: https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt
+    dest: "{{ wordlists_dir }}/rockyou.txt"
+    mode: '0644'
+  async: 600
+  poll: 10
+
+- name: Download common rules - best64
+  get_url:
+    url: https://raw.githubusercontent.com/hashcat/hashcat/master/rules/best64.rule
+    dest: "{{ rules_dir }}/best64.rule"
+    mode: '0644'
+
+- name: Download common rules - rockyou-30000
+  get_url:
+    url: https://raw.githubusercontent.com/hashcat/hashcat/master/rules/rockyou-30000.rule
+    dest: "{{ rules_dir }}/rockyou-30000.rule"
+    mode: '0644'
+
+- name: Download OneRuleToRuleThemAll
+  get_url:
+    url: https://raw.githubusercontent.com/NotSoSecure/password_cracking_rules/master/OneRuleToRuleThemAll.rule
+    dest: "{{ rules_dir }}/OneRuleToRuleThemAll.rule"
+    mode: '0644'
+  async: 300
+  poll: 10
+
+- name: Download d3ad0ne rule
+  get_url:
+    url: https://raw.githubusercontent.com/hashcat/hashcat/master/rules/d3ad0ne.rule
+    dest: "{{ rules_dir }}/d3ad0ne.rule"
+    mode: '0644'
+
+- name: List downloaded wordlists
+  find:
+    paths: "{{ wordlists_dir }}"
+    patterns: "*"
+  register: wordlists
+
+- name: List downloaded rules
+  find:
+    paths: "{{ rules_dir }}"
+    patterns: "*.rule"
+  register: rules
+
+- name: Display wordlist summary
+  debug:
+    msg: |
+      Wordlists: {{ wordlists.files | map(attribute='path') | list }}
+      Rules: {{ rules.files | map(attribute='path') | list }}

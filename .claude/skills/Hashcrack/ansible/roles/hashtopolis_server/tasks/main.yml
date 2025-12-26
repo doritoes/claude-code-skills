@@ -1,0 +1,66 @@
+---
+# Hashtopolis Server role - Docker-based deployment
+
+- name: Install Docker packages
+  apt:
+    name: "{{ docker_packages }}"
+    state: present
+
+- name: Start and enable Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Create Hashtopolis directory
+  file:
+    path: "{{ hashtopolis_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Deploy Docker Compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ hashtopolis_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart Hashtopolis
+
+- name: Pull Hashtopolis images
+  community.docker.docker_compose_v2:
+    project_src: "{{ hashtopolis_dir }}"
+    state: present
+    pull: always
+  register: compose_pull
+
+- name: Start Hashtopolis containers
+  community.docker.docker_compose_v2:
+    project_src: "{{ hashtopolis_dir }}"
+    state: present
+  register: compose_up
+
+- name: Wait for Hashtopolis to be ready
+  uri:
+    url: "http://localhost:{{ hashtopolis_port }}"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 30
+  delay: 10
+
+- name: Create systemd service for auto-start
+  template:
+    src: hashtopolis.service.j2
+    dest: /etc/systemd/system/hashtopolis.service
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Enable Hashtopolis service
+  systemd:
+    name: hashtopolis
+    enabled: yes
+
+- name: Display server info
+  debug:
+    msg: |
+      Hashtopolis server is running!
+      URL: https://{{ ansible_default_ipv4.address }}:{{ hashtopolis_port }}

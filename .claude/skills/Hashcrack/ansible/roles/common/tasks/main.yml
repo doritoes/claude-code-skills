@@ -1,0 +1,47 @@
+---
+# Common role - Base system configuration for all hosts
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install common packages
+  apt:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Set timezone to UTC
+  timezone:
+    name: UTC
+
+- name: Ensure NTP is configured
+  apt:
+    name: chrony
+    state: present
+
+- name: Start and enable chrony
+  systemd:
+    name: chrony
+    state: started
+    enabled: yes
+
+- name: Configure sysctl for performance
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { name: 'vm.swappiness', value: '10' }
+    - { name: 'net.core.somaxconn', value: '65535' }
+
+- name: Create project directory
+  file:
+    path: /opt/hashcrack
+    state: directory
+    mode: '0755'
+
+- name: Display host info
+  debug:
+    msg: "Configured {{ inventory_hostname }} ({{ ansible_default_ipv4.address }})"

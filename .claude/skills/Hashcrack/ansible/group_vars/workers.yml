@@ -1,0 +1,18 @@
+---
+# Hashcat Worker Variables
+
+# Agent configuration
+agent_dir: /opt/hashcrack/agent
+agent_service_name: hashtopolis-agent
+
+# Hashcat packages
+hashcat_packages:
+  - hashcat
+  - hashcat-data
+  - p7zip-full
+  - ocl-icd-libopencl1
+  - opencl-headers
+
+# Server connection (should be overridden)
+# hashtopolis_server_url: set via extra-vars
+# worker_voucher: set via extra-vars

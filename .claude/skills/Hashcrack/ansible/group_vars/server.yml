@@ -1,0 +1,24 @@
+---
+# Hashtopolis Server Variables
+
+# Docker configuration
+docker_packages:
+  - docker.io
+  - docker-compose-v2
+
+# Hashtopolis settings
+hashtopolis_dir: /opt/hashtopolis
+hashtopolis_port: 8080
+
+# Database settings (should be overridden with vault)
+hashtopolis_db_name: hashtopolis
+hashtopolis_db_user: hashtopolis
+# hashtopolis_db_password: set via extra-vars or vault
+
+# Admin settings (should be overridden)
+# hashtopolis_admin_user: set via extra-vars
+# hashtopolis_admin_password: set via extra-vars
+
+# Wordlist storage
+wordlists_dir: /opt/wordlists
+rules_dir: /opt/rules

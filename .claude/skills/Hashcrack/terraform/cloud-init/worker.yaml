@@ -1,0 +1,169 @@
+#cloud-config
+# Hashcat Worker - Cloud-Init Configuration
+# Ubuntu Server 24.04 LTS
+
+hostname: ${hostname}
+fqdn: ${hostname}.local
+manage_etc_hosts: true
+
+# Create user with SSH access
+users:
+  - name: ${ssh_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Update and install packages
+package_update: true
+package_upgrade: true
+
+packages:
+  - hashcat
+  - hashcat-data
+  - python3
+  - python3-pip
+  - python3-venv
+  - curl
+  - wget
+  - unzip
+  - htop
+  - vim
+  - net-tools
+  - p7zip-full
+  - ocl-icd-libopencl1
+  - opencl-headers
+
+# Write configuration files
+write_files:
+  # Agent installation script
+  - path: /opt/hashcrack/install-agent.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      AGENT_DIR="/opt/hashcrack/agent"
+      SERVER_URL="${server_url}"
+      VOUCHER="${voucher_code}"
+      WORKER_ID="${worker_id}"
+
+      echo "=== Installing Hashtopolis Agent ==="
+      echo "Server: $SERVER_URL"
+      echo "Worker ID: $WORKER_ID"
+
+      # Create agent directory
+      mkdir -p $AGENT_DIR
+      cd $AGENT_DIR
+
+      # Download latest agent
+      echo "Downloading Hashtopolis agent..."
+      curl -L -o hashtopolis.zip \
+        https://github.com/hashtopolis/agent-python/releases/latest/download/hashtopolis.zip
+
+      # Extract
+      unzip -o hashtopolis.zip
+
+      # Create configuration
+      cat > config.json << EOF
+      {
+        "url": "$SERVER_URL/api/server.php",
+        "voucher": "$VOUCHER"
+      }
+      EOF
+
+      echo "Agent installed successfully"
+
+  # Agent registration script (runs after server is ready)
+  - path: /opt/hashcrack/register-agent.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      AGENT_DIR="/opt/hashcrack/agent"
+      SERVER_URL="${server_url}"
+      MAX_ATTEMPTS=30
+
+      echo "=== Registering Hashtopolis Agent ==="
+
+      # Wait for server to be reachable
+      echo "Waiting for Hashtopolis server..."
+      for i in $(seq 1 $MAX_ATTEMPTS); do
+        if curl -sk "$SERVER_URL" > /dev/null 2>&1; then
+          echo "Server is reachable!"
+          break
+        fi
+        echo "Attempt $i/$MAX_ATTEMPTS - server not ready, waiting 30s..."
+        sleep 30
+      done
+
+      # Run the agent once to register
+      cd $AGENT_DIR
+      echo "Registering agent with server..."
+      python3 hashtopolis.zip --register
+
+      echo "Agent registered successfully"
+
+  # Systemd service for agent
+  - path: /etc/systemd/system/hashtopolis-agent.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Hashtopolis Agent
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=root
+      WorkingDirectory=/opt/hashcrack/agent
+      ExecStart=/usr/bin/python3 /opt/hashcrack/agent/hashtopolis.zip
+      Restart=always
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Worker info file
+  - path: /opt/hashcrack/worker-info.json
+    permissions: '0644'
+    content: |
+      {
+        "worker_id": ${worker_id},
+        "hostname": "${hostname}",
+        "server_url": "${server_url}",
+        "voucher": "${voucher_code}"
+      }
+
+# Run commands after boot
+runcmd:
+  # Create directories
+  - mkdir -p /opt/hashcrack/agent
+  - mkdir -p /opt/hashcrack/wordlists
+
+  # Install agent
+  - /opt/hashcrack/install-agent.sh
+
+  # Wait for server (give it time to start)
+  - sleep 120
+
+  # Register agent
+  - /opt/hashcrack/register-agent.sh || echo "Registration will retry via systemd"
+
+  # Enable and start agent service
+  - systemctl daemon-reload
+  - systemctl enable hashtopolis-agent.service
+  - systemctl start hashtopolis-agent.service
+
+  # Signal completion
+  - touch /var/run/cloud-init-complete
+
+final_message: |
+  Hashcat worker ${worker_id} provisioning complete!
+
+  Server: ${server_url}
+  Worker ID: ${worker_id}
+
+  Cloud-init completed at $TIMESTAMP

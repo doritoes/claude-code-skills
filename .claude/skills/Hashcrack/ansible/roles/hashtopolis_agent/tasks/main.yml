@@ -1,0 +1,70 @@
+---
+# Hashtopolis Agent role - Worker configuration
+
+- name: Install hashcat packages
+  apt:
+    name: "{{ hashcat_packages }}"
+    state: present
+
+- name: Create agent directory
+  file:
+    path: "{{ agent_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Download Hashtopolis agent
+  get_url:
+    url: https://github.com/hashtopolis/agent-python/releases/latest/download/hashtopolis.zip
+    dest: "{{ agent_dir }}/hashtopolis.zip"
+    mode: '0644'
+
+- name: Create agent configuration
+  template:
+    src: config.json.j2
+    dest: "{{ agent_dir }}/config.json"
+    mode: '0644'
+  notify: Restart agent
+
+- name: Create agent registration script
+  template:
+    src: register-agent.sh.j2
+    dest: "{{ agent_dir }}/register-agent.sh"
+    mode: '0755'
+
+- name: Create systemd service for agent
+  template:
+    src: hashtopolis-agent.service.j2
+    dest: /etc/systemd/system/{{ agent_service_name }}.service
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Wait for Hashtopolis server to be reachable
+  uri:
+    url: "{{ hashtopolis_server_url }}"
+    validate_certs: no
+    status_code: 200
+  register: server_check
+  until: server_check.status == 200
+  retries: 30
+  delay: 10
+  ignore_errors: yes
+
+- name: Register agent with server
+  command: "{{ agent_dir }}/register-agent.sh"
+  args:
+    creates: "{{ agent_dir }}/registered"
+  when: server_check.status == 200
+
+- name: Enable and start agent service
+  systemd:
+    name: "{{ agent_service_name }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Display worker info
+  debug:
+    msg: |
+      Hashcat worker configured!
+      Server: {{ hashtopolis_server_url }}
+      Agent directory: {{ agent_dir }}

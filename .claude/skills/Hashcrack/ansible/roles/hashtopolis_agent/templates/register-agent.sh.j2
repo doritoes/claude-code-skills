@@ -1,0 +1,15 @@
+#!/bin/bash
+# Register Hashtopolis agent with server
+
+set -e
+
+AGENT_DIR="{{ agent_dir }}"
+cd "$AGENT_DIR"
+
+echo "Registering agent with Hashtopolis server..."
+python3 hashtopolis.zip --register
+
+# Mark as registered
+touch "$AGENT_DIR/registered"
+
+echo "Agent registered successfully"

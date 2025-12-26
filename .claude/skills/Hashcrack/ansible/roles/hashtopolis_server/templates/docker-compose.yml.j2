@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.11
+    container_name: hashtopolis-db
+    environment:
+      MYSQL_ROOT_PASSWORD: {{ hashtopolis_db_password }}
+      MYSQL_DATABASE: {{ hashtopolis_db_name }}
+      MYSQL_USER: {{ hashtopolis_db_user }}
+      MYSQL_PASSWORD: {{ hashtopolis_db_password }}
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  hashtopolis:
+    image: hashtopolis/server:latest
+    container_name: hashtopolis
+    environment:
+      HTP_ADMIN_USER: {{ hashtopolis_admin_user }}
+      HTP_ADMIN_PASSWORD: {{ hashtopolis_admin_password }}
+      HTP_DB_HOST: db
+      HTP_DB_USER: {{ hashtopolis_db_user }}
+      HTP_DB_PASS: {{ hashtopolis_db_password }}
+      HTP_DB_DATABASE: {{ hashtopolis_db_name }}
+    ports:
+      - "{{ hashtopolis_port }}:80"
+    volumes:
+      - files:/var/www/hashtopolis/files
+      - import:/var/www/hashtopolis/import
+      - log:/var/www/hashtopolis/log
+      - {{ wordlists_dir }}:/wordlists:ro
+      - {{ rules_dir }}:/rules:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  files:
+  import:
+  log:
