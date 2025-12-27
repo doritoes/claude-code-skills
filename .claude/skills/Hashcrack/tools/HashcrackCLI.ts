@@ -18,6 +18,17 @@ import {
   getHashTypeName,
   HASH_TYPES,
 } from "./HashtopolisClient";
+import {
+  parseCredentialContent,
+  detectInputFormat,
+  extractHashes,
+  getUniqueHashes,
+  generateHashMapping,
+  ParseResult,
+  ParsedHash,
+} from "./InputParsers";
+import { CustomWordlistManager } from "./CustomWordlist";
+import { JohnClient } from "./JohnClient";
 
 // =============================================================================
 // Types and Interfaces
@@ -47,6 +58,7 @@ interface CrackOptions {
   type?: string;
   strategy?: "quick" | "comprehensive" | "thorough";
   name?: string;
+  skipCustomWordlist?: boolean;
 }
 
 // =============================================================================
@@ -468,6 +480,7 @@ async function teardown(): Promise<void> {
 
 async function crack(options: CrackOptions): Promise<void> {
   const env = loadEnv();
+  const config = getConfig();
 
   if (!env.HASHCRACK_SERVER_URL || !env.HASHCRACK_API_KEY) {
     throw new CLIError(
@@ -479,53 +492,148 @@ async function crack(options: CrackOptions): Promise<void> {
   console.log("║                  SUBMITTING HASH JOB                        ║");
   console.log("╚════════════════════════════════════════════════════════════╝\n");
 
-  // Read hashes
-  let hashes: string[];
+  // Read and parse input
+  let content: string;
   if (options.input) {
     if (!existsSync(options.input)) {
       throw new CLIError(`File not found: ${options.input}`);
     }
-    hashes = readFileSync(options.input, "utf-8")
-      .split("\n")
-      .map((h) => h.trim())
-      .filter((h) => h.length > 0);
+    content = readFileSync(options.input, "utf-8");
   } else {
     // Read from stdin
     printInfo("Reading hashes from stdin (paste and press Ctrl+D when done)...");
-    const stdin = readFileSync(0, "utf-8");
-    hashes = stdin
-      .split("\n")
-      .map((h) => h.trim())
-      .filter((h) => h.length > 0);
+    content = readFileSync(0, "utf-8");
   }
+
+  // Parse the input using format-aware parsers
+  const forceHashType = options.type
+    ? options.type.toLowerCase() in HASH_TYPES
+      ? HASH_TYPES[options.type.toLowerCase()]
+      : parseInt(options.type)
+    : undefined;
+
+  const parseResult = parseCredentialContent(content, forceHashType);
+
+  // Report parsing results
+  printInfo(`Detected format: ${parseResult.format}`);
+  printInfo(`Parsed ${parseResult.stats.valid} valid hashes from ${parseResult.stats.total} entries`);
+
+  if (parseResult.stats.disabled > 0) {
+    printInfo(`Skipped ${parseResult.stats.disabled} disabled/locked accounts`);
+  }
+
+  if (parseResult.stats.skipped > 0) {
+    printWarning(`Skipped ${parseResult.stats.skipped} invalid entries`);
+  }
+
+  // Show warnings
+  for (const warning of parseResult.warnings.slice(0, 5)) {
+    printWarning(warning);
+  }
+  if (parseResult.warnings.length > 5) {
+    printWarning(`... and ${parseResult.warnings.length - 5} more warnings`);
+  }
+
+  // Get unique hashes for submission
+  const hashes = getUniqueHashes(parseResult);
 
   if (hashes.length === 0) {
-    throw new CLIError("No hashes provided");
+    throw new CLIError("No valid hashes found in input");
   }
 
-  printInfo(`Loaded ${hashes.length} hashes`);
+  printSuccess(`${hashes.length} unique hashes ready for cracking`);
 
-  // Detect or use specified hash type
-  let hashTypeId: number;
-  if (options.type) {
-    const typeLower = options.type.toLowerCase();
-    if (typeLower in HASH_TYPES) {
-      hashTypeId = HASH_TYPES[typeLower];
-    } else {
-      hashTypeId = parseInt(options.type);
-      if (isNaN(hashTypeId)) {
-        throw new CLIError(`Unknown hash type: ${options.type}`);
+  // Use detected or specified hash type
+  let hashTypeId = parseResult.hashType;
+  if (options.type && !isNaN(forceHashType!)) {
+    hashTypeId = forceHashType!;
+  }
+
+  if (hashTypeId === 0 || hashTypeId === null) {
+    throw new CLIError(
+      "Could not determine hash type. Use --type to specify."
+    );
+  }
+
+  printInfo(`Hash type: ${getHashTypeName(hashTypeId) || "mode " + hashTypeId} (${hashTypeId})`);
+
+  // Save hash mapping for result correlation
+  const hashMapping = generateHashMapping(parseResult);
+  const mappingPath = resolve(config.skillDir, `data/mapping_${Date.now()}.json`);
+  try {
+    const mappingDir = resolve(mappingPath, "..");
+    if (!existsSync(mappingDir)) {
+      const { mkdirSync } = require("fs");
+      mkdirSync(mappingDir, { recursive: true });
+    }
+    writeFileSync(mappingPath, JSON.stringify(Object.fromEntries(hashMapping), null, 2));
+    printInfo(`Hash mapping saved to ${mappingPath}`);
+  } catch {
+    // Non-critical, continue without mapping
+  }
+
+  // Handle John the Ripper routing for unsupported hashcat hashes
+  if (parseResult.routing.john.length > 0) {
+    console.log("\n╔════════════════════════════════════════════════════════════╗");
+    console.log("║           JOHN THE RIPPER ROUTING DETECTED                 ║");
+    console.log("╚════════════════════════════════════════════════════════════╝\n");
+
+    printInfo(`${parseResult.routing.john.length} hashes require John the Ripper (yescrypt/scrypt)`);
+
+    const johnClient = new JohnClient();
+    const johnAvailable = await johnClient.isAvailable();
+
+    if (johnAvailable) {
+      printSuccess(`John the Ripper available (${johnClient.getVersion()})`);
+      printInfo("Starting local John the Ripper attack...\n");
+
+      try {
+        const johnResults = await johnClient.crack(parseResult.routing.john, {
+          format: "crypt",
+          incremental: false,
+        });
+
+        if (johnResults.length > 0) {
+          printSuccess(`John cracked ${johnResults.length} passwords`);
+
+          // Add to custom wordlist
+          const wordlistManager = new CustomWordlistManager();
+          for (const r of johnResults) {
+            wordlistManager.addPassword(r.password, "john-yescrypt");
+          }
+        }
+      } catch (error) {
+        printWarning(`John attack failed: ${(error as Error).message}`);
       }
+    } else {
+      printWarning("John the Ripper not available - cannot crack yescrypt hashes");
+      console.log(`
+To install John the Ripper:
+  Ubuntu/Debian: sudo apt install john
+  macOS:         brew install john
+  Windows:       Download from https://www.openwall.com/john/
+
+Or export hashes for external cracking:
+  hashcrack export-john --input ${options.input || "stdin"}
+`);
     }
-  } else {
-    const detected = detectHashType(hashes[0]);
-    if (detected === null) {
-      throw new CLIError(
-        "Could not auto-detect hash type. Use --type to specify."
-      );
+
+    // If no hashcat hashes, we're done
+    if (parseResult.routing.hashcat.length === 0) {
+      printInfo("No hashcat-compatible hashes to process");
+      return;
     }
-    hashTypeId = detected;
-    printInfo(`Auto-detected hash type: ${getHashTypeName(hashTypeId)} (${hashTypeId})`);
+
+    console.log("\n╔════════════════════════════════════════════════════════════╗");
+    console.log("║           CONTINUING WITH HASHCAT/HASHTOPOLIS              ║");
+    console.log("╚════════════════════════════════════════════════════════════╝\n");
+
+    // Update hashes to only include hashcat-compatible ones
+    hashes.length = 0;
+    for (const h of parseResult.routing.hashcat) {
+      hashes.push(h.hash);
+    }
+    printInfo(`${hashes.length} hashes will be sent to Hashtopolis`);
   }
 
   // Connect to Hashtopolis
@@ -551,9 +659,27 @@ async function crack(options: CrackOptions): Promise<void> {
   });
   printSuccess(`Hashlist created (ID: ${hashlistId})`);
 
+  // Check for custom wordlist
+  const wordlistManager = new CustomWordlistManager();
+  const hasCustomWordlist = wordlistManager.hasEntries();
+
+  if (hasCustomWordlist && !options.skipCustomWordlist) {
+    printInfo(`Custom wordlist available: ${wordlistManager.getStats().total} passwords`);
+
+    // Upload to server if not already done
+    try {
+      const fileId = await wordlistManager.uploadToServer(client);
+      if (fileId) {
+        printSuccess(`Custom wordlist uploaded to server (file ID: ${fileId})`);
+      }
+    } catch {
+      printWarning("Could not upload custom wordlist to server");
+    }
+  }
+
   // Create attack tasks based on strategy
   const strategy = options.strategy || "comprehensive";
-  const tasks = getAttackTasks(strategy, hashTypeId);
+  const tasks = getAttackTasks(strategy, hashTypeId, hasCustomWordlist && !options.skipCustomWordlist);
 
   printInfo(`Creating ${tasks.length} attack tasks (${strategy} strategy)...`);
 
@@ -590,9 +716,27 @@ async function crack(options: CrackOptions): Promise<void> {
 
 function getAttackTasks(
   strategy: string,
-  hashTypeId: number
+  hashTypeId: number,
+  useCustomWordlist: boolean = false
 ): Array<{ name: string; cmd: string; priority: number }> {
   const tasks: Array<{ name: string; cmd: string; priority: number }> = [];
+
+  // Custom wordlist first (highest priority) - these are previously cracked passwords
+  // that weren't in standard dictionaries. Fast to run, high success rate for local accounts.
+  if (useCustomWordlist) {
+    tasks.push({
+      name: "Custom - Previously Cracked",
+      cmd: "#HL# -a 0 custom_passwords.txt",
+      priority: 110,
+    });
+
+    // Also try with common rules
+    tasks.push({
+      name: "Custom + Rules - best64",
+      cmd: "#HL# -a 0 -r best64.rule custom_passwords.txt",
+      priority: 105,
+    });
+  }
 
   // Quick strategy - just rockyou
   tasks.push({
@@ -616,6 +760,13 @@ function getAttackTasks(
     priority: 80,
   });
 
+  // Common Windows password patterns
+  tasks.push({
+    name: "Mask - Season+Year (Winter2024!)",
+    cmd: "#HL# -a 3 ?u?l?l?l?l?l?d?d?d?d?s",
+    priority: 75,
+  });
+
   if (strategy === "comprehensive") return tasks;
 
   // Thorough - heavy rules and more masks
@@ -631,10 +782,24 @@ function getAttackTasks(
     priority: 40,
   });
 
+  // Combinator attack with common words
+  tasks.push({
+    name: "Combinator - darkweb top10k",
+    cmd: "#HL# -a 1 darkweb2017-top10000.txt darkweb2017-top10000.txt",
+    priority: 35,
+  });
+
   tasks.push({
     name: "Extended Masks",
     cmd: "#HL# -a 3 ?a?a?a?a?a?a?a?a",
     priority: 20,
+  });
+
+  // Brute force short passwords (1-6 chars)
+  tasks.push({
+    name: "Brute Force 1-6 chars",
+    cmd: "#HL# -a 3 -i --increment-min 1 --increment-max 6 ?a?a?a?a?a?a",
+    priority: 10,
   });
 
   return tasks;
@@ -730,6 +895,16 @@ async function results(): Promise<void> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   saveToEnv(`HASHCRACK_RESULTS_${timestamp}`, resultsB64);
 
+  // Add novel passwords to custom wordlist
+  printInfo("Checking for novel passwords to add to custom wordlist...");
+  const wordlistManager = new CustomWordlistManager();
+  const addResult = await wordlistManager.addFromCrackedResults(
+    cracked,
+    env.HASHCRACK_CURRENT_JOB || "unknown",
+    undefined,
+    false // Check against rockyou
+  );
+
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                    RESULTS SAVED                            ║
@@ -737,6 +912,12 @@ async function results(): Promise<void> {
 
   Cracked: ${cracked.length} passwords
   Saved to: .claude/.env (HASHCRACK_RESULTS_${timestamp})
+
+  Custom Wordlist:
+    - ${addResult.added} novel passwords added
+    - ${addResult.inRockyou} already in rockyou (not saved)
+    - ${addResult.skipped} duplicates skipped
+    - Total in custom list: ${wordlistManager.getStats().total}
 
   For security, passwords are NOT displayed here.
   Log in to Hashtopolis UI to view: ${env.HASHCRACK_SERVER_URL}
@@ -763,6 +944,75 @@ async function server(): Promise<void> {
 `);
 }
 
+async function wordlist(action: string, args: string[]): Promise<void> {
+  const wordlistManager = new CustomWordlistManager();
+
+  switch (action) {
+    case "stats": {
+      const stats = wordlistManager.getStats();
+      console.log(`
+╔════════════════════════════════════════════════════════════╗
+║                 CUSTOM WORDLIST STATS                       ║
+╚════════════════════════════════════════════════════════════╝
+
+  Total Entries: ${stats.total}
+  Created: ${stats.created}
+  Last Updated: ${stats.lastUpdated}
+  Sources: ${stats.sources.length > 0 ? stats.sources.join(", ") : "none"}
+  Path: ${wordlistManager.getWordlistPath()}
+`);
+      break;
+    }
+
+    case "import": {
+      if (!args[0]) {
+        throw new CLIError("Usage: hashcrack wordlist import <potfile>");
+      }
+      const result = await wordlistManager.addFromPotfile(args[0], args[1] || args[0]);
+      printSuccess(`Imported ${result.added} new passwords (${result.skipped} duplicates)`);
+      break;
+    }
+
+    case "export": {
+      if (!args[0]) {
+        throw new CLIError("Usage: hashcrack wordlist export <output-file>");
+      }
+      wordlistManager.exportTo(args[0]);
+      printSuccess(`Exported ${wordlistManager.getStats().total} passwords to ${args[0]}`);
+      break;
+    }
+
+    case "upload": {
+      const env = loadEnv();
+      if (!env.HASHCRACK_SERVER_URL || !env.HASHCRACK_API_KEY) {
+        throw new CLIError("Hashtopolis not configured");
+      }
+
+      const client = new HashtopolisClient({
+        serverUrl: env.HASHCRACK_SERVER_URL,
+        apiKey: env.HASHCRACK_API_KEY,
+      });
+
+      const fileId = await wordlistManager.uploadToServer(client);
+      if (fileId) {
+        printSuccess(`Wordlist uploaded to server (file ID: ${fileId})`);
+      } else {
+        printWarning("No passwords to upload or upload failed");
+      }
+      break;
+    }
+
+    case "clear": {
+      wordlistManager.clear();
+      printSuccess("Custom wordlist cleared");
+      break;
+    }
+
+    default:
+      throw new CLIError(`Unknown wordlist action: ${action}. Use: stats, import, export, upload, clear`);
+  }
+}
+
 // =============================================================================
 // CLI Help
 // =============================================================================
@@ -776,7 +1026,7 @@ function printHelp(): void {
 USAGE:
   hashcrack <command> [options]
 
-COMMANDS:
+INFRASTRUCTURE:
   setup               Check prerequisites and create Ubuntu template
 
   deploy              Deploy Hashtopolis infrastructure
@@ -786,32 +1036,52 @@ COMMANDS:
   scale               Scale workers up/down
     --workers N       Target worker count
 
-  crack               Submit hash job
-    --input FILE      Path to hash file
-    --type TYPE       Hash type (md5, ntlm, sha512crypt, etc.)
-    --strategy STR    Attack strategy: quick|comprehensive|thorough
-    --name NAME       Job name
-
-  status              Show current status
-  results             Save cracked results to .env
   server              Show server URL and credentials
   teardown            Destroy all infrastructure
 
+CRACKING:
+  crack               Submit hash job
+    --input FILE      Path to hash/credential file (auto-detects format)
+    --type TYPE       Hash type (md5, ntlm, sha512crypt, etc.)
+    --strategy STR    Attack strategy: quick|comprehensive|thorough
+    --name NAME       Job name
+    --skip-custom     Skip custom wordlist attack
+
+  status              Show current status
+  results             Save cracked results to .env and update custom wordlist
+
+CUSTOM WORDLIST:
+  wordlist stats      Show custom wordlist statistics
+  wordlist import     Import passwords from hashcat potfile
+  wordlist export     Export to file
+  wordlist upload     Upload to Hashtopolis server
+  wordlist clear      Clear all entries (caution!)
+
+SUPPORTED INPUT FORMATS:
+  - Linux shadow files (/etc/shadow)
+  - Windows SAM dumps (pwdump format: user:rid:lm:ntlm:::)
+  - Domain Controller dumps (secretsdump: DOMAIN\\user:rid:lm:ntlm:::)
+  - Plain hash lists (one hash per line)
+  - Hashcat potfiles (hash:plaintext)
+
 EXAMPLES:
   hashcrack deploy --workers 5
+  hashcrack crack --input /etc/shadow
+  hashcrack crack --input ntds.dit.ntds
   hashcrack crack --input hashes.txt --type ntlm
-  cat hashes.txt | hashcrack crack --type sha512crypt
+  cat pwdump.txt | hashcrack crack
+  hashcrack wordlist stats
   hashcrack scale --workers 10
-  hashcrack status
   hashcrack teardown
 
 HASH TYPES:
-  md5, sha1, sha256, sha512, sha512crypt, bcrypt,
-  ntlm, lm, netntlmv2, kerberos-tgs, etc.
+  md5, sha1, sha256, sha512, md5crypt, sha256crypt, sha512crypt,
+  bcrypt, ntlm, lm, netntlmv1, netntlmv2, kerberos-asrep, kerberos-tgs
 
 SECURITY:
   - Cracked passwords are NEVER displayed in terminal
   - Results are saved to .claude/.env (base64 encoded)
+  - Custom wordlist is gitignored (contains cracked passwords)
   - View actual passwords in Hashtopolis web UI
 `);
 }
@@ -873,6 +1143,7 @@ async function main(): Promise<void> {
           type: parseArg("type"),
           strategy: parseArg("strategy") as "quick" | "comprehensive" | "thorough",
           name: parseArg("name"),
+          skipCustomWordlist: args.includes("--skip-custom"),
         });
         break;
 
@@ -886,6 +1157,13 @@ async function main(): Promise<void> {
 
       case "server":
         await server();
+        break;
+
+      case "wordlist":
+        if (!args[1]) {
+          throw new CLIError("Usage: hashcrack wordlist <stats|import|export|upload|clear>");
+        }
+        await wordlist(args[1], args.slice(2));
         break;
 
       case "teardown":

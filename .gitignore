@@ -16,3 +16,8 @@ scratchpad/
 tfplan
 .terraform.lock.hcl
 
+# Hashcrack custom wordlists (contains cracked passwords)
+.claude/skills/Hashcrack/data/
+custom_passwords.txt
+custom_passwords.meta.json
+

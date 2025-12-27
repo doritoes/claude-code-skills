@@ -30,11 +30,15 @@ hashcrack setup
 # Deploy infrastructure
 hashcrack deploy --workers 3
 
-# Submit hash job
-hashcrack crack --input /path/to/hashes.txt --type ntlm
+# Submit hash job (auto-detects format!)
+hashcrack crack --input /etc/shadow
+hashcrack crack --input ntds.dit.ntds
+hashcrack crack --input pwdump.txt
+hashcrack crack --input hashes.txt --type ntlm
 
 # Or pipe directly
-cat hashes.txt | hashcrack crack --type ntlm
+cat shadow | hashcrack crack
+cat pwdump.txt | hashcrack crack
 
 # Monitor progress
 hashcrack status
@@ -42,8 +46,14 @@ hashcrack status
 # Scale workers mid-job
 hashcrack scale --workers 10
 
-# View results in Hashtopolis UI
+# View results (automatically builds custom wordlist)
+hashcrack results
+
+# View Hashtopolis UI
 hashcrack server
+
+# Manage custom wordlist
+hashcrack wordlist stats
 
 # Cleanup
 hashcrack teardown
@@ -73,6 +83,31 @@ hashcrack teardown
 | **Results** | "get results", "cracked passwords" | `workflows/Results.md` |
 | **Teardown** | "destroy", "cleanup", "teardown" | `workflows/Teardown.md` |
 
+## Supported Input Formats
+
+The skill automatically detects and parses various credential dump formats:
+
+| Format | Example | Auto-Detection |
+|--------|---------|----------------|
+| **Linux Shadow** | `root:$6$salt$hash:...` | Detects `$N$` prefix |
+| **Windows SAM (pwdump)** | `user:500:aad3b435:31d6cfe0:::` | RID + LM:NTLM pattern |
+| **NTDS.dit (secretsdump)** | `DOMAIN\user:500:aad3b435:31d6cfe0:::` | Domain\\ prefix |
+| **Plain Hashes** | `31d6cfe0d16ae931...` | Hex patterns |
+| **Hashcat Potfile** | `hash:plaintext` | hash:value format |
+
+### Shadow File Hash Types
+
+| Prefix | Algorithm | Cracker |
+|--------|-----------|---------|
+| `$1$` | MD5crypt | hashcat (Hashtopolis) |
+| `$2a$`/`$2b$` | bcrypt | hashcat (Hashtopolis) |
+| `$5$` | SHA-256crypt | hashcat (Hashtopolis) |
+| `$6$` | SHA-512crypt | hashcat (Hashtopolis) |
+| `$y$` | yescrypt | **John the Ripper** (local) |
+| `$7$` | scrypt | **John the Ripper** (local) |
+
+**Note**: Ubuntu 24.04+ uses yescrypt (`$y$`) by default. These hashes are automatically routed to John the Ripper when available.
+
 ## Supported Hash Types
 
 | Type | Hashcat Mode | Common Source |
@@ -80,22 +115,79 @@ hashcrack teardown
 | MD5 | 0 | Web applications |
 | SHA1 | 100 | Legacy systems |
 | SHA256 | 1400 | Modern hashing |
-| SHA512crypt | 1800 | Linux /etc/shadow |
+| MD5crypt | 500 | Legacy Linux |
+| SHA256crypt | 7400 | Modern Linux |
+| SHA512crypt | 1800 | Current Linux /etc/shadow |
 | NTLM | 1000 | Windows SAM/AD |
 | LM | 3000 | Legacy Windows |
 | bcrypt | 3200 | Modern web apps |
+| NetNTLMv1 | 5500 | Network captures |
 | NetNTLMv2 | 5600 | Network captures |
+| Kerberos AS-REP | 18200 | AD attacks |
 | Kerberos TGS | 13100 | AD attacks |
+
+## Custom Wordlist
+
+The skill maintains a custom wordlist of cracked passwords that weren't found using standard dictionary attacks (like rockyou). This provides **significant time savings** when auditing local accounts that may reuse passwords.
+
+### How It Works
+
+1. When you run `hashcrack results`, novel passwords are automatically extracted
+2. Passwords already in rockyou are skipped (no value in duplicating)
+3. Novel passwords are saved to `.claude/skills/Hashcrack/data/custom_passwords.txt`
+4. On subsequent cracks, custom wordlist is used **first** (priority 110)
+
+### Managing Custom Wordlist
+
+```bash
+# View statistics
+hashcrack wordlist stats
+
+# Import from existing potfile
+hashcrack wordlist import /path/to/hashcat.potfile
+
+# Export for external use
+hashcrack wordlist export /path/to/output.txt
+
+# Upload to Hashtopolis server
+hashcrack wordlist upload
+
+# Clear all entries
+hashcrack wordlist clear
+```
+
+### Why This Matters
+
+- Local accounts often reuse passwords across systems
+- Passwords cracked via rules/masks won't be in standard wordlists
+- Custom wordlist catches these in seconds on future audits
+- Builds organizational password intelligence over time
 
 ## Attack Strategy
 
-The skill runs attacks in phases automatically:
+The skill runs attacks in phases automatically with priority-based scheduling:
 
-1. **Dictionary Attack** - rockyou.txt wordlist
-2. **Rules Attacks** - best66, dive, leetspeak, d3ad0ne rules
-3. **Brute Force** - Incremental masks up to 12 characters
+### Quick Strategy
+| Priority | Attack | Description |
+|----------|--------|-------------|
+| 110 | Custom Wordlist | Previously cracked passwords (if available) |
+| 105 | Custom + Rules | Custom with best64 mutations |
+| 100 | rockyou.txt | Standard wordlist attack |
 
-**Note**: Full 12+ character brute-force with full charset is impractical. Strategy uses intelligent patterns and limited charsets for longer passwords.
+### Comprehensive Strategy (default)
+| Priority | Attack | Description |
+|----------|--------|-------------|
+| 110 | Custom Wordlist | Previously cracked passwords |
+| 105 | Custom + Rules | Custom with best64 mutations |
+| 100 | rockyou.txt | Standard wordlist |
+| 90 | rockyou + best64 | Wordlist with rule mutations |
+| 80 | Common Masks | `?u?l?l?l?l?l?d?d?d?d` pattern |
+| 75 | Season+Year | `Winter2024!` style patterns |
+
+### Thorough Strategy
+Adds combinator attacks, heavy rules (rockyou-30000, OneRule), and extended brute force.
+
+**Note**: Custom wordlist is automatically used first when available, providing fast wins on password reuse.
 
 ## Security
 
@@ -124,14 +216,56 @@ HASHCRACK_VOUCHER=
 - `HashtopolisAPI.md` - REST API endpoints and authentication
 - `AttackStrategies.md` - Detailed attack configurations and hash types
 
+## John the Ripper Integration
+
+For hash types not supported by hashcat (like yescrypt), the skill automatically routes to John the Ripper.
+
+### Automatic Routing
+
+When processing a shadow file with mixed hash types:
+```
+ubuntu:$6$...:...   → Hashtopolis (distributed)
+alpha:$y$...:...    → John the Ripper (local)
+```
+
+### Installation
+
+```bash
+# Ubuntu/Debian
+sudo apt install john
+
+# macOS
+brew install john
+
+# Windows
+# Download from https://www.openwall.com/john/
+```
+
+### Manual Usage
+
+```bash
+# Check if John is available
+bun JohnClient.ts check
+
+# Crack yescrypt hashes
+bun JohnClient.ts crack shadow.txt --format crypt
+
+# Show results
+bun JohnClient.ts show shadow.txt
+```
+
+**Limitation**: John runs locally, not distributed. For large yescrypt hash lists, consider dedicated GPU hardware.
+
 ## CLI Tools
 
 | Tool | Purpose |
 |------|---------|
-| `HashcrackCLI.ts` | Main orchestrator - deploy, crack, status, teardown |
+| `HashcrackCLI.ts` | Main orchestrator - deploy, crack, status, wordlist, teardown |
 | `HashtopolisClient.ts` | Hashtopolis REST API client library |
-| `InfraProvision.ts` | Terraform wrapper for infrastructure |
-| `JobMonitor.ts` | Real-time progress display |
+| `InputParsers.ts` | Credential format parsers (shadow, SAM, NTDS, pwdump) |
+| `CustomWordlist.ts` | Custom password list manager |
+| `JohnClient.ts` | John the Ripper integration for yescrypt/scrypt |
+| `CreateTemplate.ts` | Ubuntu template creation for XCP-ng |
 
 ## Infrastructure
 
@@ -157,14 +291,45 @@ HASHCRACK_VOUCHER=
 
 ## Examples
 
-### Crack NTLM hashes from a file
+### Crack Linux shadow file (auto-detected)
 ```bash
-hashcrack crack --input /pentest/ntlm_dump.txt --type ntlm --workers 5
+hashcrack crack --input /etc/shadow
+# Detected format: shadow
+# Hash type: sha512crypt (1800)
+# Parsed 42 valid hashes, skipped 3 disabled accounts
 ```
 
-### Crack Linux shadow hashes (piped)
+### Crack Windows domain dump (secretsdump output)
 ```bash
-cat /extracted/shadow | hashcrack crack --type sha512crypt
+hashcrack crack --input ntds.dit.ntds
+# Detected format: secretsdump
+# Hash type: ntlm (1000)
+# Parsed 15,847 valid hashes
+```
+
+### Crack SAM dump (pwdump format)
+```bash
+hashcrack crack --input sam_dump.txt
+# Detected format: pwdump
+# Hash type: ntlm (1000)
+```
+
+### Pipe credentials directly
+```bash
+cat /extracted/shadow | hashcrack crack
+cat pwdump.txt | hashcrack crack
+```
+
+### Custom wordlist management
+```bash
+# View stats
+hashcrack wordlist stats
+
+# Import from potfile
+hashcrack wordlist import /path/to/hashcat.potfile
+
+# Skip custom wordlist for this job
+hashcrack crack --input hashes.txt --skip-custom
 ```
 
 ### Scale up workers for faster cracking
@@ -175,14 +340,14 @@ hashcrack scale --workers 20
 ### Check job progress
 ```bash
 hashcrack status
-# Output: Job 42% complete | 12,847/30,000 cracked | Speed: 1.2 GH/s | ETA: 2h 15m
+# Output: Job 42% complete | 12,847/30,000 cracked | Speed: 1.2 GH/s
 ```
 
-### View Hashtopolis UI
+### View and save results
 ```bash
-hashcrack server
-# Output: Hashtopolis server: https://192.168.99.xxx:8080
-#         Login with admin credentials in .claude/.env
+hashcrack results
+# Cracked: 847 passwords
+# Custom Wordlist: 234 novel passwords added
 ```
 
 ## Legal Warning
