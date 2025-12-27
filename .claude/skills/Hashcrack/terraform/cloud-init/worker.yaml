@@ -25,6 +25,8 @@ packages:
   - python3
   - python3-pip
   - python3-venv
+  - python3-requests
+  - python3-psutil
   - curl
   - wget
   - unzip
@@ -44,7 +46,7 @@ write_files:
       #!/bin/bash
       set -e
 
-      AGENT_DIR="/opt/hashcrack/agent"
+      AGENT_DIR="/opt/hashtopolis-agent"
       SERVER_URL="${server_url}"
       VOUCHER="${voucher_code}"
       WORKER_ID="${worker_id}"
@@ -57,18 +59,18 @@ write_files:
       mkdir -p $AGENT_DIR
       cd $AGENT_DIR
 
-      # Download latest agent
-      echo "Downloading Hashtopolis agent..."
-      curl -L -o hashtopolis.zip \
-        https://github.com/hashtopolis/agent-python/releases/latest/download/hashtopolis.zip
+      # Download agent from GitHub (tar.gz, not zip)
+      echo "Downloading Hashtopolis agent v0.7.4..."
+      curl -sL https://github.com/hashtopolis/agent-python/archive/refs/tags/v0.7.4.tar.gz -o agent.tar.gz
+      tar xzf agent.tar.gz --strip-components=1
 
-      # Extract
-      unzip -o hashtopolis.zip
+      # Install Python dependencies system-wide
+      pip3 install requests psutil --break-system-packages 2>/dev/null || pip3 install requests psutil
 
-      # Create configuration
+      # Create configuration (use HTTP, not HTTPS)
       cat > config.json << EOF
       {
-        "url": "$SERVER_URL/api/server.php",
+        "url": "http://$SERVER_URL/api/server.php",
         "voucher": "$VOUCHER"
       }
       EOF
@@ -82,29 +84,29 @@ write_files:
       #!/bin/bash
       set -e
 
-      AGENT_DIR="/opt/hashcrack/agent"
+      AGENT_DIR="/opt/hashtopolis-agent"
       SERVER_URL="${server_url}"
       MAX_ATTEMPTS=30
 
       echo "=== Registering Hashtopolis Agent ==="
 
-      # Wait for server to be reachable
+      # Wait for server to be reachable (use HTTP)
       echo "Waiting for Hashtopolis server..."
       for i in $(seq 1 $MAX_ATTEMPTS); do
-        if curl -sk "$SERVER_URL" > /dev/null 2>&1; then
-          echo "Server is reachable!"
+        if curl -s "http://$SERVER_URL:8080/api/user.php" -X POST -H 'Content-Type: application/json' -d '{"section":"test","request":"connection"}' 2>/dev/null | grep -q SUCCESS; then
+          echo "Server API is ready!"
           break
         fi
         echo "Attempt $i/$MAX_ATTEMPTS - server not ready, waiting 30s..."
         sleep 30
       done
 
-      # Run the agent once to register
+      # Run the agent once to register (entry point is __main__.py)
       cd $AGENT_DIR
       echo "Registering agent with server..."
-      python3 hashtopolis.zip --register
+      timeout 60 python3 __main__.py || echo "Initial registration attempt complete"
 
-      echo "Agent registered successfully"
+      echo "Agent registration initiated"
 
   # Systemd service for agent
   - path: /etc/systemd/system/hashtopolis-agent.service
@@ -118,8 +120,8 @@ write_files:
       [Service]
       Type=simple
       User=root
-      WorkingDirectory=/opt/hashcrack/agent
-      ExecStart=/usr/bin/python3 /opt/hashcrack/agent/hashtopolis.zip
+      WorkingDirectory=/opt/hashtopolis-agent
+      ExecStart=/usr/bin/python3 /opt/hashtopolis-agent/__main__.py
       Restart=always
       RestartSec=30
 

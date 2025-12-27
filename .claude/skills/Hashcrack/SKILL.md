@@ -308,6 +308,14 @@ bun JohnClient.ts show shadow.txt
 
 ## Known Issues & Workarounds
 
+### Docker Images (IMPORTANT)
+- **Use `hashtopolis/backend` + `hashtopolis/frontend`** (NOT `hashtopolis/server`)
+- The old `hashtopolis/server` image does not exist
+- Environment variables for backend:
+  - `HASHTOPOLIS_DB_HOST`, `HASHTOPOLIS_DB_USER`, `HASHTOPOLIS_DB_PASS`, `HASHTOPOLIS_DB_DATABASE`
+  - `HASHTOPOLIS_ADMIN_USER`, `HASHTOPOLIS_ADMIN_PASSWORD`
+  - `HASHTOPOLIS_APIV2_ENABLE: 0` (disable broken API v2)
+
 ### API Version
 - **Use API v1** (`/api/user.php`), NOT API v2
 - API v2 returns 500 errors in Hashtopolis 0.14.x - routes not implemented
@@ -323,13 +331,21 @@ bun JohnClient.ts show shadow.txt
 ### Server URL
 - Use **HTTP** not HTTPS: `http://192.168.99.36:8080`
 - HTTPS requires valid certificates which cloud-init doesn't set up
+- Frontend UI available on port 4200
 
-### Agent Registration
-1. Cloud-init agent download sometimes fails (corrupt zip)
-   - **Fix**: Download manually from `https://github.com/hashtopolis/agent-python/archive/refs/tags/v0.7.4.zip`
-2. Agent token must be in `config.json` for systemd service
-   - Voucher-only config fails with EOFError
-3. Ubuntu 24.04 requires `pip install --break-system-packages`
+### Agent Setup
+1. **Download**: Use tar.gz from GitHub, not zip
+   - URL: `https://github.com/hashtopolis/agent-python/archive/refs/tags/v0.7.4.tar.gz`
+   - Extract with `tar xzf agent.tar.gz --strip-components=1`
+2. **Entry point**: `python3 __main__.py` (NOT `hashtopolis.zip`)
+3. **Dependencies**: `requests`, `psutil` - install system-wide for root service
+   - `pip3 install requests psutil --break-system-packages`
+4. **Config**: Use HTTP in URL, e.g., `http://SERVER_IP:8080/api/server.php`
+
+### Agent Stability
+- Use systemd service with `Restart=always` and `RestartSec=30`
+- WorkingDirectory must be `/opt/hashtopolis-agent`
+- Run as root to avoid permission issues with hashcat
 
 ### SSH Access
 - Use `ubuntu` user, NOT `pai`
@@ -339,12 +355,19 @@ bun JohnClient.ts show shadow.txt
 - Password is in container env, not hardcoded
 - Get password: `sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD`
 
+### Task Creation
+- **Do NOT insert tasks directly into database** - bypasses proper initialization
+- Use API for task creation (agents won't pick up DB-inserted tasks)
+- TaskWrapper connects tasks to hashlists in Hashtopolis 0.14.x
+- Keyspace must be calculated before chunks can be dispatched
+
 ### Task Dispatch Issues
-If agents report "No task available!" but tasks are assigned:
-1. Check agent tokens match database (`SELECT agentId, token FROM Agent`)
-2. Verify agent is in correct AccessGroup
+If agents report "No task available!" but tasks exist:
+1. Check agent is in correct AccessGroup (should auto-assign)
+2. Verify agent is trusted: `{section:"agent",request:"setTrusted",agentId:N,trusted:true}`
 3. Ensure files used in task are not marked `isSecret=1`
-4. Try mask attack first (no file dependencies) to verify basic functionality
+4. **Do NOT manually insert into Assignment table** - this is an anti-pattern
+5. Agents should auto-pick tasks from their AccessGroup
 
 ## Examples
 

@@ -57,19 +57,19 @@ write_files:
             timeout: 5s
             retries: 5
 
-        hashtopolis:
-          image: hashtopolis/server:latest
-          container_name: hashtopolis
+        backend:
+          image: hashtopolis/backend:latest
+          container_name: hashtopolis-backend
           environment:
-            HTP_ADMIN_USER: ${admin_user}
-            HTP_ADMIN_PASSWORD: ${admin_password}
-            HTP_DB_HOST: db
-            HTP_DB_USER: hashtopolis
-            HTP_DB_PASS: ${db_password}
-            HTP_DB_DATABASE: hashtopolis
+            HASHTOPOLIS_DB_HOST: db
+            HASHTOPOLIS_DB_USER: hashtopolis
+            HASHTOPOLIS_DB_PASS: ${db_password}
+            HASHTOPOLIS_DB_DATABASE: hashtopolis
+            HASHTOPOLIS_ADMIN_USER: ${admin_user}
+            HASHTOPOLIS_ADMIN_PASSWORD: ${admin_password}
+            HASHTOPOLIS_APIV2_ENABLE: 0
           ports:
             - "8080:80"
-            - "8443:443"
           volumes:
             - files:/var/www/hashtopolis/files
             - import:/var/www/hashtopolis/import
@@ -77,6 +77,17 @@ write_files:
           depends_on:
             db:
               condition: service_healthy
+          restart: unless-stopped
+
+        frontend:
+          image: hashtopolis/frontend:latest
+          container_name: hashtopolis-frontend
+          environment:
+            HASHTOPOLIS_BACKEND_URL: http://backend
+          ports:
+            - "4200:80"
+          depends_on:
+            - backend
           restart: unless-stopped
 
       volumes:
