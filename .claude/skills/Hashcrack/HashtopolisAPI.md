@@ -5,14 +5,14 @@ Complete reference for the Hashtopolis REST API used by the Hashcrack skill.
 ## API Versions
 
 Hashtopolis has two API versions:
-- **API v1** (Legacy): `/api/user.php` - Uses API key in request body
-- **API v2** (Current): `/api/v2/` - Uses JWT tokens with HTTP Basic Auth
+- **API v1**: `/api/user.php` - Uses API key in request body - **WORKING**
+- **API v2**: `/api/v2/` - Uses JWT tokens - **BROKEN in 0.14.x**
 
-The Docker deployment uses API v2 by default.
+> ⚠️ **IMPORTANT**: API v2 returns 500 errors in Hashtopolis 0.14.x. Use API v1.
 
 ---
 
-## API v2 Configuration (Recommended)
+## API v2 Configuration (NOT RECOMMENDED - BROKEN)
 
 - **Base Endpoint**: `http://<server>:8080/api/v2`
 - **Frontend**: `http://<server>:4200` (Angular UI)
@@ -61,12 +61,14 @@ curl -H 'Authorization: Bearer <current-token>' \
 
 ---
 
-## API v1 Configuration (Legacy)
+## API v1 Configuration (RECOMMENDED)
 
-- **Endpoint**: `https://<server>/api/user.php`
+- **Endpoint**: `http://<server>:8080/api/user.php`
 - **Method**: POST (all requests)
 - **Content-Type**: `application/json`
-- **Authentication**: API key in request body
+- **Authentication**: API key (`accessKey`) in request body
+
+> Use HTTP, not HTTPS. Cloud-init doesn't set up valid SSL certificates.
 
 ### Request Format
 
@@ -102,10 +104,11 @@ Upload hashes to crack.
   "request": "createHashlist",
   "accessKey": "your-api-key",
   "name": "Job-2025-12-25-001",
-  "hashTypeId": 1000,
+  "hashtypeId": 1000,
   "format": 0,
   "separator": ":",
   "isSalted": false,
+  "isSecret": false,
   "isHexSalt": false,
   "accessGroupId": 1,
   "data": "base64-encoded-hashes",
@@ -118,13 +121,16 @@ Upload hashes to crack.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | name | string | Descriptive name for the hashlist |
-| hashTypeId | int | Hashcat hash type (see Attack Strategies) |
+| hashtypeId | int | Hashcat hash type (see Attack Strategies) - NOTE: lowercase 't' |
 | format | int | 0 = text, 1 = binary |
 | separator | string | Field separator (usually ":") |
 | isSalted | bool | Whether hashes include salt |
+| **isSecret** | bool | **REQUIRED** - Set to false for agents to access |
 | isHexSalt | bool | Salt is hex encoded |
 | accessGroupId | int | Access group (1 = default) |
 | data | string | Base64-encoded hash data |
+
+> ⚠️ Missing `isSecret` parameter causes "Invalid query!" error
 
 **Response**:
 ```json
@@ -355,12 +361,14 @@ Trust agent to access sensitive data.
 ```json
 {
   "section": "agent",
-  "request": "setAgentTrusted",
+  "request": "setTrusted",
   "accessKey": "your-api-key",
   "agentId": 1,
-  "isTrusted": true
+  "trusted": true
 }
 ```
+
+> ⚠️ Parameter is `trusted`, NOT `isTrusted`. Request is `setTrusted`, NOT `setAgentTrusted`.
 
 ## File Operations
 
@@ -373,14 +381,18 @@ Trust agent to access sensitive data.
   "accessKey": "your-api-key",
   "filename": "rockyou.txt",
   "fileType": 0,
+  "source": "inline",
   "accessGroupId": 1,
-  "data": "base64-encoded-content"
+  "data": "base64-encoded-content",
+  "isSecret": false
 }
 ```
 
 **File Types**:
 - 0 = Wordlist
 - 1 = Rule file
+
+> ⚠️ Set `isSecret: false` explicitly, otherwise defaults to true and untrusted agents can't access
 
 ### List Files
 
@@ -441,10 +453,13 @@ Trust agent to access sensitive data.
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `Invalid access key` | Wrong/expired API key | Regenerate key in UI |
+| `Invalid access key` | Wrong/expired API key | Create key via database (see SKILL.md) |
+| `Invalid query!` | Missing required parameter | Check `isSecret` for hashlists/files |
 | `Invalid hashlist ID` | Hashlist doesn't exist | Create hashlist first |
 | `Hashtype not found` | Invalid hash type ID | Check hashcat modes |
 | `Agent not found` | Invalid agent ID | List agents to verify |
+| `500 Internal Server Error` | API v2 not implemented | Use API v1 (`/api/user.php`) |
+| `To change your own password...` | Can't change own password via API | Create new user instead |
 
 ## Rate Limiting
 

@@ -204,11 +204,23 @@ Adds combinator attacks, heavy rules (rockyou-30000, OneRule), and extended brut
 XO_HOST=192.168.99.206
 XO_USER=admin
 XO_PASSWORD=<password>
+SSH_PUBLIC_KEY=ssh-ed25519 AAAA... user@host
 
 # Hashtopolis (set after deployment)
-HASHCRACK_SERVER_URL=
-HASHCRACK_API_KEY=
-HASHCRACK_VOUCHER=
+# IMPORTANT: Use HTTP, not HTTPS
+HASHCRACK_SERVER_URL=http://<server_ip>:8080
+HASHCRACK_ADMIN_USER=hashcrack
+HASHCRACK_ADMIN_PASSWORD=<generated>
+HASHCRACK_API_KEY=<create via DB or UI>
+HASHCRACK_VOUCHER=<from terraform output>
+```
+
+### Creating API Key
+API keys must be created manually after deployment:
+```sql
+-- Via database
+INSERT INTO ApiKey (startValid, endValid, accessKey, accessCount, userId, apiGroupId)
+VALUES (0, 9999999999, 'PAI_<random_hex>', 0, 1, 1);
 ```
 
 ## Reference Documentation
@@ -280,14 +292,59 @@ bun JohnClient.ts show shadow.txt
 
 1. **Trust Agents**: In Hashtopolis UI → Agents → Set each agent to "Trusted"
    - Required for agents to receive tasks and download files
+   - API v1: `{"section":"agent","request":"setTrusted","agentId":1,"trusted":true}`
+   - Note: Parameter is `trusted`, NOT `isTrusted`
 
 2. **Allow Sensitive Information**: If hashlist is marked sensitive, agents must be trusted
    - Database: `UPDATE Agent SET isTrusted = 1;`
-   - API: Use `/api/v2/ui/agents/{id}` with `{"isTrusted": true}`
 
 3. **Delete Old Assignments**: When creating new tasks, clear old task assignments
    - Database: `DELETE FROM Assignment WHERE taskId = <old_task_id>;`
    - Otherwise agents may not pick up new tasks
+
+4. **Upload Wordlists First**: Wordlists must be uploaded to Hashtopolis as Files before use
+   - Local paths like `/opt/hashcrack/wordlists/rockyou.txt` don't work
+   - Upload via API or UI, then reference by filename in attack command
+
+## Known Issues & Workarounds
+
+### API Version
+- **Use API v1** (`/api/user.php`), NOT API v2
+- API v2 returns 500 errors in Hashtopolis 0.14.x - routes not implemented
+- API v1 uses `accessKey` in request body for authentication
+
+### API Parameter Gotchas
+| Endpoint | Required Parameter | Notes |
+|----------|-------------------|-------|
+| `createHashlist` | `isSecret: false` | Missing = "Invalid query!" error |
+| `addFile` | `isSecret: false` | Defaults to true, blocks untrusted agents |
+| `setTrusted` | `trusted: true` | NOT `isTrusted` |
+
+### Server URL
+- Use **HTTP** not HTTPS: `http://192.168.99.36:8080`
+- HTTPS requires valid certificates which cloud-init doesn't set up
+
+### Agent Registration
+1. Cloud-init agent download sometimes fails (corrupt zip)
+   - **Fix**: Download manually from `https://github.com/hashtopolis/agent-python/archive/refs/tags/v0.7.4.zip`
+2. Agent token must be in `config.json` for systemd service
+   - Voucher-only config fails with EOFError
+3. Ubuntu 24.04 requires `pip install --break-system-packages`
+
+### SSH Access
+- Use `ubuntu` user, NOT `pai`
+- Cloud-init creates `ubuntu` user with sudo access
+
+### Database Access
+- Password is in container env, not hardcoded
+- Get password: `sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD`
+
+### Task Dispatch Issues
+If agents report "No task available!" but tasks are assigned:
+1. Check agent tokens match database (`SELECT agentId, token FROM Agent`)
+2. Verify agent is in correct AccessGroup
+3. Ensure files used in task are not marked `isSecret=1`
+4. Try mask attack first (no file dependencies) to verify basic functionality
 
 ## Examples
 
