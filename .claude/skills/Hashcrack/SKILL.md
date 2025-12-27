@@ -225,6 +225,8 @@ VALUES (0, 9999999999, 'PAI_<random_hex>', 0, 1, 1);
 
 ## Reference Documentation
 
+- **Official Docs**: https://docs.hashtopolis.org/
+- **GitHub Wiki**: https://github.com/hashtopolis/server/wiki
 - `HashtopolisAPI.md` - REST API endpoints and authentication
 - `AttackStrategies.md` - Detailed attack configurations and hash types
 
@@ -288,23 +290,79 @@ bun JohnClient.ts show shadow.txt
 
 ## Critical Setup Requirements
 
-**After deploying workers, you MUST configure these settings in Hashtopolis:**
+### Correct Order of Operations for Secret Data
 
-1. **Trust Agents**: In Hashtopolis UI → Agents → Set each agent to "Trusted"
-   - Required for agents to receive tasks and download files
-   - API v1: `{"section":"agent","request":"setTrusted","agentId":1,"trusted":true}`
-   - Note: Parameter is `trusted`, NOT `isTrusted`
+**The secure approach**: Keep files and hashlists as secret (default), and trust agents to access them.
 
-2. **Allow Sensitive Information**: If hashlist is marked sensitive, agents must be trusted
-   - Database: `UPDATE Agent SET isTrusted = 1;`
+```
+1. Deploy infrastructure (server + workers)
+2. Wait for agents to register with server
+3. TRUST AGENTS FIRST (before creating tasks!)
+4. Upload wordlists/rules (they will be secret by default - this is OK)
+5. Create hashlists (they will be secret by default - this is OK)
+6. Create tasks with PRIORITY >= 10 (not 0!)
+7. Agents will now receive and process tasks
+```
 
-3. **Delete Old Assignments**: When creating new tasks, clear old task assignments
-   - Database: `DELETE FROM Assignment WHERE taskId = <old_task_id>;`
-   - Otherwise agents may not pick up new tasks
+### Step-by-Step Configuration
 
-4. **Upload Wordlists First**: Wordlists must be uploaded to Hashtopolis as Files before use
-   - Local paths like `/opt/hashcrack/wordlists/rockyou.txt` don't work
-   - Upload via API or UI, then reference by filename in attack command
+**1. Wait for Agents to Register** (2-5 minutes after deploy)
+```bash
+# Check agents via API
+curl -X POST http://SERVER:8080/api/user.php \
+  -H 'Content-Type: application/json' \
+  -d '{"section":"agent","request":"listAgents","accessKey":"YOUR_KEY"}'
+```
+
+**2. Trust All Agents** (CRITICAL - do this BEFORE uploading files!)
+```bash
+# Via API (for each agent)
+curl -X POST http://SERVER:8080/api/user.php \
+  -H 'Content-Type: application/json' \
+  -d '{"section":"agent","request":"setTrusted","accessKey":"YOUR_KEY","agentId":1,"trusted":true}'
+
+# Or via database (trust all at once)
+sudo docker exec hashtopolis-db mysql -u hashtopolis -p<password> \
+  -e "UPDATE hashtopolis.Agent SET isTrusted = 1;"
+```
+
+**3. Upload Wordlists** (they will be secret - trusted agents can access)
+```bash
+# Via API - file will be secret by default, which is correct
+curl -X POST http://SERVER:8080/api/user.php \
+  -H 'Content-Type: application/json' \
+  -d '{"section":"file","request":"addFile","accessKey":"YOUR_KEY",...}'
+
+# Verify file was written to disk
+sudo docker exec hashtopolis-backend ls -la /var/www/hashtopolis/files/
+```
+
+**4. Create Hashlist** (will be secret by default - trusted agents can access)
+
+**5. Create Task with Priority >= 10**
+```bash
+# IMPORTANT: Set priority to 10 or higher, NOT 0
+curl -X POST http://SERVER:8080/api/user.php \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "section":"task",
+    "request":"createTask",
+    "accessKey":"YOUR_KEY",
+    "name":"Wordlist Attack",
+    "hashlistId":1,
+    "attackCmd":"#HL# -a 0 rockyou.txt",
+    "priority":10,
+    ...
+  }'
+```
+
+### Why This Order Matters
+
+- **Files/hashlists default to secret** - this is the secure design
+- **Agents default to untrusted** - they cannot access secrets
+- **If you upload files BEFORE trusting agents**, tasks won't dispatch
+- **If task priority is 0**, tasks may not be picked up
+- **Trust agents FIRST**, then everything else works automatically
 
 ## Known Issues & Workarounds
 
@@ -324,9 +382,12 @@ bun JohnClient.ts show shadow.txt
 ### API Parameter Gotchas
 | Endpoint | Required Parameter | Notes |
 |----------|-------------------|-------|
-| `createHashlist` | `isSecret: false` | Missing = "Invalid query!" error |
-| `addFile` | `isSecret: false` | Defaults to true, blocks untrusted agents |
-| `setTrusted` | `trusted: true` | NOT `isTrusted` |
+| `createHashlist` | `isSecret` | Required field. Let it be `true` (secret) - trust agents instead |
+| `addFile` | - | Defaults to secret. Trust agents rather than trying to set `isSecret:false` |
+| `setTrusted` | `trusted: true` | NOT `isTrusted`. Request is `setTrusted`, NOT `setAgentTrusted` |
+| `createTask` | `priority: 10` | Must be >= 10, NOT 0. Priority 0 may prevent task dispatch |
+
+**Best Practice**: Don't fight the secret defaults. Trust your agents first, then secrets work automatically.
 
 ### Server URL
 - Use **HTTP** not HTTPS: `http://192.168.99.36:8080`
@@ -363,11 +424,103 @@ bun JohnClient.ts show shadow.txt
 
 ### Task Dispatch Issues
 If agents report "No task available!" but tasks exist:
-1. Check agent is in correct AccessGroup (should auto-assign)
-2. Verify agent is trusted: `{section:"agent",request:"setTrusted",agentId:N,trusted:true}`
-3. Ensure files used in task are not marked `isSecret=1`
-4. **Do NOT manually insert into Assignment table** - this is an anti-pattern
-5. Agents should auto-pick tasks from their AccessGroup
+
+1. **Trust agents first** - most common issue
+   ```bash
+   sudo docker exec hashtopolis-db mysql -u hashtopolis -p<password> \
+     -e "UPDATE hashtopolis.Agent SET isTrusted = 1;"
+   ```
+
+2. **Check task priority** - must be >= 10, not 0
+   ```sql
+   SELECT taskId, taskName, priority FROM Task;
+   -- If priority is 0, tasks won't dispatch
+   ```
+
+3. **Check TaskWrapper priority** - also must be > 0
+   ```sql
+   UPDATE TaskWrapper SET priority=100 WHERE priority=0;
+   ```
+
+4. **Verify agent is in correct AccessGroup** (usually auto-assigned to group 1)
+
+5. **Do NOT manually insert into Assignment table** - this is an anti-pattern
+
+### File Upload Issues
+Files may not be written to disk even after successful API response.
+
+**Workaround - Use docker cp:**
+```bash
+# Create wordlist locally
+echo "password
+123456
+qwerty" > /tmp/wordlist.txt
+
+# Copy to container (file ID from API response)
+sudo docker cp /tmp/wordlist.txt hashtopolis-backend:/var/www/hashtopolis/files/<fileId>
+
+# Verify file exists
+sudo docker exec hashtopolis-backend ls -la /var/www/hashtopolis/files/
+```
+
+**Note**: Files being secret is NOT the problem. Trust agents first (see Critical Setup Requirements).
+
+### Start Simple - Avoid Supertasks Initially
+**Recommendation**: Use basic tasks until the workflow is reliable, then introduce advanced features.
+
+| Feature | Complexity | Recommendation |
+|---------|------------|----------------|
+| Basic Task | Simple | ✅ Start here |
+| Pretask | Medium | Add after basics work |
+| Supertask | Advanced | Only after pretasks work |
+
+**Simple task creation pattern:**
+```bash
+# Create task directly linked to hashlist
+curl -X POST http://SERVER:8080/api/user.php \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "section":"task",
+    "request":"createTask",
+    "accessKey":"YOUR_KEY",
+    "name":"MD5-Wordlist",
+    "hashlistId":1,
+    "attackCmd":"#HL# -a 0 rockyou.txt",
+    "chunkTime":600,
+    "statusTimer":5,
+    "priority":10,
+    "maxAgents":0,
+    "isCpuTask":false,
+    "isSmall":true,
+    "crackerBinaryId":1,
+    "crackerBinaryTypeId":1
+  }'
+```
+
+### API Limitations Discovered
+1. **`runPretask`** - Does NOT exist as an API endpoint
+2. **`importSupertask`** - Requires many undocumented params (isCpuOnly, isSmall, masks)
+3. **File references** - Stored by fileId (integer), not filename on disk
+4. **Keyspace calculation** - Must happen via agent benchmark before task dispatch
+
+### Database Patterns for Recovery
+```sql
+-- Check all file references
+SELECT f.fileId, f.filename, f.isSecret, ft.taskId
+FROM File f LEFT JOIN FileTask ft ON f.fileId = ft.fileId;
+
+-- Check task wrapper to task mapping
+SELECT tw.taskWrapperId, tw.hashlistId, tw.priority, t.taskId, t.taskName
+FROM TaskWrapper tw LEFT JOIN Task t ON tw.taskWrapperId = t.taskWrapperId;
+
+-- Check chunk states (0=NEW, 4=ABORTED, 5=FINISHED)
+SELECT chunkId, taskId, state, agentId, progress
+FROM Chunk ORDER BY chunkId DESC LIMIT 10;
+
+-- Find stuck/orphaned tasks
+SELECT taskId, taskName, keyspace, keyspaceProgress, priority
+FROM Task WHERE keyspaceProgress < keyspace AND keyspace > 0;
+```
 
 ## Examples
 
