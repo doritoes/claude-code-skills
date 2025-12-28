@@ -317,6 +317,45 @@ During an audit, suggest worker scaling when it will meaningfully impact the 24-
 **Example recommendation:**
 > "We have 2 remaining hashes. One is 7-char brute forceable - with current 4 workers this will complete in ~20 minutes. The 11-char password needs rules. **Recommend: Stay at 4 workers** - scaling won't significantly help the rules attack, and the brute force will finish soon."
 
+### Intelligent Task Prioritization (PAI Enhancement)
+
+Hashtopolis uses static priority numbers. PAI should dynamically evaluate and reprioritize tasks based on value proposition:
+
+**Task Value Formula:**
+```
+Value = (Probability of Success × Hashes Remaining) / Time to Complete
+```
+
+**Priority Guidelines:**
+| Task Type | Value Proposition | Recommended Priority |
+|-----------|-------------------|---------------------|
+| Exhaustive BF (6-7 char) | Guaranteed success if password is that length | HIGH - will definitively crack or eliminate |
+| Wordlist (rockyou) | High probability, fast | HIGH - quick wins |
+| Wordlist + common rules | Good probability, moderate time | MEDIUM-HIGH |
+| Targeted masks (from hints) | Overfitted, narrow applicability | LOW - don't chase single passwords |
+| Long BF (8+ char) | Very low probability in 24h | LOW - only if time permits |
+
+**Avoid Overfitting:**
+- Don't create masks based on known/cracked passwords (that's cheating)
+- Generic patterns (word+digits, l33t speak) are OK
+- Specific patterns (J@son-style) waste compute on unlikely matches
+
+**Reprioritization During Audit:**
+```bash
+# Lower priority of overfitted tasks
+sudo docker exec hashtopolis-db mysql -u hashtopolis -p<password> -e "
+UPDATE hashtopolis.Task SET priority = 50 WHERE taskName LIKE '%pattern%';
+UPDATE hashtopolis.TaskWrapper SET priority = 50 WHERE taskWrapperId IN
+  (SELECT taskWrapperId FROM Task WHERE taskName LIKE '%pattern%');
+"
+```
+
+**PAI should proactively:**
+1. Review running tasks every 30 min
+2. Identify overfitted/low-value tasks consuming agents
+3. Suggest reprioritization to user
+4. Focus compute on exhaustive searches that eliminate possibilities
+
 ## Security
 
 - **NEVER display cracked passwords in terminal**
