@@ -248,6 +248,28 @@ Adds combinator attacks, heavy rules (rockyou-30000, OneRule), and extended brut
 
 **Note**: Custom wordlist is automatically used first when available, providing fast wins on password reuse.
 
+### Attack Escalation Philosophy
+
+For realistic password audits (24-hour window typical), escalate attacks in order of cost-effectiveness:
+
+| Phase | Attack Type | Target | Worker Scaling |
+|-------|-------------|--------|----------------|
+| 1 | Wordlists | Common passwords, leaked lists | 1-2 workers |
+| 2 | Wordlist + Rules | Mutations of common passwords | 2-4 workers |
+| 3 | Targeted Wordlists | Pop culture, company names, seasonal | 2-4 workers |
+| 4 | Heavy Rules | OneRuleToRuleThemAll, rockyou-30000 | 4+ workers |
+| 5 | Short Brute Force | 6-7 character exhaustive search | 4+ workers |
+| 6 | Hybrid Attacks | Wordlist + mask combinations | 4+ workers |
+| 7 | Long Brute Force | 8+ characters (time permitting) | Scale as needed |
+
+**Realistic Password Complexity:**
+- 6-7 char mixed case + digits: Crackable with brute force in hours with enough workers
+- 8-10 char with patterns: Crackable with smart rules (l33t speak, common substitutions)
+- 11+ char passphrases: Require targeted wordlists (movies, phrases) or hybrid attacks
+- Random 12+ char: Likely not crackable in 24 hours
+
+**Key Insight:** Most real passwords follow patterns. After cracking the easy ones, analyze patterns to create targeted attacks for the remaining hashes.
+
 ## Security
 
 - **NEVER display cracked passwords in terminal**
@@ -527,6 +549,56 @@ curl -X POST http://SERVER:8080/api/user.php \
 - Use systemd service with `Restart=always` and `RestartSec=30`
 - WorkingDirectory must be `/opt/hashtopolis-agent`
 - Run as root to avoid permission issues with hashcat
+
+### Python RecursionError Fix (Ubuntu 24.04 / Python 3.12)
+
+The Hashtopolis Python agent can hit `RecursionError: maximum recursion depth exceeded` during HTTP requests on Python 3.12. This is a cookiejar bug triggered during agent registration.
+
+**Symptoms:**
+```
+File "/usr/lib/python3.12/http/cookiejar.py", line 642, in eff_request_host
+    erhn = req_host = request_host(request)
+RecursionError: maximum recursion depth exceeded
+```
+
+**Fix:** Increase Python recursion limit in systemd service:
+```bash
+# Update /etc/systemd/system/hashtopolis-agent.service
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hashtopolis-agent
+ExecStart=/usr/bin/python3 -c "import sys; sys.setrecursionlimit(5000); exec(open('__main__.py').read())"
+Restart=always
+RestartSec=30
+```
+
+**Or manually apply fix:**
+```bash
+ssh ubuntu@WORKER_IP 'sudo bash -c "
+cat > /etc/systemd/system/hashtopolis-agent.service << EOF
+[Unit]
+Description=Hashtopolis Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hashtopolis-agent
+ExecStart=/usr/bin/python3 -c \"import sys; sys.setrecursionlimit(5000); exec(open(chr(95)+chr(95)+chr(109)+chr(97)+chr(105)+chr(110)+chr(95)+chr(95)+chr(46)+chr(112)+chr(121)).read())\"
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl restart hashtopolis-agent
+"'
+```
+
+**Why this works:** Python's default recursion limit (1000) is too low for the complex call stack in cookiejar.py when processing certain HTTP requests. Setting it to 5000 provides sufficient headroom.
 
 ### SSH Access
 - Use `ubuntu` user, NOT `pai`
@@ -927,6 +999,44 @@ When an agent stops working or reports "No task available!":
    ```bash
    ssh ubuntu@WORKER_IP 'echo "{\"url\": \"http://SERVER:8080/api/server.php\", \"voucher\": \"VOUCHER\"}" | sudo tee /opt/hashtopolis-agent/config.json && sudo systemctl restart hashtopolis-agent'
    ```
+
+### Voucher Management
+
+When workers are destroyed and recreated, vouchers may be invalidated.
+
+**Best practice: Pre-create reusable backup vouchers**
+```sql
+-- Create backup vouchers
+INSERT INTO RegVoucher (voucher, time) VALUES
+  ('PAI_BACKUP_1', UNIX_TIMESTAMP()),
+  ('PAI_BACKUP_2', UNIX_TIMESTAMP()),
+  ('PAI_BACKUP_3', UNIX_TIMESTAMP());
+
+-- Disable voucher deletion (make them reusable)
+UPDATE Config SET value = '0' WHERE item = 'voucherDeletion';
+```
+
+**Pros of reusable vouchers:**
+- No need to create new ones when rebuilding workers
+- Simpler recovery from failures
+- Pre-created backups available for emergencies
+
+**Cons of reusable vouchers:**
+- Security risk if voucher is leaked
+- Anyone with voucher can register agents
+- Less audit trail
+
+**Recovery when voucher is missing:**
+```bash
+# 1. Create new voucher in database
+ssh ubuntu@SERVER 'sudo docker exec hashtopolis-db mysql -u hashtopolis -p<password> \
+  -e "INSERT INTO RegVoucher (voucher, time) VALUES (\"NEW_VOUCHER\", UNIX_TIMESTAMP());"'
+
+# 2. Update all workers with new voucher
+for ip in WORKER_IPS; do
+  ssh ubuntu@$ip 'echo "{\"url\": \"http://SERVER:8080/api/server.php\", \"voucher\": \"NEW_VOUCHER\"}" | sudo tee /opt/hashtopolis-agent/config.json && sudo systemctl restart hashtopolis-agent'
+done
+```
 
 ### Recovering from Destroyed Workers
 

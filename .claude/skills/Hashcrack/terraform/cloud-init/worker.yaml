@@ -109,6 +109,8 @@ write_files:
       echo "Agent registration initiated"
 
   # Systemd service for agent
+  # Note: Uses increased Python recursion limit (5000) to work around Python 3.12 cookiejar bug
+  # that causes RecursionError during HTTP requests in the Hashtopolis agent
   - path: /etc/systemd/system/hashtopolis-agent.service
     permissions: '0644'
     content: |
@@ -121,7 +123,7 @@ write_files:
       Type=simple
       User=root
       WorkingDirectory=/opt/hashtopolis-agent
-      ExecStart=/usr/bin/python3 /opt/hashtopolis-agent/__main__.py
+      ExecStart=/usr/bin/python3 -c "import sys; sys.setrecursionlimit(5000); exec(open('__main__.py').read())"
       Restart=always
       RestartSec=30
 
