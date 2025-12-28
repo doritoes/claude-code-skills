@@ -1267,6 +1267,115 @@ aws configure
 | Network latency | Workers and server in same region/zone |
 | Authentication | Per-provider credentials in .env or terraform vars |
 
+### Graceful Worker Scale-Down
+
+**Never just destroy workers.** Proper scale-down sequence:
+
+1. **Identify worker to remove** (lowest priority tasks, idle, or oldest)
+2. **Stop dispatching new chunks** - Set agent inactive via API/DB
+3. **Wait for current chunk to complete** - Monitor agent's assigned chunks
+4. **Confirm chunk completion** - Verify state=5 (FINISHED) or state=0 (returned)
+5. **Remove agent from assignments** - `DELETE FROM Assignment WHERE agentId = X`
+6. **Deactivate agent** - `UPDATE Agent SET isActive = 0 WHERE agentId = X`
+7. **Destroy worker VM** - Terraform or cloud API
+
+```bash
+# Graceful scale-down script pattern
+AGENT_ID=5
+WORKER_IP=192.168.99.X
+
+# 1. Stop agent from taking new work
+sudo docker exec hashtopolis-db mysql -u hashtopolis -p<pw> -e "
+  UPDATE Agent SET isActive = 0 WHERE agentId = $AGENT_ID;"
+
+# 2. Wait for current work to finish (check every 30s)
+while true; do
+  CHUNKS=$(sudo docker exec hashtopolis-db mysql -u hashtopolis -p<pw> -sN -e "
+    SELECT COUNT(*) FROM Chunk WHERE agentId = $AGENT_ID AND state = 2;")
+  [ "$CHUNKS" -eq 0 ] && break
+  echo "Waiting for $CHUNKS chunks to complete..."
+  sleep 30
+done
+
+# 3. Clean up
+sudo docker exec hashtopolis-db mysql -u hashtopolis -p<pw> -e "
+  DELETE FROM Assignment WHERE agentId = $AGENT_ID;"
+
+# 4. Now safe to destroy worker
+terraform destroy -target=xenorchestra_vm.workers[$INDEX]
+```
+
+### GPU vs CPU Worker Management
+
+**Cloud unlocks GPU acceleration.** Manage mixed fleets intelligently:
+
+| Hash Type | CPU Speed | GPU Speed | Recommendation |
+|-----------|-----------|-----------|----------------|
+| MD5 | ~35 MH/s | ~25 GH/s | GPU (700x faster) |
+| NTLM | ~30 MH/s | ~20 GH/s | GPU (600x faster) |
+| SHA512crypt | ~10 KH/s | ~500 KH/s | GPU (50x faster) |
+| bcrypt | ~500 H/s | ~25 KH/s | GPU (50x faster) |
+
+**Fleet transition strategy:**
+1. Start with CPU workers (cheaper, faster to provision)
+2. Run initial wordlist attacks (I/O bound, CPU fine)
+3. When moving to brute force/rules, spin up GPU workers
+4. Spin down CPU workers as GPU workers come online
+5. Keep 1-2 CPU workers for light tasks (wordlist preprocessing)
+
+**GPU instance types by provider:**
+| Provider | Instance | GPU | Cost/hr (approx) |
+|----------|----------|-----|------------------|
+| AWS | g4dn.xlarge | T4 | $0.526 |
+| AWS | p3.2xlarge | V100 | $3.06 |
+| Azure | NC4as_T4_v3 | T4 | $0.526 |
+| GCP | n1-standard-4 + T4 | T4 | $0.35 + $0.35 |
+
+### Optimal Worker VM Sizing
+
+**CPU Workers (wordlists, light rules):**
+| Workload | vCPUs | RAM | Notes |
+|----------|-------|-----|-------|
+| Light | 2 | 4 GB | Wordlist attacks |
+| Medium | 4 | 8 GB | Rules, combinator |
+| Heavy | 8 | 16 GB | Heavy rules |
+
+**GPU Workers (brute force, heavy rules):**
+| Workload | vCPUs | RAM | GPU RAM | Notes |
+|----------|-------|-----|---------|-------|
+| Standard | 4 | 16 GB | 16 GB | T4, good balance |
+| High-end | 8 | 32 GB | 32 GB | V100/A100, max speed |
+
+**Key sizing insights:**
+- Hashcat is GPU-bound, not CPU-bound (4 vCPUs sufficient for GPU worker)
+- RAM needed for large wordlists (16GB minimum for rockyou + rules)
+- GPU RAM limits mask complexity (longer masks need more VRAM)
+- Network bandwidth matters for large file distribution
+
+### Region Selection Strategy
+
+**Cost optimization factors:**
+| Factor | Impact | Strategy |
+|--------|--------|----------|
+| Spot pricing | 60-90% savings | Use spot for workers, on-demand for server |
+| Regional pricing | 10-30% variance | Compare us-east-1, us-west-2, eu-west-1 |
+| Data transfer | $0.01-0.09/GB | Keep workers in same region as server |
+| GPU availability | Varies by region | Check spot capacity before selecting |
+
+**Recommended regions by provider:**
+| Provider | Primary | Backup | Notes |
+|----------|---------|--------|-------|
+| AWS | us-east-1 | us-west-2 | Best spot availability |
+| Azure | eastus | westus2 | Lowest GPU pricing |
+| GCP | us-central1 | us-east1 | Best preemptible capacity |
+
+**Region selection checklist:**
+1. Check spot/preemptible pricing for desired instance type
+2. Verify GPU instance availability
+3. Consider compliance (data residency requirements)
+4. Check current spot capacity (AWS Spot Advisor)
+5. Factor in your location (latency to manage infrastructure)
+
 ## Session Learnings Summary
 
 Quick reference for operational knowledge gained:
