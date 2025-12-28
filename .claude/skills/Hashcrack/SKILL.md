@@ -752,10 +752,12 @@ If agents report "No task available!" but tasks exist:
 
    **Fix:**
    ```bash
-   # Deactivate stale agent and reset its chunks
+   # Deactivate stale agent, reset chunks, AND remove task assignments
    sudo docker exec hashtopolis-db mysql -u hashtopolis -p<password> -e "
    -- Reset chunks assigned to stale agent
    UPDATE hashtopolis.Chunk SET state = 0, agentId = NULL WHERE agentId = STALE_ID AND state IN (2, 4);
+   -- Remove task assignments (this clears the agent count in UI)
+   DELETE FROM hashtopolis.Assignment WHERE agentId = STALE_ID;
    -- Deactivate stale agent
    UPDATE hashtopolis.Agent SET isActive = 0 WHERE agentId = STALE_ID;
    "
