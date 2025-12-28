@@ -70,7 +70,7 @@ write_files:
       # Create configuration (use HTTP, not HTTPS)
       cat > config.json << EOF
       {
-        "url": "http://$SERVER_URL/api/server.php",
+        "url": "http://$SERVER_URL:8080/api/server.php",
         "voucher": "$VOUCHER"
       }
       EOF

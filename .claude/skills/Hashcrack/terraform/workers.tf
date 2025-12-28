@@ -20,7 +20,7 @@ resource "xenorchestra_vm" "workers" {
     worker_id      = count.index + 1
     ssh_user       = var.ssh_user
     ssh_public_key = var.ssh_public_key
-    server_url     = "https://HASHTOPOLIS_SERVER:8080"  # Placeholder, configured by Ansible
+    server_url     = xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]  # Just IP, cloud-init adds http:// and port
     voucher_code   = local.voucher_code
   })
 

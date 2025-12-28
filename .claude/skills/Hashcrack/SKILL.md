@@ -163,6 +163,65 @@ hashcrack wordlist clear
 - Custom wordlist catches these in seconds on future audits
 - Builds organizational password intelligence over time
 
+## Passphrase Wordlist Sources
+
+Long passphrases (10+ chars) require specialized wordlists. Standard wordlists like rockyou focus on short passwords.
+
+### Recommended Sources
+
+| Source | Size | Best For | URL |
+|--------|------|----------|-----|
+| **initstring/passphrase-wordlist** | 20M | Movie quotes, song lyrics, book titles | [GitHub Releases](https://github.com/initstring/passphrase-wordlist/releases) |
+| **berzerk0/Probable-Wordlists** | 350GB | Real breach data, 8-40 char passwords | [GitHub](https://github.com/berzerk0/Probable-Wordlists) |
+| **SecLists Passwords** | Various | Common credentials, NCSC 100k | [GitHub](https://github.com/danielmiessler/SecLists/tree/master/Passwords) |
+| **CrackStation** | 15GB | Comprehensive breach compilation | [crackstation.net](https://crackstation.net/crackstation-wordlist-password-cracking-dictionary.htm) |
+
+### initstring/passphrase-wordlist Contents
+
+Compiled from multiple sources for passphrase cracking:
+- Wikipedia/Wiktionary articles
+- IMDB movie titles and quotes
+- Billboard music charts and artists
+- Famous book titles and phrases
+- Geographic location names
+- Urban Dictionary entries
+
+### Quick Download
+
+```bash
+# SecLists (common credentials)
+wget https://github.com/danielmiessler/SecLists/raw/master/Passwords/Common-Credentials/10k-most-common.txt
+
+# Passphrase wordlist (from releases)
+wget https://github.com/initstring/passphrase-wordlist/releases/download/v1.0/passphrases.txt.gz
+gunzip passphrases.txt.gz
+
+# Top 1000 long passwords (custom extraction from breaches)
+# Focus on 10+ char passwords that appear frequently
+```
+
+### Pattern-Based Learning
+
+After cracking passwords, analyze patterns to improve future attacks:
+
+| Cracked Password | Pattern | Rule to Create |
+|-----------------|---------|----------------|
+| `returnofthejedi` | Movie title (no spaces) | Pop culture wordlist |
+| `January2022` | Month + Year | Date patterns wordlist |
+| `P@$$w0rd` | L33t speak | `sa@ ss$ so0` rules |
+| `sillywombat11` | 2 words + 2 digits | Combinator + `$11` |
+| `Butterfly123!` | Word + 3 digits + special | `c $123 $!` |
+
+### Building Custom Passphrase Lists
+
+```bash
+# Extract long passwords from potfile
+awk -F: 'length($2) >= 10 {print $2}' hashcat.potfile > long_passwords.txt
+
+# Find most common patterns
+sort long_passwords.txt | uniq -c | sort -rn | head -100
+```
+
 ## Attack Strategy
 
 The skill runs attacks in phases automatically with priority-based scheduling:
@@ -286,7 +345,67 @@ bun JohnClient.ts show shadow.txt
 - **Server**: Ubuntu 24.04 LTS, Docker Compose (Hashtopolis containers)
 - **Workers**: Ubuntu 24.04 LTS, hashcat + Hashtopolis agent
 - **Provisioning**: Terraform (XenOrchestra provider)
-- **Configuration**: Ansible (roles for server, agents, wordlists)
+- **Configuration**: Cloud-init (embedded in terraform)
+
+## Deployment Timing Metrics
+
+Key SLAs for password audit planning:
+
+| Milestone | Target Time | Notes |
+|-----------|-------------|-------|
+| Server VM created | ~1 min | Terraform provision |
+| Server up + Hashtopolis ready | ~5-7 min | Docker pull + compose up |
+| First worker VM created | ~1 min | Parallel with server |
+| First agent registered | ~3-5 min | Cloud-init + agent install |
+| All agents ready (4 workers) | ~5-8 min | Parallel cloud-init |
+| First task dispatched | Immediate | After agent trusted |
+
+**Bottlenecks:**
+- Cloud-init `package_upgrade: true` adds 2-3 minutes
+- Docker image pulls on server add 2-3 minutes
+- Agent registration depends on server being ready
+
+**Optimization opportunities:**
+- Pre-bake Ubuntu template with hashcat installed
+- Use local Docker registry for Hashtopolis images
+- Reduce cloud-init to minimal configuration
+
+## Cloud-Init Best Practices
+
+### Worker Cloud-Init Optimization
+
+**Current approach** (slower but reliable):
+```yaml
+package_update: true
+package_upgrade: true
+packages:
+  - hashcat
+  - python3-requests
+  ...
+```
+
+**Faster approach** (pre-bake template):
+1. Create Ubuntu template with hashcat pre-installed
+2. Cloud-init only configures agent + registers
+3. Reduces boot-to-ready time to ~2 minutes
+
+### Agent Configuration Pitfalls
+
+**Common cloud-init variable issues:**
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `HASHTOPOLIS_SERVER` in config | Variable not interpolated | Use terraform `templatefile()` |
+| `http://https://...` | Double protocol | Pass just IP, add protocol in template |
+| Agent fails silently | Wrong server URL | Check `/opt/hashtopolis-agent/config.json` |
+
+**Correct terraform → cloud-init flow:**
+```hcl
+# workers.tf
+server_url = xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]  # Just IP
+
+# worker.yaml
+"url": "http://${server_url}:8080/api/server.php"  # Add protocol + port
+```
 
 ## Critical Setup Requirements
 
@@ -759,6 +878,112 @@ hashcrack results
 # Cracked: 847 passwords
 # Custom Wordlist: 234 novel passwords added
 ```
+
+## Operational Lessons Learned
+
+### Scaling Workers Safely
+
+**NEVER destroy working workers when fixing broken ones.**
+
+```bash
+# BAD: Destroys ALL workers including working ones
+terraform apply -var="worker_count=0" -auto-approve  # DON'T DO THIS
+
+# GOOD: Taint only the broken workers, then apply
+terraform taint 'xenorchestra_vm.workers[1]'  # Broken worker
+terraform taint 'xenorchestra_vm.workers[2]'  # Broken worker
+terraform apply -var="worker_count=4" -auto-approve  # Recreates only tainted
+
+# ALTERNATIVE: SSH and fix the agent directly
+ssh ubuntu@BROKEN_WORKER_IP 'sudo systemctl restart hashtopolis-agent'
+```
+
+### Agent Troubleshooting Checklist
+
+When an agent stops working or reports "No task available!":
+
+1. **Check agent is registered and trusted**
+   ```bash
+   curl -X POST http://SERVER:8080/api/user.php \
+     -H 'Content-Type: application/json' \
+     -d '{"section":"agent","request":"listAgents","accessKey":"YOUR_KEY"}'
+   ```
+
+2. **Check agent service on worker**
+   ```bash
+   ssh ubuntu@WORKER_IP 'systemctl status hashtopolis-agent'
+   ssh ubuntu@WORKER_IP 'journalctl -u hashtopolis-agent -n 50'
+   ```
+
+3. **Common agent issues and fixes**:
+   | Symptom | Cause | Fix |
+   |---------|-------|-----|
+   | RecursionError in logs | Python logging recursion bug | Known Hashtopolis agent issue - agent may still work despite errors. Clear log: `rm /opt/hashtopolis-agent/client.log && systemctl restart hashtopolis-agent` |
+   | "HASHTOPOLIS_SERVER" in config | Cloud-init variable not replaced | Fix config.json with correct URL |
+   | Agent registered but inactive | No tasks with priority > 0 | Create tasks with high priority |
+   | Agent not picking up tasks | Agent untrusted | Trust agent via API or database |
+
+4. **Fix agent config directly**
+   ```bash
+   ssh ubuntu@WORKER_IP 'echo "{\"url\": \"http://SERVER:8080/api/server.php\", \"voucher\": \"VOUCHER\"}" | sudo tee /opt/hashtopolis-agent/config.json && sudo systemctl restart hashtopolis-agent'
+   ```
+
+### Recovering from Destroyed Workers
+
+When a worker is destroyed while tasks are running, chunks become orphaned:
+
+**Chunk states:**
+- 0 = PENDING (ready to dispatch)
+- 2 = DISPATCHED (running on agent)
+- 4 = ABORTED (agent died mid-task)
+- 5 = FINISHED (completed)
+- 6 = SKIPPED
+
+**Recovery procedure:**
+```sql
+-- Reset stuck/dispatched chunks (were running on destroyed worker)
+UPDATE Chunk SET state = 0, agentId = NULL WHERE state = 2;
+
+-- Reset aborted chunks (agent died before completing)
+UPDATE Chunk SET state = 0, agentId = NULL WHERE state = 4;
+
+-- Verify all chunks can be re-dispatched
+SELECT state, COUNT(*) as count FROM Chunk GROUP BY state;
+```
+
+**Why this happens:**
+- Worker destruction doesn't gracefully disconnect agent
+- Chunks assigned to agent remain in DISPATCHED state
+- New agents won't pick up chunks assigned to old agent
+- Must manually reset to PENDING for re-dispatch
+
+### XCP-ng Scaling Errors
+
+When creating multiple VMs simultaneously, XCP-ng may throw errors:
+
+| Error | Meaning | Solution |
+|-------|---------|----------|
+| `TOO_MANY_STORAGE_MIGRATES(3)` | Too many concurrent disk operations | Wait and retry `terraform apply` |
+| VM creation timeout | Host overloaded | Reduce parallel creates, retry |
+
+**Best practice**: Create workers in batches of 3-4, wait for completion, then add more.
+
+### Keeping Workers Productive
+
+**24-hour password audit workflow:**
+
+1. Deploy initial workers (4-8)
+2. Submit hashlist and first wave of tasks
+3. Monitor progress every 15-30 minutes
+4. When tasks complete, add new attack strategies
+5. Scale workers based on remaining keyspace
+6. **Never let workers idle** - queue multiple task types
+
+**Task priority strategy:**
+- Quick wins first (wordlists, common masks): Priority 100+
+- Medium effort (rules, combinator): Priority 80-99
+- Long running (brute force): Priority 60-79
+- Background (exhaustive): Priority 40-59
 
 ## Legal Warning
 
