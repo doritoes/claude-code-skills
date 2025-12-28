@@ -295,6 +295,28 @@ For realistic password audits (24-hour window typical), escalate attacks in orde
 
 **Key Insight:** Most real passwords follow patterns. After cracking the easy ones, analyze patterns to create targeted attacks for the remaining hashes.
 
+### Proactive Worker Scaling Recommendations
+
+During an audit, suggest worker scaling when it will meaningfully impact the 24-hour window:
+
+**When to recommend more workers:**
+| Scenario | Current Workers | Recommendation |
+|----------|-----------------|----------------|
+| 6-7 char brute force running | 2-4 | "Scale to 8 workers - will cut remaining time in half" |
+| Heavy rules on large hashlist | 4 | "Add 4 more workers - rules benefit from parallelization" |
+| Multiple hash types pending | 4 | "Scale to 8+ workers to process hash types in parallel" |
+| Wordlist attacks only | 4+ | No benefit - I/O bound, not CPU bound |
+| 8+ char brute force | Any | Diminishing returns - focus on rules instead |
+
+**Calculation guidance:**
+- MD5/NTLM brute force: Each worker adds ~1B hashes/sec (CPU)
+- SHA512crypt: Much slower (~10K/sec) - more workers help significantly
+- 7-char keyspace (62^7): ~3.5 trillion - with 4 workers at 4B/sec = ~15 min
+- 8-char keyspace (62^8): ~218 trillion - 4 workers = ~15 hours
+
+**Example recommendation:**
+> "We have 2 remaining hashes. One is 7-char brute forceable - with current 4 workers this will complete in ~20 minutes. The 11-char password needs rules. **Recommend: Stay at 4 workers** - scaling won't significantly help the rules attack, and the brute force will finish soon."
+
 ## Security
 
 - **NEVER display cracked passwords in terminal**
