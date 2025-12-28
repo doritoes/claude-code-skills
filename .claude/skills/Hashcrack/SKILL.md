@@ -390,9 +390,10 @@ curl -X POST http://SERVER:8080/api/user.php \
 **Best Practice**: Don't fight the secret defaults. Trust your agents first, then secrets work automatically.
 
 ### Server URL
-- Use **HTTP** not HTTPS: `http://192.168.99.36:8080`
+- Use **HTTP** not HTTPS: `http://SERVER_IP:8080`
 - HTTPS requires valid certificates which cloud-init doesn't set up
-- Frontend UI available on port 4200
+- **Always use port 8080** (classic PHP UI) - the Angular frontend on 4200 requires API v2 which is broken
+- When user asks to "log in to Hashtopolis", provide: `http://SERVER_IP:8080`
 
 ### Agent Setup
 1. **Download**: Use tar.gz from GitHub, not zip
@@ -411,6 +412,54 @@ curl -X POST http://SERVER:8080/api/user.php \
 ### SSH Access
 - Use `ubuntu` user, NOT `pai`
 - Cloud-init creates `ubuntu` user with sudo access
+
+### Password Authentication (IMPORTANT)
+
+Hashtopolis uses **PEPPER + password + salt** for password hashing, NOT plain bcrypt. When setting passwords:
+
+**Wrong approach (fails login):**
+```php
+$hash = password_hash("mypassword", PASSWORD_BCRYPT);  // WRONG!
+```
+
+**Correct approach:**
+```bash
+# Create a PHP script on the server
+ssh ubuntu@SERVER 'cat > /tmp/set_password.php << '\''PHPEOF'\''
+<?php
+$config = json_decode(file_get_contents("/usr/local/share/hashtopolis/config/config.json"), true);
+$PEPPER = $config["PEPPER"];
+
+$pdo = new PDO("mysql:host=hashtopolis-db;dbname=hashtopolis", "hashtopolis", "DB_PASSWORD");
+$stmt = $pdo->query("SELECT passwordSalt FROM User WHERE userId = 1");
+$salt = $stmt->fetch()["passwordSalt"];
+
+$password = "newpassword123";
+$CIPHER = $PEPPER[1] . $password . $salt;
+$hash = password_hash($CIPHER, PASSWORD_BCRYPT, ["cost" => 12]);
+
+$stmt = $pdo->prepare("UPDATE User SET passwordHash = ? WHERE userId = 1");
+$stmt->execute([$hash]);
+echo "Password updated!\n";
+PHPEOF
+sudo docker cp /tmp/set_password.php hashtopolis-backend:/tmp/set_password.php
+sudo docker exec hashtopolis-backend php /tmp/set_password.php'
+```
+
+**Where PEPPER is stored:** `/usr/local/share/hashtopolis/config/config.json`
+
+**Password structure:**
+- `PEPPER[1]` (32 char random string) + `password` + `passwordSalt` (from User table)
+- Hashed with bcrypt cost 12
+
+**ALWAYS test credentials before providing to user:**
+```bash
+# Test login via curl - must see "agents.php" in response, NOT "Wrong username/password"
+curl -s -c /tmp/cookies.txt http://SERVER:8080/index.php > /dev/null
+curl -s -c /tmp/cookies.txt -b /tmp/cookies.txt -L -X POST \
+  -d "username=hashcrack&password=mypassword&fw=" \
+  http://SERVER:8080/login.php | grep -E "(agents\.php|Wrong)"
+```
 
 ### Database Access
 - Password is in container env, not hardcoded
@@ -446,24 +495,78 @@ If agents report "No task available!" but tasks exist:
 
 5. **Do NOT manually insert into Assignment table** - this is an anti-pattern
 
-### File Upload Issues
-Files may not be written to disk even after successful API response.
+### File Upload - CRITICAL DISCOVERY
 
-**Workaround - Use docker cp:**
-```bash
-# Create wordlist locally
-echo "password
-123456
-qwerty" > /tmp/wordlist.txt
+**Files MUST be uploaded via API with `source: inline`**. Manually placing files in the container does NOT work - the server returns "ERR3 - file not present" even though files exist on disk.
 
-# Copy to container (file ID from API response)
-sudo docker cp /tmp/wordlist.txt hashtopolis-backend:/var/www/hashtopolis/files/<fileId>
+**Working approach:**
+```python
+import base64
+import requests
 
-# Verify file exists
-sudo docker exec hashtopolis-backend ls -la /var/www/hashtopolis/files/
+# Read file and base64 encode
+with open('wordlist.txt', 'rb') as f:
+    data = base64.b64encode(f.read()).decode('utf-8')
+
+# Upload via API
+payload = {
+    'section': 'file',
+    'request': 'addFile',
+    'accessKey': 'YOUR_KEY',
+    'filename': 'wordlist.txt',
+    'fileType': 0,  # 0=wordlist, 1=rule
+    'source': 'inline',
+    'accessGroupId': 1,
+    'data': data,
+    'isSecret': False
+}
+resp = requests.post('http://SERVER:8080/api/user.php', json=payload)
 ```
 
-**Note**: Files being secret is NOT the problem. Trust agents first (see Critical Setup Requirements).
+**For large files (>50MB):** Split into chunks and upload separately:
+```bash
+# Split rockyou.txt into 500k line chunks
+head -500000 rockyou.txt > rockyou_chunk1.txt
+tail -n +500001 rockyou.txt | head -500000 > rockyou_chunk2.txt
+# Upload each chunk via API, then create separate tasks for each
+```
+
+**Why manual file placement fails:**
+- Hashtopolis stores files by internal metadata, not just filesystem path
+- API upload triggers proper registration with database
+- Files placed via `docker cp` don't have required metadata
+
+### CPU-Only Workers
+
+Workers without GPU support need special configuration:
+
+```sql
+-- Workers auto-detect as cpuOnly=1 when no GPU found
+-- Tasks must have isCpuTask=1 to be dispatched to CPU-only workers
+UPDATE Task SET isCpuTask = 1 WHERE taskId IN (1, 2, 3);
+```
+
+**Cloud-init installs PoCL (Portable OpenCL)** for CPU-based hashcat:
+- `ocl-icd-libopencl1` and `opencl-headers` packages
+- Hashcat uses CPU cores via OpenCL backend
+- Typical speed: ~35 MH/s for MD5 on modern CPU
+
+### Agent Activation Issues
+
+Agents may become inactive during operation. Check and fix:
+
+```sql
+-- Check agent status
+SELECT agentId, agentName, isActive, isTrusted FROM Agent;
+
+-- Reactivate inactive agents
+UPDATE Agent SET isActive = 1 WHERE isActive = 0;
+```
+
+**Signs of inactive agent:**
+- "No task available!" in agent logs despite pending tasks
+- Agent's `lastAct` timestamp not updating
+- Tasks with high priority not being picked up
 
 ### Start Simple - Avoid Supertasks Initially
 **Recommendation**: Use basic tasks until the workflow is reliable, then introduce advanced features.
@@ -502,6 +605,39 @@ curl -X POST http://SERVER:8080/api/user.php \
 2. **`importSupertask`** - Requires many undocumented params (isCpuOnly, isSmall, masks)
 3. **File references** - Stored by fileId (integer), not filename on disk
 4. **Keyspace calculation** - Must happen via agent benchmark before task dispatch
+
+### Why Direct Database Access is Sometimes Needed
+
+The Hashtopolis API v1 doesn't support all operations. Database access is required for:
+
+| Operation | API Support | Database Alternative |
+|-----------|-------------|---------------------|
+| Create API key | ❌ No | `INSERT INTO ApiKey (...)` |
+| Create voucher | Limited | `INSERT INTO RegVoucher (voucher, time)` |
+| Bulk trust agents | ❌ No | `UPDATE Agent SET isTrusted = 1` |
+| Create tasks with files | ❌ Error | Insert TaskWrapper + Task + FileTask |
+| Check detailed status | Limited | Query Task, TaskWrapper, Chunk tables |
+| Fix stuck tasks | ❌ No | Update Chunk states, reset keyspaceProgress |
+
+**Pattern for task creation via database:**
+```sql
+-- 1. Create TaskWrapper (links to hashlist)
+INSERT INTO TaskWrapper (priority, maxAgents, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked)
+VALUES (100, 0, 0, 1, 1, 'MyTask', 0, 0);
+SET @wrapper = LAST_INSERT_ID();
+
+-- 2. Create Task (the actual job)
+INSERT INTO Task (taskName, attackCmd, ..., taskWrapperId, isCpuTask, ...)
+VALUES ('MyTask', '#HL# wordlist.txt', ..., @wrapper, 1, ...);
+SET @task = LAST_INSERT_ID();
+
+-- 3. Link files to task
+INSERT INTO FileTask (fileId, taskId) VALUES (5, @task);
+```
+
+**When to use API vs Database:**
+- ✅ **API**: File uploads, hashlist creation, status queries
+- ✅ **Database**: Task creation with file links, bulk operations, recovery
 
 ### Database Patterns for Recovery
 ```sql
