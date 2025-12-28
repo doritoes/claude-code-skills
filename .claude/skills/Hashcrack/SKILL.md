@@ -568,6 +568,47 @@ UPDATE Agent SET isActive = 1 WHERE isActive = 0;
 - Agent's `lastAct` timestamp not updating
 - Tasks with high priority not being picked up
 
+### Task Queue Management (CRITICAL for Cloud)
+
+**Keep tasks queued** - agents become inactive when no valid tasks available. In cloud environments, idle workers = wasted cost.
+
+**Why agents report "No task available!" despite pending tasks:**
+1. **Agent inactive** - Check and reactivate: `UPDATE Agent SET isActive = 1`
+2. **Agent untrusted** - Trust the agent: `UPDATE Agent SET isTrusted = 1`
+3. **Task files broken** - File references created via `import` don't work
+4. **Task priority = 0** - Tasks must have priority > 0
+5. **crackerBinaryId NULL** - Must be set to valid cracker binary ID
+
+**Database task creation with all required fields:**
+```sql
+INSERT INTO TaskWrapper (priority, maxAgents, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked)
+VALUES (80, 0, 0, 1, 1, 'TaskName', 0, 0);
+SET @tw = LAST_INSERT_ID();
+
+INSERT INTO Task (
+  taskName, attackCmd, chunkTime, statusTimer, keyspace, keyspaceProgress,
+  priority, maxAgents, color, isSmall, isCpuTask, useNewBench, skipKeyspace,
+  crackerBinaryId, crackerBinaryTypeId, taskWrapperId, isArchived, notes,
+  staticChunks, chunkSize, forcePipe, usePreprocessor, preprocessorCommand
+)
+VALUES (
+  'TaskName', '#HL# -a 3 ?l?l?l?l?l?l', 600, 5, 0, 0,
+  80, 0, '#FF6600', 1, 1, 0, 0,
+  1, 1, @tw, 0, '',
+  0, 0, 0, 0, ''
+);
+```
+
+**Key fields that cause "Invalid query!" if missing:**
+- `useNewBench` - Set to 0
+- `crackerBinaryId` - Set to 1 (hashcat)
+- `notes`, `preprocessorCommand` - Empty string, not NULL
+
+**Monitoring worker utilization:**
+- Check CPU usage on worker VM (should be maxed during cracking)
+- Check via XCP-ng/hypervisor for host-level stats
+- Idle workers = wasted resources in cloud environments
+
 ### Start Simple - Avoid Supertasks Initially
 **Recommendation**: Use basic tasks until the workflow is reliable, then introduce advanced features.
 
