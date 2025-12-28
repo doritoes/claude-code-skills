@@ -1213,6 +1213,92 @@ When creating multiple VMs simultaneously, XCP-ng may throw errors:
 - Long running (brute force): Priority 60-79
 - Background (exhaustive): Priority 40-59
 
+## Cloud Provider Roadmap
+
+### Current: XCP-ng (Local)
+- Terraform with XenOrchestra provider
+- Cloud-init for VM configuration
+- Learned: recursion limits, voucher management, stale agents
+
+### Next: AWS
+**Prerequisites:**
+- AWS account with programmatic access
+- IAM user/role with EC2, VPC permissions
+- Terraform AWS provider configuration
+
+**Expected changes:**
+- Replace XenOrchestra provider with AWS provider
+- Use EC2 instances (t3.medium for server, c5.large+ for workers)
+- VPC + security groups instead of XCP-ng network
+- Consider Spot instances for workers (cost savings)
+- S3 for wordlist storage (optional)
+
+**Authentication setup needed:**
+```bash
+# Option 1: Environment variables
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_DEFAULT_REGION="us-east-1"
+
+# Option 2: AWS credentials file
+aws configure
+
+# Option 3: IAM role (if running on EC2)
+# Automatic via instance metadata
+```
+
+### Future: Azure
+- Terraform azurerm provider
+- Azure VMs (Standard_D2s_v3 for server, Standard_F4s_v2+ for workers)
+- Virtual Network + NSG
+- Consider Azure Spot VMs for cost savings
+
+### Future: GCP
+- Terraform google provider
+- Compute Engine instances (e2-medium for server, c2-standard-4+ for workers)
+- VPC + firewall rules
+- Consider Preemptible VMs for cost savings
+
+### Cross-Cloud Considerations
+| Concern | Solution |
+|---------|----------|
+| Cost control | Use spot/preemptible instances, auto-shutdown |
+| Wordlist distribution | Pre-bake into AMI/image, or use object storage |
+| Network latency | Workers and server in same region/zone |
+| Authentication | Per-provider credentials in .env or terraform vars |
+
+## Session Learnings Summary
+
+Quick reference for operational knowledge gained:
+
+### Infrastructure
+- **Python 3.12 RecursionError**: Set `sys.setrecursionlimit(5000)` in systemd
+- **Cloud-init variables**: Use terraform `templatefile()`, not string interpolation
+- **Voucher management**: Disable deletion, create backups, track usage
+
+### Agent Management
+- **Stale agents after worker deletion**: Delete from Assignment table, reset Chunk table, deactivate Agent
+- **Trust agents FIRST**: Before uploading files or creating tasks
+- **Check duplicate names**: Old agents retain names after worker rebuild
+
+### Task Prioritization
+- **Exhaustive BF > targeted masks**: Guaranteed elimination is more valuable
+- **Don't overfit**: Generic patterns OK, specific patterns waste compute
+- **Task value = (Probability × Hashes) / Time**
+
+### Chunk Recovery
+```sql
+-- Reset orphaned chunks
+UPDATE Chunk SET state = 0, agentId = NULL WHERE state IN (2, 4);
+-- Remove stale assignments
+DELETE FROM Assignment WHERE agentId = STALE_ID;
+```
+
+### Multi-Hash Audits
+- Load all hash types as separate hashlists
+- After any crack, run cracked passwords against ALL hash types
+- Password reuse catches ~30% additional cracks
+
 ## Legal Warning
 
 This skill is for **authorized security testing only**. Before use:
