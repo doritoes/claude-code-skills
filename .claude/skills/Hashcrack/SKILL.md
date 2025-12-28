@@ -733,6 +733,36 @@ If agents report "No task available!" but tasks exist:
 
 5. **Do NOT manually insert into Assignment table** - this is an anti-pattern
 
+6. **Check for stale agents after worker deletion** - CRITICAL
+
+   When workers are destroyed/rebuilt, their old agent entries remain in the database. These stale agents:
+   - Get assigned chunks but can't complete them
+   - Show `speed: 0` in task details
+   - Cause `workPossible: false` on tasks
+   - Block real workers from getting work
+
+   **Detection:**
+   ```bash
+   # Check for duplicate agent names or agents with 0 speed
+   sudo docker exec hashtopolis-db mysql -u hashtopolis -p<password> -e "
+   SELECT agentId, agentName, isActive, lastTime FROM hashtopolis.Agent;
+   "
+   # Look for: duplicate names, old lastTime, or agents that don't match running workers
+   ```
+
+   **Fix:**
+   ```bash
+   # Deactivate stale agent and reset its chunks
+   sudo docker exec hashtopolis-db mysql -u hashtopolis -p<password> -e "
+   -- Reset chunks assigned to stale agent
+   UPDATE hashtopolis.Chunk SET state = 0, agentId = NULL WHERE agentId = STALE_ID AND state IN (2, 4);
+   -- Deactivate stale agent
+   UPDATE hashtopolis.Agent SET isActive = 0 WHERE agentId = STALE_ID;
+   "
+   ```
+
+   **Best practice:** After destroying workers, ALWAYS check for and deactivate stale agents before continuing.
+
 ### File Upload - CRITICAL DISCOVERY
 
 **Files MUST be uploaded via API with `source: inline`**. Manually placing files in the container does NOT work - the server returns "ERR3 - file not present" even though files exist on disk.
