@@ -212,6 +212,31 @@ After cracking passwords, analyze patterns to improve future attacks:
 | `sillywombat11` | 2 words + 2 digits | Combinator + `$11` |
 | `Butterfly123!` | Word + 3 digits + special | `c $123 $!` |
 
+### Cross-Hash Type Password Reuse Detection
+
+When auditing mixed hash types (MD5, SHA512crypt, NTLM), immediately reuse cracked passwords:
+
+```bash
+# After cracking MD5 hashes, extract plaintext passwords
+awk -F: '{print $2}' cracked_md5.txt > reuse_wordlist.txt
+
+# Run against other hash types with highest priority
+hashcat -m 1800 linux_shadow.txt reuse_wordlist.txt  # SHA512crypt
+hashcat -m 1000 ntlm_hashes.txt reuse_wordlist.txt   # NTLM
+```
+
+**Multi-Hash Audit Workflow:**
+1. Load ALL hash types as separate hashlists (MD5, SHA512, NTLM, etc.)
+2. Run initial wordlist attacks on the fastest hash type first (MD5/NTLM)
+3. After any crack, IMMEDIATELY add password to `reuse_wordlist.txt`
+4. Run `reuse_wordlist.txt` against ALL other hashlists
+5. Password reuse is extremely common - this catches ~30% of additional cracks
+
+**Hashtopolis Integration:**
+- Create a shared "cracked passwords" wordlist file
+- Set up a high-priority pretask using this wordlist
+- Run against all hashlists after any successful crack
+
 ### Building Custom Passphrase Lists
 
 ```bash
