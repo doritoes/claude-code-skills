@@ -4,6 +4,31 @@ Accumulated learnings from testing and operation to improve future runs.
 
 ## Deployment Issues
 
+### Hashtopolis Password Hashing
+**Format:** `bcrypt($PEPPER[1] + password + salt)`
+- PEPPER: Server-side secret stored in config.json or generated during install
+- salt: Per-user random string stored in `User.passwordSalt` column
+- Cannot set password directly via SQL - must use Hashtopolis's Encryption class
+
+**To reset password properly:**
+1. Find PEPPER array in `/var/www/html/src/inc/config.json` or via PHP
+2. Get user's salt from `User.passwordSalt`
+3. Generate: `password_hash($PEPPER[1] . $password . $salt, PASSWORD_BCRYPT, ['cost' => 12])`
+4. Update `User.passwordHash` with result
+
+**Best Practice:** Set admin password via environment variable during deployment:
+```yaml
+HASHTOPOLIS_ADMIN_USER: hashcrack
+HASHTOPOLIS_ADMIN_PASSWORD: <secure-password>
+```
+
+**CRITICAL:** Avoid special characters (`!@#$%^&*`) in passwords when using cloud-init.
+Special chars cause YAML parsing/shell escaping issues, resulting in empty password.
+
+**Default Credentials (set in terraform.tfvars):**
+- Username: `hashcrack`
+- Password: `Hashcrack2025Lab`
+
 ### Voucher Creation
 **Problem:** Vouchers not created during server setup, causing agent registration failure.
 **Solution:** Add voucher creation to cloud-init server.yaml:
