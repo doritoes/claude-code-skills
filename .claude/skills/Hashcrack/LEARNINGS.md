@@ -157,19 +157,30 @@ SET @agent_ids = (SELECT GROUP_CONCAT(agentId) FROM Agent
                   WHERE agentName IN ('hashcrack-worker-1', 'hashcrack-worker-2', ...));
 
 -- Clean up FK references for SPECIFIC agents only
+-- ORDER MATTERS due to foreign key constraints!
 DELETE FROM Speed WHERE agentId IN (@agent_ids);
 DELETE FROM AccessGroupAgent WHERE agentId IN (@agent_ids);
 DELETE FROM Zap WHERE agentId IN (@agent_ids);
-UPDATE Chunk SET agentId = NULL WHERE agentId IN (@agent_ids);
+UPDATE Chunk SET agentId = NULL WHERE agentId IN (@agent_ids);  -- UPDATE not DELETE
 DELETE FROM AgentZap WHERE agentId IN (@agent_ids);
 DELETE FROM Assignment WHERE agentId IN (@agent_ids);
 DELETE FROM AgentStat WHERE agentId IN (@agent_ids);
 DELETE FROM AgentError WHERE agentId IN (@agent_ids);
 DELETE FROM HealthCheckAgent WHERE agentId IN (@agent_ids);
-DELETE FROM Agent WHERE agentId IN (@agent_ids);
+DELETE FROM Agent WHERE agentId IN (@agent_ids);  -- LAST - parent table
 ```
-**Why:** Precise cleanup preserves other agents if scaling down partially.
-**Anti-pattern:** Don't DELETE FROM table without WHERE clause.
+
+**Why precision matters:**
+- Other agents may still be working if scaling down partially
+- Tasks remain intact for when new workers are added
+- Shotgun DELETE wipes all data including active agents
+
+**Anti-patterns to avoid:**
+- `DELETE FROM Agent;` - Wipes ALL agents
+- `DELETE FROM Assignment;` - Breaks ALL task assignments
+- `DELETE FROM Chunk;` - Loses ALL progress
+
+**Correct approach:** Always use WHERE clause with specific agent IDs.
 
 ## Recommended Improvements
 

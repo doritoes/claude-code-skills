@@ -25,27 +25,81 @@ This allows the user to review results in the web UI before destroying everythin
 - User confirms they are satisfied with cracking results
 
 ### Pre-Destroy Checklist
-- [ ] All tasks show 100% complete
+- [ ] All tasks show 100% complete (or user is satisfied with partial results)
 - [ ] User has reviewed cracked hashes count
-- [ ] User confirms: "destroy workers" or "I'm satisfied, destroy workers"
+- [ ] User has had opportunity to log into Hashtopolis UI
+- [ ] User confirms: "destroy workers" or "spin down workers"
 
 ### Execution
 
 ```bash
 cd ~/.claude/skills/Hashcrack/terraform
 
-# Set worker count to 0 and apply
-export TF_VAR_worker_count=0
-terraform apply -auto-approve
+# Destroy ONLY workers using targeted destroy
+terraform destroy -target=xenorchestra_vm.workers -auto-approve
 ```
 
-### Verify
+**IMPORTANT:** Use targeted destroy, NOT `terraform apply -var="worker_count=0"`. The targeted approach is more reliable and explicit.
+
+### Agent Cleanup (CRITICAL)
+
+After destroying workers, **clean up stale agents** from Hashtopolis database. This is REQUIRED to allow future workers to register and function properly.
+
 ```bash
-terraform output worker_count
-# Should show: 0
+# Get server IP
+SERVER_IP=$(terraform output -raw server_ip)
+DB_PW=$(terraform output -raw db_password)
+
+# Get list of agent IDs to clean up (match destroyed worker hostnames)
+ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-db mysql -u hashtopolis -p$DB_PW hashtopolis -sNe \"
+SELECT agentId, agentName FROM Agent WHERE agentName LIKE 'hashcrack-worker-%';
+\""
+
+# For each agent ID that no longer has a running VM, run cleanup:
+# Replace AGENT_IDS with actual IDs (e.g., "1,2,3,4")
+ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-db mysql -u hashtopolis -p$DB_PW hashtopolis -e \"
+-- Delete in FK constraint order (CRITICAL - do not skip any table)
+DELETE FROM Speed WHERE agentId IN (AGENT_IDS);
+DELETE FROM AccessGroupAgent WHERE agentId IN (AGENT_IDS);
+DELETE FROM Zap WHERE agentId IN (AGENT_IDS);
+UPDATE Chunk SET agentId = NULL WHERE agentId IN (AGENT_IDS);
+DELETE FROM AgentZap WHERE agentId IN (AGENT_IDS);
+DELETE FROM Assignment WHERE agentId IN (AGENT_IDS);
+DELETE FROM AgentStat WHERE agentId IN (AGENT_IDS);
+DELETE FROM AgentError WHERE agentId IN (AGENT_IDS);
+DELETE FROM HealthCheckAgent WHERE agentId IN (AGENT_IDS);
+DELETE FROM Agent WHERE agentId IN (AGENT_IDS);
+\""
 ```
 
-**Server remains running** - User can still access Hashtopolis UI at http://<server-ip>:4200
+### Why Agent Cleanup Matters
+
+Without cleanup:
+- Stale agents remain in database with isActive=0
+- Future workers may have naming conflicts
+- Task assignments may reference non-existent agents
+- User sees confusing "ghost" agents in UI
+
+With cleanup:
+- Database is clean for fresh worker deployment
+- Tasks remain intact, ready for new workers
+- User can scale back up seamlessly
+
+### Verify Cleanup
+```bash
+# Confirm no stale agents remain
+ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-db mysql -u hashtopolis -p$DB_PW hashtopolis -e \"
+SELECT agentId, agentName, isActive FROM Agent;
+\""
+# Should show empty result or only active agents
+
+# Confirm tasks are intact and ready
+ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-db mysql -u hashtopolis -p$DB_PW hashtopolis -e \"
+SELECT taskId, taskName, priority FROM Task WHERE isArchived = 0;
+\""
+```
+
+**Server remains running** - User can still access Hashtopolis UI at http://<server-ip>:8080
 
 ---
 

@@ -86,14 +86,71 @@ Save to `.claude/.env`:
 - `HASHCRACK_ADMIN_PASSWORD`
 - `HASHCRACK_VOUCHER`
 
-### Step 7: Verify Deployment
+### Step 7: Wait for Infrastructure Ready
+
+Wait for cloud-init to complete on all VMs (~5-7 minutes):
+```bash
+# Monitor server readiness
+SERVER_IP=$(terraform output -raw server_ip)
+until ssh -o ConnectTimeout=5 ubuntu@$SERVER_IP 'sudo docker ps | grep -q hashtopolis-backend'; do
+  echo "Waiting for Hashtopolis containers..."
+  sleep 15
+done
+echo "Server ready!"
+```
+
+### Step 8: Verify Credentials Work (CRITICAL)
+
+**Before providing credentials to user, VERIFY THEY WORK:**
 
 ```bash
-# Check server
-curl -sk https://<server-ip>:8080
+# Test login - must see "agents.php" NOT "Wrong username/password"
+ssh ubuntu@$SERVER_IP 'curl -s -c /tmp/c.txt http://localhost:8080/ > /dev/null && \
+  curl -s -c /tmp/c.txt -b /tmp/c.txt -L -X POST \
+  -d "username=hashcrack&password=Hashcrack2025Lab&fw=" \
+  http://localhost:8080/login.php | grep -qE "agents\.php" && echo "LOGIN OK" || echo "LOGIN FAILED"'
+```
 
-# Check workers registered
-bun run tools/HashtopolisClient.ts agents
+**If login fails**, the password was not set correctly during cloud-init. Reset it:
+```bash
+# See LEARNINGS.md for full password reset procedure using PHP
+ssh ubuntu@$SERVER_IP 'cat > /tmp/set_password.php << '\''EOF'\''
+<?php
+$config = json_decode(file_get_contents("/usr/local/share/hashtopolis/config/config.json"), true);
+$PEPPER = $config["PEPPER"];
+$pdo = new PDO("mysql:host=hashtopolis-db;dbname=hashtopolis", "hashtopolis", "DB_PASSWORD");
+$stmt = $pdo->query("SELECT passwordSalt FROM User WHERE userId = 1");
+$salt = $stmt->fetch()["passwordSalt"];
+$hash = password_hash($PEPPER[1] . "Hashcrack2025Lab" . $salt, PASSWORD_BCRYPT, ["cost" => 12]);
+$pdo->prepare("UPDATE User SET passwordHash = ? WHERE userId = 1")->execute([$hash]);
+echo "Password reset!\n";
+EOF
+sudo docker cp /tmp/set_password.php hashtopolis-backend:/tmp/set_password.php
+sudo docker exec hashtopolis-backend php /tmp/set_password.php'
+```
+
+### Step 9: Trust Agents
+
+Wait for agents to register, then trust them:
+```bash
+# Wait for agents to appear
+until ssh ubuntu@$SERVER_IP 'sudo docker exec hashtopolis-db mysql -u hashtopolis -p<db_pw> hashtopolis -sNe "SELECT COUNT(*) FROM Agent;" | grep -v "^0$"'; do
+  echo "Waiting for agents to register..."
+  sleep 15
+done
+
+# Trust all agents
+ssh ubuntu@$SERVER_IP 'sudo docker exec hashtopolis-db mysql -u hashtopolis -p<db_pw> hashtopolis -e "UPDATE Agent SET isTrusted = 1 WHERE isTrusted = 0;"'
+```
+
+### Step 10: Verify Deployment
+
+```bash
+# Check server UI is accessible
+curl -sk http://$SERVER_IP:8080 | grep -q "Hashtopolis" && echo "UI accessible"
+
+# Check worker count
+ssh ubuntu@$SERVER_IP 'sudo docker exec hashtopolis-db mysql -u hashtopolis -p<db_pw> hashtopolis -sNe "SELECT COUNT(*) FROM Agent WHERE isActive = 1;"'
 ```
 
 ## CLI Usage
@@ -115,6 +172,22 @@ On success:
 - Server URL saved to env
 - Admin credentials saved to env
 - Worker voucher saved to env
+
+## Credential Delivery to User
+
+When deployment is complete and verified, provide credentials to user:
+
+```
+Hashtopolis is ready!
+
+URL: http://<SERVER_IP>:8080
+Username: hashcrack
+Password: Hashcrack2025Lab
+
+Workers: X/X agents registered and trusted
+```
+
+**IMPORTANT:** Always use the credentials from `terraform.tfvars`, NOT randomly generated passwords. Random passwords with special characters often fail due to cloud-init YAML/shell escaping issues.
 
 ## Troubleshooting
 

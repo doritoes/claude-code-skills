@@ -7,6 +7,39 @@ description: Highly scalable distributed password hash cracking using Hashtopoli
 
 Distributed password hash cracking using Hashtopolis as the orchestration layer. The core value is **scalability** - distribute work across many workers, from a handful of local VMs to hundreds of cloud instances.
 
+## Quick Reference for Other Claude Instances
+
+When executing this skill, follow these critical procedures:
+
+### Before Providing Credentials to User
+1. **Always verify login works** before giving credentials (see User Verification Workflow)
+2. **Use known credentials** from `terraform.tfvars` (NOT random passwords)
+3. Default: `hashcrack` / `Hashcrack2025Lab`
+
+### When Destroying Workers
+1. **Clean up agents** from Hashtopolis database (see Teardown.md)
+2. **Use precise WHERE clauses** with specific agent IDs
+3. **Never use shotgun DELETE** statements without WHERE
+
+### When User Wants to Scale Down
+1. **Wait for chunks to complete** before destroying workers
+2. **Clean up agent records** after VM destruction
+3. **Keep tasks intact** for potential scale-back-up
+
+### Key Files
+- `terraform.tfvars` - Credentials and worker count
+- `LEARNINGS.md` - Accumulated operational knowledge
+- `workflows/` - Step-by-step procedures for each operation
+
+### Common Pitfalls
+| Pitfall | Solution |
+|---------|----------|
+| Password doesn't work | Cloud-init escaping - use known password without special chars |
+| Agents not trusted | Run `UPDATE Agent SET isTrusted = 1` after registration |
+| Tasks not dispatching | Check priority > 0, agents trusted, files accessible |
+| Stale agents after teardown | Clean up FK tables in correct order |
+| yescrypt hashes | Not supported by hashcat - use John the Ripper |
+
 ## Architecture
 
 ```
@@ -355,6 +388,46 @@ UPDATE hashtopolis.TaskWrapper SET priority = 50 WHERE taskWrapperId IN
 2. Identify overfitted/low-value tasks consuming agents
 3. Suggest reprioritization to user
 4. Focus compute on exhaustive searches that eliminate possibilities
+
+## User Verification Workflow (MANDATORY)
+
+**Before destroying workers**, the user MUST have an opportunity to inspect results in the Hashtopolis UI. Follow this sequence:
+
+### Step 1: Provide Login Credentials
+After cracking completes, provide the user with:
+```
+Hashtopolis UI: http://<SERVER_IP>:8080
+Username: hashcrack
+Password: Hashcrack2025Lab
+```
+
+**IMPORTANT:** Credentials are defined in `terraform.tfvars`. Always use these known values, NOT randomly generated passwords that may fail due to cloud-init escaping issues.
+
+### Step 2: Pre-Login Password Verification (MANDATORY)
+Before giving credentials to the user, **verify they work**:
+
+```bash
+# Test login - must see "agents.php" NOT "Wrong username/password"
+ssh ubuntu@<SERVER_IP> 'curl -s -c /tmp/c.txt http://localhost:8080/ > /dev/null && \
+  curl -s -c /tmp/c.txt -b /tmp/c.txt -L -X POST \
+  -d "username=hashcrack&password=Hashcrack2025Lab&fw=" \
+  http://localhost:8080/login.php | grep -qE "agents\.php" && echo "LOGIN OK" || echo "LOGIN FAILED"'
+```
+
+If login fails, reset the password via PHP script (see LEARNINGS.md for the procedure).
+
+### Step 3: User Inspection
+Wait for user confirmation that they:
+- Logged into Hashtopolis UI
+- Viewed cracked passwords (Lists → Show Cracked)
+- Saved/exported any results they need
+
+### Step 4: Staged Teardown
+Only after user confirms satisfaction:
+1. First destroy workers (user approves)
+2. Then destroy server (user approves)
+
+**Never skip user verification.** The user may want to download potfiles, run additional attacks, or examine specific hashes.
 
 ## Security
 
