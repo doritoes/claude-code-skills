@@ -149,6 +149,28 @@ Recommend: Skip yescrypt in Hashtopolis workflows entirely.
 **Don't:** Try to delete tasks with foreign key relationships.
 **Do:** Archive tasks (isArchived=1) instead of deleting.
 
+### Worker Teardown Cleanup
+When destroying workers, clean up ONLY the specific agents being removed:
+```sql
+-- Get agent IDs for destroyed workers (by hostname pattern)
+SET @agent_ids = (SELECT GROUP_CONCAT(agentId) FROM Agent
+                  WHERE agentName IN ('hashcrack-worker-1', 'hashcrack-worker-2', ...));
+
+-- Clean up FK references for SPECIFIC agents only
+DELETE FROM Speed WHERE agentId IN (@agent_ids);
+DELETE FROM AccessGroupAgent WHERE agentId IN (@agent_ids);
+DELETE FROM Zap WHERE agentId IN (@agent_ids);
+UPDATE Chunk SET agentId = NULL WHERE agentId IN (@agent_ids);
+DELETE FROM AgentZap WHERE agentId IN (@agent_ids);
+DELETE FROM Assignment WHERE agentId IN (@agent_ids);
+DELETE FROM AgentStat WHERE agentId IN (@agent_ids);
+DELETE FROM AgentError WHERE agentId IN (@agent_ids);
+DELETE FROM HealthCheckAgent WHERE agentId IN (@agent_ids);
+DELETE FROM Agent WHERE agentId IN (@agent_ids);
+```
+**Why:** Precise cleanup preserves other agents if scaling down partially.
+**Anti-pattern:** Don't DELETE FROM table without WHERE clause.
+
 ## Recommended Improvements
 
 ### 1. Server Cloud-Init
