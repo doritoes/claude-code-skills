@@ -1,0 +1,29 @@
+# =============================================================================
+# Hashcrack AWS Deployment Configuration
+# Copy to terraform.tfvars and customize
+# =============================================================================
+
+aws_region   = "us-east-1"
+project_name = "hashcrack"
+environment  = "lab"
+
+# Server configuration
+server_instance_type = "t3.medium"
+server_disk_gb       = 50
+
+# Worker configuration
+cpu_worker_count         = 4
+cpu_worker_instance_type = "c5.large"
+gpu_worker_count         = 0      # Requires quota increase for g4dn
+gpu_worker_instance_type = "g4dn.xlarge"
+worker_disk_gb           = 30
+
+# SSH access (replace with your public key)
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+ssh_user       = "ubuntu"
+
+# Hashtopolis credentials
+# IMPORTANT: Avoid special characters (!@#$%^&*) - causes cloud-init issues
+hashtopolis_admin_user     = "hashcrack"
+hashtopolis_admin_password = "YourSecurePassword123"
+worker_voucher             = "YOURWORKERS"

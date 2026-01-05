@@ -2,6 +2,25 @@
 
 Accumulated learnings from testing and operation to improve future runs.
 
+## CRITICAL GAP: Brute Force Not Working
+
+**Status: MAJOR BLOCKER - Core functionality missing**
+
+Brute force (mask) attacks are a core feature of distributed hash cracking. Currently:
+- **createTask API v1**: Returns "Invalid query!" for all mask attacks
+- **Database insertion**: Tasks don't dispatch (workPossible: false)
+- **Manual UI creation**: Not tested due to time constraints
+
+**Impact**: Without brute force, the skill can only run dictionary attacks. This limits crack rates to ~25-30% instead of potential 90%+ with exhaustive search.
+
+**Required Fix**:
+1. Test manual task creation in Hashtopolis UI to verify it works
+2. If UI works, investigate what fields/state the UI sets that API doesn't
+3. Consider upgrading to newer Hashtopolis version if API is broken
+4. Document exact createTask parameters that work
+
+**Workaround**: Use Hashtopolis UI to create mask/brute-force tasks manually after PAI deploys infrastructure.
+
 ## Deployment Issues
 
 ### Hashtopolis Password Hashing
@@ -212,6 +231,97 @@ Create reusable pretasks:
 - `Rules-best64` - Wordlist + best64 rules
 - `Mask-common` - Common password patterns
 
+## AWS-Specific Issues
+
+### IAM Permissions
+**Problem:** Initial IAM policy missing `ec2:DescribeInstanceCreditSpecifications`.
+**Cause:** Required for t3/t3a burstable instance types.
+**Solution:** Add to IAM policy:
+```json
+{
+    "Sid": "BurstableInstances",
+    "Effect": "Allow",
+    "Action": [
+        "ec2:DescribeInstanceCreditSpecifications",
+        "ec2:ModifyInstanceCreditSpecification"
+    ],
+    "Resource": "*"
+}
+```
+
+### APIv2 for Frontend
+**Problem:** Hashtopolis frontend (port 4200) requires APIv2.
+**Solution:** Set `HASHTOPOLIS_APIV2_ENABLE: 1` in docker-compose.yml.
+**Legacy Access:** Backend on port 8080 works without APIv2.
+
+### Password Reset on AWS
+Same as XCP-ng - password must be reset via bcrypt hash:
+```bash
+HASH=$(docker exec hashtopolis-backend php -r "echo password_hash(\"crackme123\", PASSWORD_BCRYPT);")
+docker exec hashtopolis-db mysql -u hashtopolis -p$DB_PASSWORD hashtopolis \
+  -e "UPDATE User SET passwordHash = '$HASH' WHERE username = 'hashcrack';"
+```
+
+### File Storage Path
+**Problem:** Files uploaded to `/var/www/hashtopolis/files/` but Hashtopolis looks in `/usr/local/share/hashtopolis/files/`.
+**Cause:** StoredValue `directory_files` set to different path than volume mount.
+**Solution:** Copy files to correct location:
+```bash
+docker exec hashtopolis-backend cp /var/www/hashtopolis/files/* /usr/local/share/hashtopolis/files/
+```
+
+### Task Keyspace Issues
+**Problem:** Tasks created with keyspace=1 or incorrect keyspace don't run properly.
+**Cause:** Keyspace set manually instead of letting agent calculate.
+**Solution:** Create tasks with `keyspace = 0` and let agent calculate on first run.
+
+### Python RecursionError on AWS (Ubuntu 24.04 / Python 3.12)
+**Problem:** Agent fails with `RecursionError: maximum recursion depth exceeded` in cookiejar.py.
+**Cause:** Python 3.12 default recursion limit (1000) too low for Hashtopolis agent HTTP requests.
+**Solution:** Increase to 10000 in systemd service:
+```bash
+ExecStart=/usr/bin/python3 -c "import sys; sys.setrecursionlimit(10000); exec(open('__main__.py').read())"
+```
+**Note:** 5000 still hits recursion errors; 10000 works reliably.
+
+### Voucher Consumption Race Condition
+**Problem:** Multiple workers trying to register consume voucher before others can use it.
+**Cause:** `voucherDeletion=0` setting doesn't prevent race condition.
+**Solution:** Create multiple copies of the same voucher:
+```sql
+INSERT INTO RegVoucher (voucher, time) VALUES
+  ('VOUCHER_NAME', UNIX_TIMESTAMP()),
+  ('VOUCHER_NAME', UNIX_TIMESTAMP()),
+  ('VOUCHER_NAME', UNIX_TIMESTAMP());
+-- Create N copies for N workers
+```
+
+### Spot Instance Quotas
+**Problem:** `MaxSpotInstanceCountExceeded` error when adding GPU spot instances.
+**Cause:** Default AWS account spot instance limits.
+**Limits (us-east-1 defaults):**
+- Standard instances: 5 vCPUs per instance family
+- GPU instances (g4dn, p3): Often 0 until quota increase requested
+**Solution:** Request quota increase via AWS Service Quotas console.
+
+### Spot Instance Names
+**Problem:** Spot instances show as "unnamed" in AWS console.
+**Cause:** Tags are applied to spot request, not the instance.
+**Solution:** Add `aws_ec2_tag` resource for spot instance tagging:
+```hcl
+resource "aws_ec2_tag" "spot_instance_name" {
+  resource_id = aws_spot_instance_request.workers[count.index].spot_instance_id
+  key         = "Name"
+  value       = "worker-${count.index + 1}"
+}
+```
+
+### AWS Test 1 Results (2026-01-04)
+- Server: t3.medium, Worker: c5.large (CPU)
+- Speed: ~8.77 MH/s on MD5 with rockyou + OneRule
+- Cracked 1/4 test hashes:
+  - `c53e479b03b3220d3d56da88c4cace20` = `P@$$w0rd`
+
 ## Session Statistics
 
 ### Test 2 Results (2025-12-31)
@@ -225,6 +335,126 @@ Create reusable pretasks:
 *NTLM: 9 via Hashtopolis + 1 verified locally (Ubuntu++)
 
 **Cross-reference success:** Same 9 passwords cracked in both MD5 and NTLM.
+
+### Test 3 Results - AWS Spot Instances (2026-01-05)
+| Configuration | Value |
+|--------------|-------|
+| Server | t3.medium (on-demand) |
+| Workers | 15 × c5.large (spot) |
+| Cost Savings | ~70% vs on-demand |
+
+| Hash Type | Total | Cracked | Rate |
+|-----------|-------|---------|------|
+| NTLM | 16 | 4 | 25% |
+
+**Cracked Passwords:**
+1. (empty) - Disabled accounts
+2. Butterfly123! - word + digits + special
+3. January2022 - month + year pattern
+4. P@$$w0rd - l33t speak
+
+## AWS Instance Type Comparison (Test 3)
+
+### Cost-Effectiveness Analysis
+| Instance Type | Role | Pricing | Effectiveness |
+|--------------|------|---------|---------------|
+| t3.medium | Server | On-demand ~$0.042/hr | ✅ Reliable, sufficient for orchestration |
+| c5.large | CPU Worker (spot) | ~$0.03/hr (70% savings) | ✅ Best value for CPU cracking |
+| g4dn.xlarge | GPU Worker (spot) | ~$0.16/hr (60% savings) | ❌ Account quota blocked |
+
+### Spot Instance Recommendations
+1. **Always use spot for workers** - 60-70% cost savings, acceptable interruption risk
+2. **Use on-demand for server** - Needs stability for orchestration
+3. **Request GPU quota increase BEFORE deployment** - Default quota is often 0
+4. **CPU spot instances are most cost-effective** for dictionary + rule attacks
+
+### GPU Spot Instance Blockers
+- Default AWS accounts have 0 GPU spot vCPU quota
+- Must request increase via Service Quotas console
+- Allow 24-48 hours for quota approval
+- Region matters: us-east-1 has best spot availability
+
+## Critical API/Task Dispatch Issues (Test 3)
+
+### createTask API v1 - Still Broken
+**Problem:** `createTask` returns "Invalid query!" for ALL mask/brute-force attacks.
+**Tested Parameters:**
+- name, hashlistId, attackCmd, chunkTime, statusTimer, priority ❌
+- Added: maxAgents, isCpuTask, isSmall, crackerBinaryId ❌
+- Added: chunksize, benchmarkType, isCpuOnly ❌
+
+**Working:** Wordlist attacks created via earlier sessions still function.
+**Not Working:** New mask attacks (-a 3) cannot be created via API.
+
+### Database-Created Tasks Don't Dispatch
+**Problem:** Tasks inserted directly into database are visible in API but agents report "No task available!"
+**Symptoms:**
+- Task appears in `listTasks` API response
+- Task appears in Hashtopolis UI
+- `getTask` shows `workPossible: false`
+- Agents continuously poll with "No task available!"
+
+**Attempted fixes that DIDN'T work:**
+1. Setting keyspace manually
+2. Creating chunks manually
+3. Setting TaskWrapper priority to 100
+4. Creating new TaskWrapper
+5. Setting staticChunks=1
+6. Restarting agents
+
+**Root Cause:** Unknown - likely missing internal state that API sets during task creation.
+
+### Pretasks and Supertasks - DO NOT USE
+**Problem:** Pretasks and supertasks have never worked in this lab environment.
+**Recommendation:** Avoid entirely. Use direct task creation only.
+
+### What DOES Work
+1. **Wordlist attacks** - Created in earlier sessions, work perfectly
+2. **OneRule attacks** - `#HL# wordlist.txt -r onerule.rule` works
+3. **Agents dispatch correctly** for existing tasks
+4. **File uploads via API** - Work reliably
+5. **Hashlist creation via API** - Works reliably
+
+**IMPORTANT CLARIFICATION:** The high crack rates in Test 2 (90% MD5, 71% NTLM) were achieved
+through **wordlist + OneRule**, NOT brute force. All cracked passwords (Butterfly123!,
+returnofthejedi, J@sonHouse, etc.) match patterns that OneRule would find via dictionary
+transformations. Brute force attacks were never successfully created in any test.
+
+### What DOESN'T Work
+1. **createTask API for new tasks** - Always fails with "Invalid query!"
+2. **Mask/brute-force attacks via API** - Can't create via API
+3. **Database-inserted tasks** - Don't dispatch to agents (workPossible: false)
+4. **Pretasks/Supertasks** - Never functional in this environment
+
+### Brute Force Status
+**Brute force (mask) attacks have NEVER been successfully created via API or database.**
+- Test 2: High crack rates were from rockyou + OneRule (dictionary attacks)
+- Test 3: Attempted to create mask attacks, all methods failed
+- Manual UI creation was not tested due to time constraints
+- The API limitation means automated brute force deployment is not possible
+
+## Recommended Workflow (Based on Test 3)
+
+### For Reliable Cracking
+1. **Deploy infrastructure** (server + spot workers)
+2. **Upload wordlists and rules** via API (works)
+3. **Create hashlist** via API (works)
+4. **Create wordlist+rules task via UI** (only reliable method for new tasks)
+5. **Trust agents** via database
+6. **Monitor progress**
+
+### Attack Priority (CPU Workers)
+| Priority | Attack Type | Expected Results |
+|----------|-------------|------------------|
+| 1 | Wordlist (rockyou) | Fast, catches common passwords |
+| 2 | Wordlist + OneRule | Catches mutations |
+| 3 | Wordlist + best64 | Lighter rule set |
+| 4 | UI-created mask attacks | If API ever fixed |
+
+### Brute Force - Not Viable via API
+Until createTask API is fixed, brute force attacks require:
+- Manual task creation in Hashtopolis UI
+- Or fixing the underlying Hashtopolis API bug
 
 ### Key Finding: yescrypt Broke Workflow
 Creating a task for unsupported hash type (yescrypt mode 13400) caused:
