@@ -48,11 +48,19 @@ PAI Hashcrack CLI
        ▼
 Hashtopolis Server (orchestration)
        │
-       ├── Worker 1 (XCP-ng)
-       ├── Worker 2 (XCP-ng)
+       ├── Worker 1 (XCP-ng / AWS / Azure)
+       ├── Worker 2 (XCP-ng / AWS / Azure)
        ├── Worker N (cloud)
        └── ...scale to hundreds
 ```
+
+### Supported Platforms
+| Platform | Terraform Dir | Status |
+|----------|---------------|--------|
+| XCP-ng (local) | `terraform/` | Production |
+| AWS | `terraform/aws/` | Production |
+| Azure | `terraform/azure/` | Tested |
+| GCP | `terraform/gcp/` | Ready |
 
 ## Quick Start
 
@@ -1320,17 +1328,75 @@ aws configure
 # Automatic via instance metadata
 ```
 
-### Future: Azure
-- Terraform azurerm provider
-- Azure VMs (Standard_D2s_v3 for server, Standard_F4s_v2+ for workers)
-- Virtual Network + NSG
-- Consider Azure Spot VMs for cost savings
+### Azure (Ready)
+**Terraform:** `terraform/azure/`
 
-### Future: GCP
-- Terraform google provider
-- Compute Engine instances (e2-medium for server, c2-standard-4+ for workers)
-- VPC + firewall rules
-- Consider Preemptible VMs for cost savings
+**Instance Types:**
+| Role | VM Size | Specs | Cost/hr (approx) |
+|------|---------|-------|------------------|
+| Server | Standard_B2s | 2 vCPU, 4 GB | $0.042 |
+| CPU Worker | Standard_F4s_v2 | 4 vCPU, 8 GB | $0.17 |
+| GPU Worker | Standard_NC4as_T4_v3 | 4 vCPU, Tesla T4 | $0.53 |
+
+**Deployment:**
+```bash
+cd terraform/azure
+# Edit terraform.tfvars with your config
+terraform init
+terraform plan
+terraform apply
+```
+
+**Authentication:**
+```bash
+# Option 1: Azure CLI
+az login
+
+# Option 2: Service Principal
+export ARM_CLIENT_ID="..."
+export ARM_CLIENT_SECRET="..."
+export ARM_TENANT_ID="..."
+export ARM_SUBSCRIPTION_ID="..."
+```
+
+**Azure-Specific Notes:**
+- Use `Standard_NC4as_T4_v3` for Tesla T4 GPU (similar to AWS g4dn.xlarge)
+- Spot VMs available via `use_spot_instances = true`
+- Resource group auto-created with project name
+
+### GCP (Ready)
+**Terraform:** `terraform/gcp/`
+
+**Instance Types:**
+| Role | Machine Type | Specs | Cost/hr (approx) |
+|------|--------------|-------|------------------|
+| Server | e2-medium | 2 vCPU, 4 GB | $0.034 |
+| CPU Worker | c2-standard-4 | 4 vCPU, 16 GB | $0.188 |
+| GPU Worker | n1-standard-4 + T4 | 4 vCPU, Tesla T4 | ~$0.45 |
+
+**Deployment:**
+```bash
+cd terraform/gcp
+# Edit terraform.tfvars with your GCP project ID and SSH key
+terraform init
+terraform plan
+terraform apply
+```
+
+**Authentication:**
+```bash
+# Option 1: User credentials (development)
+gcloud auth application-default login
+
+# Option 2: Service account (production)
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
+```
+
+**GCP-Specific Notes:**
+- Use `n1-standard-4` + `nvidia-tesla-t4` for GPU workers (GPU quota required)
+- Preemptible VMs available via `use_preemptible = true` (~60-70% savings)
+- GCP supports both ed25519 and RSA SSH keys
+- Workers deploy with private IPs only (access via server as jump host)
 
 ### Cross-Cloud Considerations
 | Concern | Solution |

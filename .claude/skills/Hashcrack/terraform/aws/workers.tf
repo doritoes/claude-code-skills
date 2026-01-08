@@ -60,10 +60,10 @@ resource "aws_ec2_tag" "cpu_worker_role" {
 }
 
 # =============================================================================
-# Hashcat GPU Worker EC2 Spot Instances
+# Hashcat GPU Worker EC2 On-Demand Instances
 # =============================================================================
 
-resource "aws_spot_instance_request" "gpu_workers" {
+resource "aws_instance" "gpu_workers" {
   count = var.gpu_worker_count
 
   ami                    = data.aws_ami.ubuntu.id
@@ -71,9 +71,6 @@ resource "aws_spot_instance_request" "gpu_workers" {
   key_name               = aws_key_pair.hashcrack.key_name
   vpc_security_group_ids = [aws_security_group.worker.id]
   subnet_id              = aws_subnet.public.id
-
-  spot_type            = "one-time"
-  wait_for_fulfillment = true
 
   root_block_device {
     volume_size           = var.worker_disk_gb
@@ -92,7 +89,7 @@ resource "aws_spot_instance_request" "gpu_workers" {
 
   tags = {
     Name = "${var.project_name}-gpu-worker-${count.index + 1}"
-    Role = "gpu-worker-spot"
+    Role = "gpu-worker"
   }
 
   depends_on = [time_sleep.wait_for_server]
@@ -100,22 +97,4 @@ resource "aws_spot_instance_request" "gpu_workers" {
   lifecycle {
     ignore_changes = [user_data]
   }
-}
-
-# =============================================================================
-# GPU Spot Instance Tagging (applies Name to actual instance, not just request)
-# =============================================================================
-
-resource "aws_ec2_tag" "gpu_worker_name" {
-  count       = var.gpu_worker_count
-  resource_id = aws_spot_instance_request.gpu_workers[count.index].spot_instance_id
-  key         = "Name"
-  value       = "${var.project_name}-gpu-worker-${count.index + 1}"
-}
-
-resource "aws_ec2_tag" "gpu_worker_role" {
-  count       = var.gpu_worker_count
-  resource_id = aws_spot_instance_request.gpu_workers[count.index].spot_instance_id
-  key         = "Role"
-  value       = "gpu-worker-spot"
 }
