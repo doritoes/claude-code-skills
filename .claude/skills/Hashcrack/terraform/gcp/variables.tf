@@ -113,6 +113,18 @@ variable "use_preemptible" {
   default     = false
 }
 
+variable "worker_public_ip" {
+  description = "Give workers public IPs (avoids Cloud NAT cost but exposes workers)"
+  type        = bool
+  default     = false
+}
+
+variable "use_cloud_nat" {
+  description = "Create Cloud NAT for private IP workers (costs ~$0.044/hr per VM)"
+  type        = bool
+  default     = true
+}
+
 # =============================================================================
 # Hashtopolis Configuration
 # =============================================================================

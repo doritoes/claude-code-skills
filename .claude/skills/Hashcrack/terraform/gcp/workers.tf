@@ -28,7 +28,14 @@ resource "google_compute_instance" "cpu_workers" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.hashcrack.id
-    # No access_config = private IP only (workers don't need external IP)
+
+    # Public IP if enabled (avoids Cloud NAT cost)
+    dynamic "access_config" {
+      for_each = var.worker_public_ip ? [1] : []
+      content {
+        network_tier = "STANDARD"  # Cheaper than PREMIUM
+      }
+    }
   }
 
   # Cloud-init configuration
@@ -95,7 +102,14 @@ resource "google_compute_instance" "gpu_workers" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.hashcrack.id
-    # No access_config = private IP only
+
+    # Public IP if enabled (avoids Cloud NAT cost)
+    dynamic "access_config" {
+      for_each = var.worker_public_ip ? [1] : []
+      content {
+        network_tier = "STANDARD"
+      }
+    }
   }
 
   # Cloud-init configuration (uses GPU template)

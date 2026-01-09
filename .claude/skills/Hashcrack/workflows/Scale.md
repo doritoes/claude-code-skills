@@ -181,9 +181,78 @@ hashcrack scale --workers 0
 watch -n 5 'hashcrack status'
 ```
 
+## GCP-Specific Scale Operations
+
+### Scale Up on GCP
+```bash
+cd ~/.claude/skills/Hashcrack/terraform/gcp
+
+# Create unique vouchers for new workers BEFORE terraform apply
+ssh -i ~/.ssh/gcp_hashcrack ubuntu@<SERVER_IP> 'sudo docker exec hashtopolis-db mysql -u hashtopolis -p<DB_PW> hashtopolis -e "
+INSERT INTO RegVoucher (voucher, time) VALUES
+  (\"PAI_GCP_W8\", UNIX_TIMESTAMP()),
+  (\"PAI_GCP_W9\", UNIX_TIMESTAMP()),
+  (\"PAI_GCP_W10\", UNIX_TIMESTAMP());
+"'
+
+# Update terraform.tfvars with new worker count
+# Then apply
+terraform apply -auto-approve
+
+# After new workers boot, configure each with unique voucher
+# Then trust new agents
+```
+
+### GCP Quota Considerations
+- `CPUS_ALL_REGIONS` is the global limit (not regional quotas)
+- Each n2-standard-4 uses 4 vCPU
+- Server uses 2 vCPU (e2-medium)
+- Max workers = (quota - 2) / 4
+
+### Scale Down on GCP
+Same procedure as other platforms, but remember:
+- Cloud NAT costs ~$0.045/hr per VM - scale down saves money
+- Deactivate agents BEFORE destroying workers
+- GCP VMs destroy quickly (~30 sec)
+
+## Chunk State Verification (CRITICAL)
+
+**NEVER trust keyspaceProgress alone!** Verify actual chunk completion:
+
+```sql
+-- Check actual chunk states
+SELECT
+  SUM(CASE WHEN state = 5 THEN 1 ELSE 0 END) as finished,
+  SUM(CASE WHEN state != 5 THEN 1 ELSE 0 END) as not_finished,
+  COUNT(*) as total
+FROM Chunk WHERE taskId = X;
+
+-- Task is ONLY complete when ALL chunks are state=5
+```
+
+**Chunk States:**
+| State | Meaning |
+|-------|---------|
+| 0 | PENDING - waiting |
+| 2 | DISPATCHED - running |
+| 4 | ABORTED - agent died |
+| 5 | FINISHED - complete |
+
+## Aborted Chunk Management
+
+During cracking, monitor and reset aborted chunks every 5 minutes:
+
+```sql
+-- Check for aborted chunks
+SELECT COUNT(*) as aborted FROM Chunk WHERE taskId = X AND state = 4;
+
+-- Reset aborted chunks to allow re-dispatch
+UPDATE Chunk SET state = 0, agentId = NULL WHERE taskId = X AND state = 4;
+```
+
 ## Limitations
 
 - Maximum workers depend on XCP-ng resources
-- Cloud providers may have instance limits
+- Cloud providers may have instance limits (GCP: CPUS_ALL_REGIONS quota)
 - Network bandwidth may bottleneck at high scale
 - Hashtopolis server may need more resources for 50+ workers

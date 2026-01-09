@@ -75,6 +75,35 @@ resource "google_compute_firewall" "allow_internal" {
 }
 
 # =============================================================================
+# Cloud Router & NAT (for worker internet access - OPTIONAL)
+# =============================================================================
+# Only created if use_cloud_nat = true AND worker_public_ip = false
+# Cost: ~$0.044/hr per VM using NAT + ~$0.045/GB data
+
+# Cloud Router (required for Cloud NAT)
+resource "google_compute_router" "hashcrack" {
+  count   = var.use_cloud_nat && !var.worker_public_ip ? 1 : 0
+  name    = "${var.project_name}-router"
+  region  = var.gcp_region
+  network = google_compute_network.hashcrack.id
+}
+
+# Cloud NAT - allows private instances to reach internet
+resource "google_compute_router_nat" "hashcrack" {
+  count                              = var.use_cloud_nat && !var.worker_public_ip ? 1 : 0
+  name                               = "${var.project_name}-nat"
+  router                             = google_compute_router.hashcrack[0].name
+  region                             = var.gcp_region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  log_config {
+    enable = false
+    filter = "ALL"
+  }
+}
+
+# =============================================================================
 # Random Resources
 # =============================================================================
 

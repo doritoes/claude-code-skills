@@ -29,6 +29,11 @@ output "gpu_worker_ips" {
   value       = google_compute_instance.gpu_workers[*].network_interface[0].network_ip
 }
 
+output "gpu_worker_public_ips" {
+  description = "Public IPs of GPU workers (if enabled)"
+  value       = var.worker_public_ip ? [for w in google_compute_instance.gpu_workers : w.network_interface[0].access_config[0].nat_ip] : []
+}
+
 output "db_password" {
   description = "Database password"
   value       = local.db_password

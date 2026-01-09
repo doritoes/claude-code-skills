@@ -60,7 +60,26 @@ Hashtopolis Server (orchestration)
 | XCP-ng (local) | `terraform/` | Production |
 | AWS | `terraform/aws/` | Production |
 | Azure | `terraform/azure/` | Tested |
-| GCP | `terraform/gcp/` | Ready |
+| GCP | `terraform/gcp/` | **Production** |
+
+### GCP-Specific Requirements
+
+**CRITICAL: Cloud NAT Required**
+GCP VMs with private IPs cannot reach internet without Cloud NAT (unlike AWS/Azure).
+The terraform config includes Cloud Router + Cloud NAT automatically.
+
+**Quota Limits:**
+- `CPUS_ALL_REGIONS`: Global limit overrides regional quotas
+- New projects default to 32 vCPU globally
+- Request increases via Console → IAM & Admin → Quotas
+
+**GCP Authentication:**
+```bash
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project YOUR_PROJECT
+gcloud services enable compute.googleapis.com
+```
 
 ## Quick Start
 
