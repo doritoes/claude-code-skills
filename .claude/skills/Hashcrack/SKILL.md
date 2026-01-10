@@ -39,6 +39,213 @@ When executing this skill, follow these critical procedures:
 | Tasks not dispatching | Check priority > 0, agents trusted, files accessible |
 | Stale agents after teardown | Clean up FK tables in correct order |
 | yescrypt hashes | Not supported by hashcat - use John the Ripper |
+| **Voucher consumed** | Create ONE VOUCHER PER WORKER before boot (race conditions cause failures even with deletion disabled) |
+| **API hashlist creation fails** | ALWAYS create hashlist via database - API is unreliable |
+| **Manual task assignment** | ANTI-PATTERN - use API createTask instead of DB insert |
+| **CPU task not dispatching** | Set agents to `cpuOnly=1` if using CPU workers with `isCpuTask=1` tasks |
+| **Files not downloading** | Files must be in `/usr/local/share/hashtopolis/files/` FLAT (not in subdirectories) |
+| **Agent recursion error** | If agent hits recursion error during registration, kill and restart: `sudo pkill -9 -f "__main__.py"; sudo rm -f /opt/hashtopolis-agent/lock.pid; cd /opt/hashtopolis-agent && sudo nohup python3 __main__.py &` |
+
+### STEP-BY-STEP DEPLOYMENT PROCESS (FOLLOW EXACTLY)
+
+**STEP 1: Deploy Infrastructure**
+```bash
+cd terraform/aws  # or gcp, azure
+terraform init
+terraform apply -auto-approve
+```
+
+**STEP 2: Wait for Server (3 minutes)**
+```bash
+sleep 180
+curl -s http://SERVER_IP:8080/ | head -5  # Should show Hashtopolis HTML
+```
+
+**STEP 3: Configure Server (IMMEDIATELY after server is up)**
+
+**CRITICAL: Create ONE VOUCHER PER WORKER before they boot. Even with deletion disabled, race conditions can cause registration failures.**
+
+```bash
+# For N workers, create N vouchers (replace WORKER_COUNT with actual number)
+WORKER_COUNT=4
+ssh ubuntu@SERVER_IP "DB_PASS=\$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p\"\$DB_PASS\" -e \"
+-- CRITICAL: Disable voucher deletion FIRST
+UPDATE hashtopolis.Config SET value='0' WHERE item='voucherDeletion';
+
+-- Create individual vouchers for each worker (one per worker to avoid race conditions)
+INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('WORKER_VOUCHER_1', UNIX_TIMESTAMP());
+INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('WORKER_VOUCHER_2', UNIX_TIMESTAMP());
+INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('WORKER_VOUCHER_3', UNIX_TIMESTAMP());
+INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('WORKER_VOUCHER_4', UNIX_TIMESTAMP());
+-- Add more vouchers if deploying more workers
+
+-- Create API key
+INSERT IGNORE INTO hashtopolis.ApiKey (startValid, endValid, accessKey, accessCount, userId, apiGroupId)
+VALUES (0, 9999999999, 'PAI_API_KEY', 0, 1, 1);
+
+-- Verify
+SELECT COUNT(*) as voucher_count FROM hashtopolis.RegVoucher;
+\""
+```
+
+**Why multiple vouchers?** Even with `voucherDeletion=0`, race conditions during simultaneous agent registration can cause failures. Creating N vouchers for N workers ensures each agent can register successfully.
+
+**STEP 4: Wait for Agents to Register (2-3 minutes)**
+```bash
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "SELECT agentId, agentName, isActive FROM hashtopolis.Agent;"'
+# Wait until all workers appear
+```
+
+**STEP 5: Trust Agents and Configure CPU/GPU Mode**
+```bash
+# Trust all agents
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "UPDATE hashtopolis.Agent SET isTrusted = 1;"'
+
+# CRITICAL FOR CPU WORKERS: Set cpuOnly=1 so they can accept CPU tasks
+# Skip this if using GPU workers
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "
+-- For CPU workers (c5.xlarge, etc.): set cpuOnly=1
+UPDATE hashtopolis.Agent SET cpuOnly=1;
+-- Verify
+SELECT agentId, agentName, isTrusted, cpuOnly FROM hashtopolis.Agent;
+"'
+```
+
+**STEP 6: Download Wordlists and Rules (BEFORE creating task)**
+
+**CRITICAL: Files must be in FLAT structure, not subdirectories. The getFile.php endpoint reads from `/usr/local/share/hashtopolis/files/` as a flat directory.**
+
+```bash
+# 1. Download rockyou.txt and OneRuleToRuleThemAll to server /tmp
+ssh ubuntu@SERVER_IP 'cd /tmp &&
+curl -sL "https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt" -o rockyou.txt &&
+curl -sL "https://raw.githubusercontent.com/NotSoSecure/password_cracking_rules/master/OneRuleToRuleThemAll.rule" -o OneRuleToRuleThemAll.rule &&
+ls -lh rockyou.txt OneRuleToRuleThemAll.rule'
+
+# 2. Copy to the CORRECT location (hashtopolis reads from /usr/local/share/hashtopolis/files/)
+# Files must be FLAT - not in subdirectories like /files/1/rockyou.txt
+ssh ubuntu@SERVER_IP 'sudo docker exec hashtopolis-backend mkdir -p /usr/local/share/hashtopolis/files
+# Copy files directly into the backend container
+sudo docker cp /tmp/rockyou.txt hashtopolis-backend:/usr/local/share/hashtopolis/files/rockyou.txt
+sudo docker cp /tmp/OneRuleToRuleThemAll.rule hashtopolis-backend:/usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule
+
+# Set ownership so hashtopolis can serve them
+sudo docker exec hashtopolis-backend chown -R www-data:www-data /usr/local/share/hashtopolis/files/
+
+# Verify files exist with correct sizes
+sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/'
+
+# 3. Register files in database (MUST match filename exactly, no path)
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "
+-- fileType 0 = wordlist, fileType 1 = rules
+INSERT INTO hashtopolis.File (fileId, filename, size, isSecret, fileType, accessGroupId, lineCount)
+VALUES (1, \"rockyou.txt\", 139921497, 0, 0, 1, 14344391);
+
+INSERT INTO hashtopolis.File (fileId, filename, size, isSecret, fileType, accessGroupId, lineCount)
+VALUES (2, \"OneRuleToRuleThemAll.rule\", 402732, 0, 1, 1, 51995);
+
+-- Verify registration
+SELECT fileId, filename, size, fileType FROM hashtopolis.File;
+"'
+
+# 4. Test file download works (optional but recommended)
+ssh ubuntu@SERVER_IP 'curl -s "http://localhost:8080/getFile.php?file=1" 2>&1 | head -1'
+# Should NOT show "ERR3 - file not present" or "No access!"
+```
+
+**Why this matters:** Workers download files from the server via getFile.php. If files are in wrong location (subdirectories, docker volumes not mapped), workers get empty/corrupt files and cracking fails silently with keyspace=1.
+
+**STEP 7: Create Hashlist (DATABASE - NOT API)**
+```bash
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "
+INSERT INTO hashtopolis.Hashlist (hashlistName, format, hashTypeId, hashCount, saltSeparator, cracked, isSecret, hexSalt, isSalted, accessGroupId, notes, brainId, brainFeatures, isArchived)
+VALUES (\"MyHashlist\", 0, 0, 3, \":\", 0, 0, 0, 0, 1, \"\", 0, 0, 0);
+SET @hl = LAST_INSERT_ID();
+
+INSERT INTO hashtopolis.Hash (hashlistId, hash, salt, plaintext, timeCracked, chunkId, isCracked, crackPos)
+VALUES
+  (@hl, \"5d41402abc4b2a76b9719d911017c592\", \"\", \"\", NULL, NULL, 0, 0),
+  (@hl, \"098f6bcd4621d373cade4e832627b4f6\", \"\", \"\", NULL, NULL, 0, 0),
+  (@hl, \"d8578edf8458ce06fbc5bb76a58c5ca4\", \"\", \"\", NULL, NULL, 0, 0);
+
+SELECT hashlistId, hashlistName, hashCount FROM hashtopolis.Hashlist ORDER BY hashlistId DESC LIMIT 1;
+"'
+```
+
+**STEP 8: Create Task**
+
+**TRY API FIRST** (preferred - handles keyspace automatically):
+```bash
+HASHLIST_ID=1
+curl -X POST http://SERVER_IP:8080/api/user.php \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"section\":\"task\",
+    \"request\":\"createTask\",
+    \"accessKey\":\"PAI_API_KEY\",
+    \"name\":\"SHA256-OneRule-Rockyou\",
+    \"hashlistId\":$HASHLIST_ID,
+    \"attackCmd\":\"#HL# rockyou.txt -r OneRuleToRuleThemAll.rule\",
+    \"chunkTime\":600,
+    \"statusTimer\":5,
+    \"priority\":100,
+    \"maxAgents\":0,
+    \"isCpuTask\":true,
+    \"isSmall\":false,
+    \"crackerBinaryId\":1,
+    \"crackerBinaryTypeId\":1,
+    \"files\":[1,2]
+  }"
+```
+
+**IF API RETURNS "Invalid query!" - USE DATABASE WITH KEYSPACE FIX:**
+
+Database task insert skips keyspace calculation, causing keyspace=1 and immediate task exhaustion. You MUST set keyspace=0 and priority correctly:
+
+```bash
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "
+-- Create TaskWrapper (links task to hashlist)
+INSERT INTO hashtopolis.TaskWrapper (priority, maxAgents, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked)
+VALUES (100, 0, 0, 1, 1, \"SHA256-OneRule-Rockyou\", 0, 0);
+SET @tw = LAST_INSERT_ID();
+
+-- Create Task with keyspace=0 (forces recalculation by agents)
+INSERT INTO hashtopolis.Task (taskName, attackCmd, chunkTime, statusTimer, keyspace, keyspaceProgress, priority, maxAgents, color, isSmall, isCpuTask, useNewBench, skipKeyspace, crackerBinaryId, crackerBinaryTypeId, taskWrapperId, isArchived, notes, staticChunks, chunkSize, forcePipe, usePreprocessor, preprocessorCommand)
+VALUES (\"SHA256-OneRule-Rockyou\", \"#HL# rockyou.txt -r OneRuleToRuleThemAll.rule\", 600, 5, 0, 0, 100, 0, \"\", 0, 1, 1, 0, 1, 1, @tw, 0, \"\", 0, 0, 0, 0, \"\");
+SET @t = LAST_INSERT_ID();
+
+-- Link files to task
+INSERT INTO hashtopolis.FileTask (fileId, taskId) VALUES (1, @t);
+INSERT INTO hashtopolis.FileTask (fileId, taskId) VALUES (2, @t);
+
+-- CRITICAL: Verify keyspace=0 (will be calculated by first agent)
+SELECT taskId, taskName, keyspace, priority FROM hashtopolis.Task;
+"'
+```
+
+**IMPORTANT:** If you see keyspace=1 instead of 0, the task will exhaust immediately. Fix with:
+```bash
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "
+UPDATE hashtopolis.Task SET keyspace=0, keyspaceProgress=0, priority=100;
+UPDATE hashtopolis.TaskWrapper SET priority=100;
+"'
+```
+
+**STEP 9: Monitor Progress**
+```bash
+ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "
+SELECT taskId, keyspace, keyspaceProgress FROM hashtopolis.Task;
+SELECT cracked, hashCount FROM hashtopolis.Hashlist WHERE hashlistId=1;
+"'
+```
+
+### WHY THIS ORDER MATTERS
+
+1. **Vouchers must exist BEFORE workers boot** - Create N vouchers for N workers to avoid race conditions
+2. **Download wordlists/rules BEFORE creating task** - Files must exist for task to work
+3. **Hashlist via database** - API createHashlist is unreliable, returns "Invalid query!"
+4. **Task via API** - Database insert skips initialization, causes "No task available!"
+5. **NEVER manually insert into Assignment table** - This is an anti-pattern, use API createTask instead
 
 ## Architecture
 
@@ -48,19 +255,20 @@ PAI Hashcrack CLI
        ▼
 Hashtopolis Server (orchestration)
        │
-       ├── Worker 1 (XCP-ng / AWS / Azure)
-       ├── Worker 2 (XCP-ng / AWS / Azure)
+       ├── Worker 1 (XCP-ng / AWS / Azure / GCP / OCI)
+       ├── Worker 2 (XCP-ng / AWS / Azure / GCP / OCI)
        ├── Worker N (cloud)
        └── ...scale to hundreds
 ```
 
 ### Supported Platforms
-| Platform | Terraform Dir | Status |
-|----------|---------------|--------|
-| XCP-ng (local) | `terraform/` | Production |
-| AWS | `terraform/aws/` | Production |
-| Azure | `terraform/azure/` | Tested |
-| GCP | `terraform/gcp/` | **Production** |
+| Platform | Terraform Dir | Status | Notes |
+|----------|---------------|--------|-------|
+| XCP-ng (local) | `terraform/` | Production | Local hypervisor |
+| AWS | `terraform/aws/` | **Production** | Spot instances, T4 GPU |
+| GCP | `terraform/gcp/` | **Production** | Preemptible, T4 GPU |
+| Azure | `terraform/azure/` | Tested | Spot instances |
+| **OCI** | `terraform/oci/` | **New** | Preemptible, 10TB free egress |
 
 ### GCP-Specific Requirements
 
@@ -80,6 +288,40 @@ gcloud auth application-default login
 gcloud config set project YOUR_PROJECT
 gcloud services enable compute.googleapis.com
 ```
+
+### OCI-Specific Requirements
+
+**Benefits:**
+- 10TB free egress per month (vs ~$0.09/GB on AWS/GCP)
+- Preemptible instances up to 50% cheaper
+- Flex shapes allow custom OCPU/memory configuration
+- No minimum commitment
+
+**OCI Authentication:**
+1. Create API Key in OCI Console → User Settings → API Keys
+2. Download the private key and config file
+3. Set up `~/.oci/config` or use terraform.tfvars
+
+```bash
+# Install OCI CLI (optional but helpful)
+bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)"
+
+# Verify authentication
+oci iam region list
+```
+
+**Required OCIDs for terraform.tfvars:**
+- `tenancy_ocid` - Your tenancy identifier
+- `user_ocid` - Your user identifier
+- `compartment_ocid` - (Optional) Compartment for resources
+- `fingerprint` - API key fingerprint
+
+**GPU Shapes:**
+| Shape | GPU | Memory | Use Case |
+|-------|-----|--------|----------|
+| VM.GPU2.1 | 1x P100 | 16GB | Good for hashcracking |
+| VM.GPU3.1 | 1x V100 | 16GB | Better performance |
+| BM.GPU4.8 | 8x A100 | 40GB | Maximum throughput |
 
 ## Quick Start
 
