@@ -1,79 +1,81 @@
 # =============================================================================
-# Hashcrack OCI Deployment - Example Configuration
+# Hashcrack OCI Deployment Configuration - EXAMPLE
 # =============================================================================
 # Copy this file to terraform.tfvars and fill in your values
 # =============================================================================
 
 # =============================================================================
-# OCI Authentication (REQUIRED)
+# OCI Authentication (Required)
 # Get these from OCI Console -> User Settings -> API Keys
 # =============================================================================
 
-tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaaxxxxxxxxxxxxxxxxxxxxxxxx"
-user_ocid        = "ocid1.user.oc1..aaaaaaaaxxxxxxxxxxxxxxxxxxxxxxxx"
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaa..."
+user_ocid        = "ocid1.user.oc1..aaaa..."
 fingerprint      = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
 private_key_path = "~/.oci/oci_api_key.pem"
 
-# Optional: Compartment for resources (defaults to tenancy root)
-# compartment_ocid = "ocid1.compartment.oc1..aaaaaaaaxxxxxxxxxxxxxxxxxxxxxxxx"
+# Optional: Use a specific compartment (defaults to tenancy root)
+# compartment_ocid = "ocid1.compartment.oc1..aaaa..."
 
 # =============================================================================
 # Region Selection
 # =============================================================================
-# Available regions: us-ashburn-1, us-phoenix-1, eu-frankfurt-1, uk-london-1, etc.
-# See: https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm
+# Free trial regions: us-ashburn-1, us-phoenix-1, uk-london-1, eu-frankfurt-1
+# Check availability at: https://www.oracle.com/cloud/data-regions/
 
-region       = "us-ashburn-1"
+oci_region = "us-ashburn-1"
+
+# =============================================================================
+# Infrastructure Naming
+# =============================================================================
+
 project_name = "hashcrack"
 environment  = "lab"
 
 # =============================================================================
 # Server Configuration
 # =============================================================================
-# VM.Standard.E4.Flex is recommended for cost efficiency
-# Flex shapes allow custom OCPU and memory configuration
 
-server_shape     = "VM.Standard.E4.Flex"
-server_ocpus     = 2
-server_memory_gb = 8
-server_disk_gb   = 50
+server_shape     = "VM.Standard.E4.Flex"  # AMD EPYC, flexible OCPU/memory
+server_ocpus     = 2                      # 2 OCPUs (equivalent to 4 vCPUs)
+server_memory_gb = 8                      # 8 GB RAM
+server_disk_gb   = 50                     # 50 GB boot volume
 
 # =============================================================================
-# Worker Configuration - CPU
+# Worker Configuration
 # =============================================================================
-# Preemptible instances offer up to 50% cost savings but can be reclaimed
-# VM.Standard.E4.Flex provides good CPU performance for hashcat
 
+# CPU Workers (Flex shapes allow custom OCPU/memory)
 cpu_worker_count     = 4
 cpu_worker_shape     = "VM.Standard.E4.Flex"
-cpu_worker_ocpus     = 4   # 4 OCPUs = ~4 vCPUs
-cpu_worker_memory_gb = 8
-worker_disk_gb       = 30
-use_preemptible      = true
+cpu_worker_ocpus     = 4                  # 4 OCPUs (equivalent to 8 vCPUs)
+cpu_worker_memory_gb = 16                 # 16 GB RAM
 
-# =============================================================================
-# Worker Configuration - GPU (Optional)
-# =============================================================================
-# GPU shapes available:
-#   VM.GPU2.1  - 1x P100 (16GB) - Good for hashcracking
-#   VM.GPU3.1  - 1x V100 (16GB) - Better performance
-#   BM.GPU4.8  - 8x A100 (40GB) - Maximum performance (bare metal)
-# Note: GPU availability varies by region
-
+# GPU Workers (Fixed shapes, not Flex)
+# VM.GPU2.1  = 1x NVIDIA P100 (16GB)
+# VM.GPU3.1  = 1x NVIDIA V100 (16GB)  
+# VM.GPU.A10.1 = 1x NVIDIA A10 (24GB)
 gpu_worker_count = 0
 gpu_worker_shape = "VM.GPU2.1"
 
-# =============================================================================
-# SSH Access
-# =============================================================================
-
-ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... your-key-here"
-ssh_user       = "ubuntu"
+worker_disk_gb   = 50
+use_preemptible  = true                   # Use preemptible instances (~50% cheaper)
 
 # =============================================================================
 # Hashtopolis Credentials
 # =============================================================================
 
 hashtopolis_admin_user     = "hashcrack"
-hashtopolis_admin_password = "Hashcrack2025Lab"
-worker_voucher             = "OCI4WORKERS"
+hashtopolis_admin_password = "Hashcrack2025Lab"  # Use simple password (no special chars)
+worker_voucher             = "PAI_OCI_WORKER_1"
+
+# =============================================================================
+# SSH Access
+# =============================================================================
+# OCI supports both ed25519 and RSA keys
+
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+ssh_user       = "ubuntu"
+
+# Restrict SSH access (recommended for production)
+# allowed_ssh_cidr = "1.2.3.4/32"

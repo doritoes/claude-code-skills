@@ -1,5 +1,5 @@
 # =============================================================================
-# OCI Security List (equivalent to Security Groups)
+# OCI Security Lists
 # =============================================================================
 
 resource "oci_core_security_list" "hashcrack" {
@@ -7,26 +7,18 @@ resource "oci_core_security_list" "hashcrack" {
   vcn_id         = oci_core_vcn.hashcrack.id
   display_name   = "${var.project_name}-security-list"
 
-  # ==========================================================================
-  # Egress Rules - Allow all outbound
-  # ==========================================================================
+  # Allow all egress
   egress_security_rules {
-    destination      = "0.0.0.0/0"
-    protocol         = "all"
-    stateless        = false
-    description      = "Allow all outbound traffic"
+    destination = "0.0.0.0/0"
+    protocol    = "all"
+    stateless   = false
   }
-
-  # ==========================================================================
-  # Ingress Rules
-  # ==========================================================================
 
   # SSH access
   ingress_security_rules {
-    protocol    = "6" # TCP
-    source      = "0.0.0.0/0"
+    protocol    = "6"  # TCP
+    source      = var.allowed_ssh_cidr
     stateless   = false
-    description = "SSH access"
 
     tcp_options {
       min = 22
@@ -34,12 +26,11 @@ resource "oci_core_security_list" "hashcrack" {
     }
   }
 
-  # Hashtopolis web interface
+  # Hashtopolis UI (port 8080)
   ingress_security_rules {
-    protocol    = "6" # TCP
-    source      = "0.0.0.0/0"
+    protocol    = "6"  # TCP
+    source      = var.allowed_ssh_cidr
     stateless   = false
-    description = "Hashtopolis web UI"
 
     tcp_options {
       min = 8080
@@ -47,20 +38,30 @@ resource "oci_core_security_list" "hashcrack" {
     }
   }
 
-  # Internal VCN communication (for workers to reach server)
+  # Hashtopolis Angular Frontend (port 4200)
+  ingress_security_rules {
+    protocol    = "6"  # TCP
+    source      = var.allowed_ssh_cidr
+    stateless   = false
+
+    tcp_options {
+      min = 4200
+      max = 4200
+    }
+  }
+
+  # Internal VCN traffic - allow all
   ingress_security_rules {
     protocol    = "all"
     source      = var.vcn_cidr
     stateless   = false
-    description = "Internal VCN communication"
   }
 
-  # ICMP for path discovery
+  # ICMP (ping)
   ingress_security_rules {
-    protocol    = "1" # ICMP
+    protocol    = "1"  # ICMP
     source      = "0.0.0.0/0"
     stateless   = false
-    description = "ICMP for network diagnostics"
 
     icmp_options {
       type = 3
@@ -69,10 +70,9 @@ resource "oci_core_security_list" "hashcrack" {
   }
 
   ingress_security_rules {
-    protocol    = "1" # ICMP
+    protocol    = "1"  # ICMP
     source      = var.vcn_cidr
     stateless   = false
-    description = "ICMP from VCN"
 
     icmp_options {
       type = 3

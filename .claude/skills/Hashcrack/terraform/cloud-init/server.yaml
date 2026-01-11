@@ -20,6 +20,7 @@ package_update: true
 package_upgrade: true
 
 packages:
+  - qemu-guest-agent
   - docker.io
   - docker-compose-v2
   - curl
@@ -155,6 +156,10 @@ write_files:
 
 # Run commands after boot
 runcmd:
+  # Start qemu-guest-agent early for Proxmox IP reporting
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+
   # Enable and start Docker
   - systemctl enable docker
   - systemctl start docker

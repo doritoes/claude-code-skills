@@ -124,6 +124,54 @@ cd ~/.claude/skills/Hashcrack/terraform
 terraform destroy -auto-approve
 ```
 
+---
+
+## Cloud Provider Credentials
+
+**CRITICAL:** For cloud deployments (AWS, Azure, GCP), you MUST set provider credentials before running terraform destroy. Credentials are stored in `~/.claude/.env`.
+
+### AWS
+```bash
+# Read credentials from .env and export for terraform
+source <(grep -E '^AWS_' ~/.claude/.env | sed 's/^/export /')
+
+# Verify credentials are set
+echo "AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:0:8}..."
+
+# Now terraform can authenticate
+cd ~/.claude/skills/Hashcrack/terraform/aws
+terraform destroy -auto-approve
+```
+
+### Azure
+```bash
+# Azure credentials in .env (ARM_* variables)
+source <(grep -E '^ARM_' ~/.claude/.env | sed 's/^/export /')
+
+cd ~/.claude/skills/Hashcrack/terraform/azure
+terraform destroy -auto-approve
+```
+
+### GCP
+```bash
+# GCP uses service account key file or application default credentials
+# Path should be in GOOGLE_APPLICATION_CREDENTIALS in .env
+source <(grep -E '^GOOGLE_|^GCP_' ~/.claude/.env | sed 's/^/export /')
+
+cd ~/.claude/skills/Hashcrack/terraform/gcp
+terraform destroy -auto-approve
+```
+
+### Common Credential Issues
+
+| Error | Solution |
+|-------|----------|
+| "No valid credential sources found" (AWS) | Export AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY from .env |
+| "AADSTS" errors (Azure) | Export ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID |
+| "Could not find default credentials" (GCP) | Set GOOGLE_APPLICATION_CREDENTIALS or run `gcloud auth application-default login` |
+
+**Remember:** Credentials in `.env` are gitignored - never commit them to version control.
+
 ### Clean Environment Variables
 
 Remove from `.claude/.env`:

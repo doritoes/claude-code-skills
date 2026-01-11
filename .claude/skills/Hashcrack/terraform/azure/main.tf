@@ -36,6 +36,20 @@ resource "azurerm_subnet" "hashcrack" {
 }
 
 # =============================================================================
+# Worker Outbound Internet Access Strategy
+# =============================================================================
+# ANTI-PATTERN: Azure NAT Gateway costs ~$0.045/hr + per GB data charges
+#
+# BETTER APPROACH: Use Hashtopolis server as a file proxy
+# 1. Server has public IP and can download from internet
+# 2. Pre-download hashcat binary to server during cloud-init
+# 3. Workers download from server's internal IP instead of hashcat.net
+# 4. See cloud-init/server.yaml for file pre-staging
+#
+# This saves ~$30-40/month on NAT Gateway costs
+# =============================================================================
+
+# =============================================================================
 # Network Security Groups
 # =============================================================================
 

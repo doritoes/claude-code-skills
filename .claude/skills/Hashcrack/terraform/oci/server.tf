@@ -10,7 +10,7 @@ resource "oci_core_instance" "hashtopolis_server" {
 
   # Flex shape configuration
   dynamic "shape_config" {
-    for_each = length(regexall("Flex", var.server_shape)) > 0 ? [1] : []
+    for_each = can(regex("Flex", var.server_shape)) ? [1] : []
     content {
       ocpus         = var.server_ocpus
       memory_in_gbs = var.server_memory_gb
@@ -44,7 +44,7 @@ resource "oci_core_instance" "hashtopolis_server" {
   }
 
   freeform_tags = merge(local.common_tags, {
-    "Role" = "server"
+    Role = "server"
   })
 
   lifecycle {

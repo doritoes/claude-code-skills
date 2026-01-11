@@ -1,19 +1,19 @@
 # =============================================================================
-# OCI Authentication Configuration
+# OCI Authentication - Required for API access
 # =============================================================================
 
 variable "tenancy_ocid" {
-  description = "OCI Tenancy OCID"
+  description = "OCI tenancy OCID"
   type        = string
 }
 
 variable "user_ocid" {
-  description = "OCI User OCID"
+  description = "OCI user OCID"
   type        = string
 }
 
 variable "fingerprint" {
-  description = "OCI API Key fingerprint"
+  description = "OCI API key fingerprint"
   type        = string
 }
 
@@ -23,14 +23,14 @@ variable "private_key_path" {
   default     = "~/.oci/oci_api_key.pem"
 }
 
-variable "region" {
+variable "oci_region" {
   description = "OCI region to deploy to"
   type        = string
   default     = "us-ashburn-1"
 }
 
 variable "compartment_ocid" {
-  description = "OCI Compartment OCID (defaults to tenancy root)"
+  description = "OCI compartment OCID (uses tenancy root if not specified)"
   type        = string
   default     = ""
 }
@@ -72,19 +72,19 @@ variable "subnet_cidr" {
 # =============================================================================
 
 variable "server_shape" {
-  description = "OCI compute shape for Hashtopolis server (VM.Standard.E4.Flex recommended)"
+  description = "OCI compute shape for Hashtopolis server"
   type        = string
-  default     = "VM.Standard.E4.Flex"
+  default     = "VM.Standard.E4.Flex"  # AMD EPYC, flexible OCPU/memory
 }
 
 variable "server_ocpus" {
-  description = "Number of OCPUs for server (flex shapes)"
+  description = "Number of OCPUs for server (Flex shapes)"
   type        = number
   default     = 2
 }
 
 variable "server_memory_gb" {
-  description = "Memory in GB for server (flex shapes)"
+  description = "Memory in GB for server (Flex shapes)"
   type        = number
   default     = 8
 }
@@ -108,19 +108,19 @@ variable "cpu_worker_count" {
 variable "cpu_worker_shape" {
   description = "OCI compute shape for CPU workers"
   type        = string
-  default     = "VM.Standard.E4.Flex"
+  default     = "VM.Standard.E4.Flex"  # AMD EPYC, flexible OCPU/memory
 }
 
 variable "cpu_worker_ocpus" {
-  description = "Number of OCPUs per CPU worker (flex shapes)"
+  description = "Number of OCPUs per CPU worker (Flex shapes)"
   type        = number
   default     = 4
 }
 
 variable "cpu_worker_memory_gb" {
-  description = "Memory in GB per CPU worker (flex shapes)"
+  description = "Memory in GB per CPU worker (Flex shapes)"
   type        = number
-  default     = 8
+  default     = 16
 }
 
 variable "gpu_worker_count" {
@@ -130,15 +130,18 @@ variable "gpu_worker_count" {
 }
 
 variable "gpu_worker_shape" {
-  description = "OCI compute shape for GPU workers (VM.GPU2.1 has P100, VM.GPU3.1 has V100)"
+  description = "OCI compute shape for GPU workers"
   type        = string
-  default     = "VM.GPU2.1"
+  default     = "VM.GPU2.1"  # 1x NVIDIA P100 GPU
+  # Other options:
+  # VM.GPU3.1  - 1x NVIDIA V100 GPU
+  # BM.GPU4.8  - 8x NVIDIA A100 GPU (bare metal)
 }
 
 variable "worker_disk_gb" {
   description = "Boot volume size in GB per worker"
   type        = number
-  default     = 30
+  default     = 50
 }
 
 variable "use_preemptible" {
@@ -161,20 +164,20 @@ variable "hashtopolis_admin_password" {
   description = "Hashtopolis admin password"
   type        = string
   sensitive   = true
-  default     = ""
+  default     = ""  # Generated if empty
 }
 
 variable "hashtopolis_db_password" {
   description = "Hashtopolis database password"
   type        = string
   sensitive   = true
-  default     = ""
+  default     = ""  # Generated if empty
 }
 
 variable "worker_voucher" {
   description = "Voucher code for worker registration"
   type        = string
-  default     = ""
+  default     = ""  # Generated if empty
 }
 
 # =============================================================================
@@ -190,4 +193,10 @@ variable "ssh_user" {
   description = "SSH username for instance access"
   type        = string
   default     = "ubuntu"
+}
+
+variable "allowed_ssh_cidr" {
+  description = "CIDR block allowed for SSH access (default: anywhere)"
+  type        = string
+  default     = "0.0.0.0/0"
 }

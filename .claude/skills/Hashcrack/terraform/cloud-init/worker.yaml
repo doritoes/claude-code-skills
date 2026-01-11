@@ -20,6 +20,7 @@ package_update: true
 package_upgrade: true
 
 packages:
+  - qemu-guest-agent
   - hashcat
   - hashcat-data
   - python3
@@ -144,6 +145,10 @@ write_files:
 
 # Run commands after boot
 runcmd:
+  # Start qemu-guest-agent early for Proxmox IP reporting
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+
   # Create directories
   - mkdir -p /opt/hashcrack/agent
   - mkdir -p /opt/hashcrack/wordlists
