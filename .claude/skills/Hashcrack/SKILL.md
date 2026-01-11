@@ -51,6 +51,7 @@ When executing this skill, follow these critical procedures:
 | **"No task available!" after benchmark** | Check agent isActive=1, task priority>0, TaskWrapper priority>0 |
 | **Deleting tasks breaks things** | ANTI-PATTERN - archive tasks instead: `UPDATE Task SET isArchived=1, priority=0` |
 | **Files show "ERR3 - file not present"** | Copy files to `/usr/local/share/hashtopolis/files/` with www-data ownership (see Step 6) |
+| **Proxmox DHCP: Workers connect to wrong server** | Terraform output shows configured IP, not DHCP-assigned IP. Scan for actual server IP: `for ip in $(seq 30 60); do curl -s --connect-timeout 1 http://192.168.99.$ip:8080/ >/dev/null && echo "Server: 192.168.99.$ip"; done` |
 
 ### Cloud Networking Best Practices
 
@@ -424,19 +425,25 @@ This creates:
 - Hashtopolis server VM
 - Worker VMs (configured count)
 
-#### STEP 2: Wait for VMs to Boot (3-5 minutes)
+#### STEP 2: Wait for VMs to Boot and Discover DHCP IPs (3-5 minutes)
 
 ```bash
 # Wait for cloud-init and QEMU guest agent
 sleep 180
 
-# Get actual server IP (DHCP assigns it)
-# Check Proxmox GUI or use:
-ssh ubuntu@192.168.99.205 "qm guest exec 200 ip addr" 2>/dev/null | grep "inet " | head -1
-# OR check DHCP leases on pfSense
+# BEST METHOD: Scan for Hashtopolis server on port 8080
+echo "Scanning for Hashtopolis server..." && for ip in $(seq 30 60); do
+  curl -s --connect-timeout 1 http://192.168.99.$ip:8080/ >/dev/null 2>&1 && echo "Found server: 192.168.99.$ip"
+done
+
+# Then scan for worker VMs via SSH
+echo "Scanning for workers..." && for ip in $(seq 30 60); do
+  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=1 -o BatchMode=yes ubuntu@192.168.99.$ip "hostname 2>/dev/null" 2>/dev/null | grep -q "worker" && echo "Found worker: 192.168.99.$ip"
+done
 ```
 
-**CRITICAL (DHCP Mode):** The terraform outputs show the *configured* IP from `var.server_ip`, NOT the actual DHCP-assigned IP. You MUST discover the real server IP from:
+**CRITICAL (DHCP Mode):** The terraform outputs show the *configured* IP from `var.server_ip`, NOT the actual DHCP-assigned IP. You MUST discover the real IPs using one of these methods:
+- **Port scan** (recommended): Scan for port 8080 (server) and SSH (workers)
 - Proxmox GUI → VM → Summary → IP Address
 - DHCP server lease table
 - `qm guest exec <vmid> ip addr`

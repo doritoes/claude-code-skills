@@ -53,3 +53,21 @@ When session ends or context compacts:
 - Suggest scale-down when idle
 - Calculate feasibility before long-running tasks
 - Destroy resources when done
+
+## Reducing Manual Approvals
+
+Common bash patterns that need pre-approval in settings.local.json:
+- Variable assignments: `SERVER_IP=*`, `WORKER*=*`, `RESULT=*`, `DB_PASS=*`
+- Control flow: `for:*`, `while:*`, `if:*`, `then:*`, `else:*`, `do`, `done`, `fi`
+- Commands: `sleep:*`, `tail:*`, `head:*`, `cd:*`, `watch:*`, `docker:*`
+- Cloud CLIs: `oci:*`, `aws:*`, `az:*`, `gcloud:*`, `terraform:*`
+- Comments: `#:*` (commands starting with comments)
+
+## Session Handoff Checklist
+
+When session ends or context compacts:
+1. Update test-results.md with new data
+2. Add new learnings to appropriate file
+3. Note current infrastructure state (what's deployed)
+4. Document any credentials/IPs discovered
+5. Commit skill updates if significant changes

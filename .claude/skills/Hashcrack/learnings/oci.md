@@ -6,6 +6,18 @@
 - Preemptible instances up to 50% cheaper
 - Flex shapes allow custom OCPU/memory
 - No minimum commitment
+- **Free tier includes:** 2 AMD VMs (1 OCPU, 1GB RAM each) - always free
+
+## Pre-Run Checklist
+
+Before first OCI run:
+1. [ ] Create OCI account at cloud.oracle.com
+2. [ ] Generate API Key in Console → User Settings → API Keys
+3. [ ] Download private key to `~/.oci/oci_api_key.pem`
+4. [ ] Copy terraform.tfvars.example to terraform.tfvars
+5. [ ] Fill in: tenancy_ocid, user_ocid, fingerprint, private_key_path
+6. [ ] Update ssh_public_key with your key
+7. [ ] Run `oci iam region list` to verify auth works
 
 ## Authentication Setup
 
@@ -14,7 +26,10 @@
 3. Set up `~/.oci/config` or use terraform.tfvars
 
 ```bash
-# Verify
+# Install OCI CLI (optional but helpful)
+bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)"
+
+# Verify authentication
 oci iam region list
 ```
 

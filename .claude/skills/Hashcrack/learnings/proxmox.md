@@ -15,7 +15,20 @@ Learnings specific to local hypervisor deployments.
 
 **Problem:** Terraform outputs show configured IP, not DHCP-assigned IP.
 
-**Solutions:**
+**Best Method - Port Scanning:**
+```bash
+# Find server (port 8080)
+for ip in $(seq 30 60); do
+  curl -s --connect-timeout 1 http://192.168.99.$ip:8080/ >/dev/null 2>&1 && echo "Server: 192.168.99.$ip"
+done
+
+# Find workers (SSH with hostname check)
+for ip in $(seq 30 60); do
+  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=1 -o BatchMode=yes ubuntu@192.168.99.$ip "hostname" 2>/dev/null | grep -q worker && echo "Worker: 192.168.99.$ip"
+done
+```
+
+**Alternative Methods:**
 1. Proxmox GUI → VM → Summary → IP Address
 2. DHCP server lease table
 3. `qm guest exec <vmid> ip addr`

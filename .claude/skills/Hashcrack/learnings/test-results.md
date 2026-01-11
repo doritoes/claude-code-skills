@@ -17,11 +17,24 @@ Performance data from multi-cloud testing (2026-01).
 2. **GCP fastest CPU** (~8h) vs Azure slowest (9h 41m)
 3. **Identical crack rate** (43.2%) - wordlist coverage is consistent
 
-## Local Hypervisor (Proxmox) - MD5, 1250 hashes
+## Local Hypervisor (Proxmox) - MD5
+
+### Test 1: MD5, 1250 hashes (rockyou wordlist)
 
 | Workers | vCPU | Runtime | Cracked | Speed |
 |---------|------|---------|---------|-------|
 | 2 | 8 | ~5h | ~500 (40%) | ~40 MH/s combined |
+
+### Test 2: MD5, 50 hashes (6-char brute force)
+
+| Workers | vCPU | Runtime | Cracked | Keyspace |
+|---------|------|---------|---------|----------|
+| 2 | 8 | ~5 min | 41/50 (82%) | 14.7M |
+
+**Notes:**
+- CPU utilization was only ~40% due to small keyspace
+- MD5 is very fast to crack - overhead of chunk distribution exceeded compute time
+- For heavier workloads (bcrypt, SHA512crypt), CPU would be fully utilized
 
 ## Cost Estimates (10-hour run)
 
