@@ -45,6 +45,52 @@ When executing this skill, follow these critical procedures:
 | **CPU task not dispatching** | Set agents to `cpuOnly=1` if using CPU workers with `isCpuTask=1` tasks |
 | **Files not downloading** | Files must be in `/usr/local/share/hashtopolis/files/` FLAT (not in subdirectories) |
 | **Agent recursion error** | If agent hits recursion error during registration, kill and restart: `sudo pkill -9 -f "__main__.py"; sudo rm -f /opt/hashtopolis-agent/lock.pid; cd /opt/hashtopolis-agent && sudo nohup python3 __main__.py &` |
+| **Workers can't download hashcat** | Use server as file proxy - don't pay for NAT Gateway (see Networking Best Practices) |
+| **PoCL/hashcat benchmark fails** | Cloud CPU workers need `--force` flag in attackCmd (PoCL 1.8 compatibility issue) |
+| **keyspace=1 (task exhausts immediately)** | Files on worker corrupted - delete `/opt/hashtopolis-agent/files/*`, reset task keyspace=0 |
+| **"No task available!" after benchmark** | Check agent isActive=1, task priority>0, TaskWrapper priority>0 |
+| **Deleting tasks breaks things** | ANTI-PATTERN - archive tasks instead: `UPDATE Task SET isArchived=1, priority=0` |
+| **Files show "ERR3 - file not present"** | Copy files to `/usr/local/share/hashtopolis/files/` with www-data ownership (see Step 6) |
+
+### Cloud Networking Best Practices
+
+**ANTI-PATTERN: Paying for NAT Gateway**
+Azure/GCP NAT gateways cost ~$0.045/hr + per GB data charges (~$30-40/month minimum).
+
+**BEST PRACTICE: Server as File Proxy**
+Workers with private IPs should download from the server, not the internet:
+
+1. **Server downloads files during cloud-init** (has public IP)
+2. **Server runs simple HTTP server** on internal IP
+3. **Workers download from server** (internal network, no NAT needed)
+4. **SSH to workers via server jump host** if needed
+
+**Implementation:**
+```bash
+# On server - start file server for hashcat binary
+ssh ubuntu@SERVER_IP "sudo bash -c '
+cd /var/lib/docker/volumes/hashtopolis_files/_data
+curl -L -o hashcat-7.1.2.7z https://hashcat.net/files/hashcat-7.1.2.7z
+nohup python3 -m http.server 8888 --bind 0.0.0.0 > /tmp/fileserver.log 2>&1 &
+'"
+
+# Update Hashtopolis to use local URL
+ssh ubuntu@SERVER_IP "docker exec hashtopolis-db mysql -u hashtopolis -pPASSWORD hashtopolis -e \"
+UPDATE CrackerBinary SET downloadUrl='http://INTERNAL_SERVER_IP:8888/hashcat-7.1.2.7z' WHERE crackerBinaryId=1;
+\""
+```
+
+**SSH to workers via server jump host:**
+```bash
+# Azure/GCP workers have private IPs only
+ssh -J ubuntu@SERVER_PUBLIC_IP ubuntu@WORKER_PRIVATE_IP
+```
+
+**Cost savings:**
+| Approach | Monthly Cost | Notes |
+|----------|--------------|-------|
+| NAT Gateway | $30-45 | Plus per-GB charges |
+| Server File Proxy | $0 | Uses existing server |
 
 ### STEP-BY-STEP DEPLOYMENT PROCESS (FOLLOW EXACTLY)
 
@@ -117,23 +163,32 @@ SELECT agentId, agentName, isTrusted, cpuOnly FROM hashtopolis.Agent;
 
 ```bash
 # 1. Download rockyou.txt and OneRuleToRuleThemAll to server /tmp
+# CRITICAL: Use SecLists or direct download - GitHub naive-hashcat link redirects and fails
 ssh ubuntu@SERVER_IP 'cd /tmp &&
-curl -sL "https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt" -o rockyou.txt &&
+curl -sL "https://github.com/danielmiessler/SecLists/raw/master/Passwords/Leaked-Databases/rockyou.txt.tar.gz" -o rockyou.txt.tar.gz &&
+tar xzf rockyou.txt.tar.gz &&
 curl -sL "https://raw.githubusercontent.com/NotSoSecure/password_cracking_rules/master/OneRuleToRuleThemAll.rule" -o OneRuleToRuleThemAll.rule &&
 ls -lh rockyou.txt OneRuleToRuleThemAll.rule'
 
 # 2. Copy to the CORRECT location (hashtopolis reads from /usr/local/share/hashtopolis/files/)
 # Files must be FLAT - not in subdirectories like /files/1/rockyou.txt
+# NOTE: docker cp creates files as root - must pipe through container to set proper ownership
 ssh ubuntu@SERVER_IP 'sudo docker exec hashtopolis-backend mkdir -p /usr/local/share/hashtopolis/files
-# Copy files directly into the backend container
-sudo docker cp /tmp/rockyou.txt hashtopolis-backend:/usr/local/share/hashtopolis/files/rockyou.txt
-sudo docker cp /tmp/OneRuleToRuleThemAll.rule hashtopolis-backend:/usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule
 
-# Set ownership so hashtopolis can serve them
-sudo docker exec hashtopolis-backend chown -R www-data:www-data /usr/local/share/hashtopolis/files/
+# Method that ensures www-data ownership (docker cp + chown fails due to container permissions)
+sudo cat /tmp/rockyou.txt | sudo docker exec -i -u root hashtopolis-backend bash -c "cat > /usr/local/share/hashtopolis/files/rockyou.txt && chown www-data:www-data /usr/local/share/hashtopolis/files/rockyou.txt"
+sudo cat /tmp/OneRuleToRuleThemAll.rule | sudo docker exec -i -u root hashtopolis-backend bash -c "cat > /usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule && chown www-data:www-data /usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule"
 
-# Verify files exist with correct sizes
-sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/'
+# CRITICAL: Verify files exist with CORRECT sizes - DO NOT proceed if sizes are wrong!
+# rockyou.txt should be ~139MB (139921497 bytes)
+# OneRuleToRuleThemAll.rule should be ~403KB (402732 bytes)
+echo "Verifying file sizes..."
+sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/
+ROCKYOU_SIZE=$(sudo docker exec hashtopolis-backend stat -c%s /usr/local/share/hashtopolis/files/rockyou.txt 2>/dev/null || echo 0)
+RULE_SIZE=$(sudo docker exec hashtopolis-backend stat -c%s /usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule 2>/dev/null || echo 0)
+if [ "$ROCKYOU_SIZE" -lt 100000000 ]; then echo "ERROR: rockyou.txt is corrupted ($ROCKYOU_SIZE bytes) - should be ~139MB"; exit 1; fi
+if [ "$RULE_SIZE" -lt 400000 ]; then echo "ERROR: rule file is corrupted ($RULE_SIZE bytes) - should be ~403KB"; exit 1; fi
+echo "Files verified: rockyou.txt=$ROCKYOU_SIZE bytes, rule=$RULE_SIZE bytes"'
 
 # 3. Register files in database (MUST match filename exactly, no path)
 ssh ubuntu@SERVER_IP 'DB_PASS=$(sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2) && sudo docker exec hashtopolis-db mysql -u hashtopolis -p"$DB_PASS" -e "
@@ -174,6 +229,9 @@ SELECT hashlistId, hashlistName, hashCount FROM hashtopolis.Hashlist ORDER BY ha
 
 **STEP 8: Create Task**
 
+**CRITICAL FOR CPU WORKERS: Add `--force` to attackCmd**
+PoCL 1.8 on cloud instances has compatibility issues with hashcat 7.x benchmark. Without `--force`, benchmark fails with "Outdated PoCL OpenCL runtime detected!" and task gets keyspace=1.
+
 **TRY API FIRST** (preferred - handles keyspace automatically):
 ```bash
 HASHLIST_ID=1
@@ -185,7 +243,7 @@ curl -X POST http://SERVER_IP:8080/api/user.php \
     \"accessKey\":\"PAI_API_KEY\",
     \"name\":\"SHA256-OneRule-Rockyou\",
     \"hashlistId\":$HASHLIST_ID,
-    \"attackCmd\":\"#HL# rockyou.txt -r OneRuleToRuleThemAll.rule\",
+    \"attackCmd\":\"--force #HL# rockyou.txt -r OneRuleToRuleThemAll.rule\",
     \"chunkTime\":600,
     \"statusTimer\":5,
     \"priority\":100,
@@ -210,8 +268,9 @@ VALUES (100, 0, 0, 1, 1, \"SHA256-OneRule-Rockyou\", 0, 0);
 SET @tw = LAST_INSERT_ID();
 
 -- Create Task with keyspace=0 (forces recalculation by agents)
+-- CRITICAL: Use --force for CPU workers (PoCL compatibility)
 INSERT INTO hashtopolis.Task (taskName, attackCmd, chunkTime, statusTimer, keyspace, keyspaceProgress, priority, maxAgents, color, isSmall, isCpuTask, useNewBench, skipKeyspace, crackerBinaryId, crackerBinaryTypeId, taskWrapperId, isArchived, notes, staticChunks, chunkSize, forcePipe, usePreprocessor, preprocessorCommand)
-VALUES (\"SHA256-OneRule-Rockyou\", \"#HL# rockyou.txt -r OneRuleToRuleThemAll.rule\", 600, 5, 0, 0, 100, 0, \"\", 0, 1, 1, 0, 1, 1, @tw, 0, \"\", 0, 0, 0, 0, \"\");
+VALUES (\"SHA256-OneRule-Rockyou\", \"--force #HL# rockyou.txt -r OneRuleToRuleThemAll.rule\", 600, 5, 0, 0, 100, 0, \"\", 0, 1, 1, 0, 1, 1, @tw, 0, \"\", 0, 0, 0, 0, \"\");
 SET @t = LAST_INSERT_ID();
 
 -- Link files to task
@@ -265,6 +324,7 @@ Hashtopolis Server (orchestration)
 | Platform | Terraform Dir | Status | Notes |
 |----------|---------------|--------|-------|
 | XCP-ng (local) | `terraform/` | Production | Local hypervisor |
+| **Proxmox** | `terraform/proxmox/` | **New** | Local hypervisor, cloud-init |
 | AWS | `terraform/aws/` | **Production** | Spot instances, T4 GPU |
 | GCP | `terraform/gcp/` | **Production** | Preemptible, T4 GPU |
 | Azure | `terraform/azure/` | Tested | Spot instances |
@@ -322,6 +382,277 @@ oci iam region list
 | VM.GPU2.1 | 1x P100 | 16GB | Good for hashcracking |
 | VM.GPU3.1 | 1x V100 | 16GB | Better performance |
 | BM.GPU4.8 | 8x A100 | 40GB | Maximum throughput |
+
+### Proxmox-Specific Requirements
+
+**Prerequisites:**
+1. Proxmox VE with API access (default with root@pam)
+2. Storage configured (local-lvm recommended)
+3. Network bridge (vmbr0 default)
+
+**IMPORTANT: The terraform config (`create_template = true`) automatically creates the Ubuntu cloud-init template. No manual template creation needed.**
+
+**Terraform Authentication:**
+```hcl
+proxmox_url      = "https://192.168.99.205:8006"
+proxmox_user     = "root@pam"
+proxmox_password = "your-password"
+proxmox_insecure = true  # Allow self-signed certs (lab)
+```
+
+**Resource Planning (i7-10710U with 12 cores, 32GB RAM):**
+| Config | Server | Workers | Total vCPU | Total RAM |
+|--------|--------|---------|------------|-----------|
+| Conservative | 2 vCPU, 4GB | 2 × 4 vCPU, 4GB | 10 vCPU | 12 GB |
+| Moderate | 2 vCPU, 4GB | 4 × 4 vCPU, 4GB | 18 vCPU | 20 GB |
+| Maximum | 2 vCPU, 4GB | 4 × 4 vCPU, 6GB | 18 vCPU | 28 GB |
+
+### PROXMOX STEP-BY-STEP DEPLOYMENT (FOLLOW EXACTLY)
+
+**CRITICAL: Follow this sequence EXACTLY. Skipping steps or changing order causes failures.**
+
+#### STEP 1: Deploy Infrastructure
+
+```bash
+cd terraform/proxmox
+terraform init
+terraform apply -auto-approve
+```
+
+This creates:
+- Ubuntu cloud-init template (if `create_template = true`)
+- Hashtopolis server VM
+- Worker VMs (configured count)
+
+#### STEP 2: Wait for VMs to Boot (3-5 minutes)
+
+```bash
+# Wait for cloud-init and QEMU guest agent
+sleep 180
+
+# Get actual server IP (DHCP assigns it)
+# Check Proxmox GUI or use:
+ssh ubuntu@192.168.99.205 "qm guest exec 200 ip addr" 2>/dev/null | grep "inet " | head -1
+# OR check DHCP leases on pfSense
+```
+
+**CRITICAL (DHCP Mode):** The terraform outputs show the *configured* IP from `var.server_ip`, NOT the actual DHCP-assigned IP. You MUST discover the real server IP from:
+- Proxmox GUI → VM → Summary → IP Address
+- DHCP server lease table
+- `qm guest exec <vmid> ip addr`
+
+#### STEP 3: Verify Server is Running
+
+```bash
+SERVER_IP=<actual-dhcp-ip>  # e.g., 192.168.99.30
+curl -s http://$SERVER_IP:8080/ | head -5
+# Should show HTML (Hashtopolis login page)
+```
+
+#### STEP 4: Get Database Password
+
+**The DB password is auto-generated and stored in the container environment:**
+
+```bash
+ssh ubuntu@$SERVER_IP "docker exec hashtopolis-db env | grep MYSQL_PASSWORD"
+# Save this password - you'll need it for all DB operations
+DB_PASS="<password-from-above>"
+```
+
+#### STEP 5: Create Vouchers (ONE PER WORKER)
+
+**CRITICAL: Create vouchers BEFORE workers try to register. Race conditions cause failures even with deletion disabled.**
+
+```bash
+WORKER_COUNT=2  # Match your worker_count
+ssh ubuntu@$SERVER_IP "docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS -e \"
+-- Disable voucher deletion
+UPDATE hashtopolis.Config SET value='0' WHERE item='voucherDeletion';
+
+-- Create one voucher per worker (avoid race conditions)
+INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('PAI_PROXMOX_WORKER1', UNIX_TIMESTAMP());
+INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('PAI_PROXMOX_WORKER2', UNIX_TIMESTAMP());
+-- Add more if worker_count > 2
+
+-- Verify
+SELECT voucher FROM hashtopolis.RegVoucher;
+\" hashtopolis"
+```
+
+#### STEP 6: Fix Worker Config (If DHCP)
+
+**If workers connected to wrong server IP, fix their config:**
+
+```bash
+# Get worker IPs from Proxmox GUI or DHCP leases
+WORKER1_IP=192.168.99.33
+WORKER2_IP=192.168.99.31
+
+# Update worker 1 config
+ssh ubuntu@$WORKER1_IP "cat > /tmp/config.json << 'EOF'
+{\"url\": \"http://$SERVER_IP:8080/api/server.php\", \"voucher\": \"PAI_PROXMOX_WORKER1\"}
+EOF
+sudo cp /tmp/config.json /opt/hashtopolis-agent/config.json
+sudo systemctl restart hashtopolis-agent"
+
+# Update worker 2 config
+ssh ubuntu@$WORKER2_IP "cat > /tmp/config.json << 'EOF'
+{\"url\": \"http://$SERVER_IP:8080/api/server.php\", \"voucher\": \"PAI_PROXMOX_WORKER2\"}
+EOF
+sudo cp /tmp/config.json /opt/hashtopolis-agent/config.json
+sudo systemctl restart hashtopolis-agent"
+```
+
+#### STEP 7: Wait for Agents to Register (2-3 minutes)
+
+```bash
+ssh ubuntu@$SERVER_IP "docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS -N -e '
+SELECT agentId, agentName, isActive, isTrusted FROM hashtopolis.Agent;
+' hashtopolis"
+# Wait until all workers appear
+```
+
+#### STEP 8: Trust Agents and Set CPU Mode
+
+```bash
+ssh ubuntu@$SERVER_IP "docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS -e '
+-- Trust all agents
+UPDATE hashtopolis.Agent SET isTrusted = 1;
+
+-- CRITICAL for CPU workers: set cpuOnly=1
+UPDATE hashtopolis.Agent SET cpuOnly = 1;
+
+-- Verify
+SELECT agentId, agentName, isTrusted, cpuOnly FROM hashtopolis.Agent;
+' hashtopolis"
+```
+
+#### STEP 9: Download Files to Server
+
+```bash
+ssh ubuntu@$SERVER_IP 'cd /tmp &&
+curl -sL "https://github.com/danielmiessler/SecLists/raw/master/Passwords/Leaked-Databases/rockyou.txt.tar.gz" -o rockyou.txt.tar.gz &&
+tar xzf rockyou.txt.tar.gz &&
+curl -sL "https://raw.githubusercontent.com/NotSoSecure/password_cracking_rules/master/OneRuleToRuleThemAll.rule" -o OneRuleToRuleThemAll.rule &&
+ls -lh rockyou.txt OneRuleToRuleThemAll.rule'
+```
+
+#### STEP 10: Copy Files to Correct Location
+
+**CRITICAL: Files MUST be in `/usr/local/share/hashtopolis/files/` with www-data ownership**
+
+```bash
+ssh ubuntu@$SERVER_IP '
+sudo docker exec hashtopolis-backend mkdir -p /usr/local/share/hashtopolis/files
+
+# Copy files with correct ownership
+sudo cat /tmp/rockyou.txt | sudo docker exec -i -u root hashtopolis-backend bash -c "cat > /usr/local/share/hashtopolis/files/rockyou.txt && chown www-data:www-data /usr/local/share/hashtopolis/files/rockyou.txt"
+sudo cat /tmp/OneRuleToRuleThemAll.rule | sudo docker exec -i -u root hashtopolis-backend bash -c "cat > /usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule && chown www-data:www-data /usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule"
+
+# Verify
+sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/'
+```
+
+#### STEP 11: Register Files in Database
+
+```bash
+ssh ubuntu@$SERVER_IP "docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS -e \"
+INSERT INTO hashtopolis.File (fileId, filename, size, isSecret, fileType, accessGroupId, lineCount)
+VALUES (1, 'rockyou.txt', 139921497, 0, 0, 1, 14344391);
+
+INSERT INTO hashtopolis.File (fileId, filename, size, isSecret, fileType, accessGroupId, lineCount)
+VALUES (2, 'OneRuleToRuleThemAll.rule', 402732, 0, 1, 1, 51995);
+
+SELECT fileId, filename, size FROM hashtopolis.File;
+\" hashtopolis"
+```
+
+#### STEP 12: Create Hashlist via Database
+
+```bash
+# Upload your hashes to server first
+scp sample_md5.txt ubuntu@$SERVER_IP:/tmp/
+
+# Create hashlist and load hashes
+ssh ubuntu@$SERVER_IP "
+HASH_COUNT=\$(wc -l < /tmp/sample_md5.txt)
+docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS -e \"
+INSERT INTO hashtopolis.Hashlist (hashlistName, format, hashTypeId, hashCount, saltSeparator, cracked, isSecret, hexSalt, isSalted, accessGroupId, notes, brainId, brainFeatures, isArchived)
+VALUES ('Proxmox-MD5-Test', 0, 0, \$HASH_COUNT, ':', 0, 0, 0, 0, 1, '', 0, 0, 0);
+\" hashtopolis
+
+# Load individual hashes
+docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS hashtopolis << 'SQLEOF'
+LOAD DATA LOCAL INFILE '/tmp/sample_md5.txt' INTO TABLE Hash
+FIELDS TERMINATED BY '\n'
+(hash)
+SET hashlistId = 1, salt = '', plaintext = '', timeCracked = NULL, chunkId = NULL, isCracked = 0, crackPos = 0;
+SQLEOF
+"
+```
+
+#### STEP 13: Create Task with --force Flag
+
+**CRITICAL: CPU workers need `--force` in attackCmd (PoCL compatibility)**
+
+```bash
+ssh ubuntu@$SERVER_IP "docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS -e \"
+-- Create TaskWrapper
+INSERT INTO hashtopolis.TaskWrapper (priority, maxAgents, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked)
+VALUES (100, 0, 0, 1, 1, 'Proxmox MD5 + OneRule', 0, 0);
+SET @tw = LAST_INSERT_ID();
+
+-- Create Task with --force for CPU workers
+INSERT INTO hashtopolis.Task (taskName, attackCmd, chunkTime, statusTimer, keyspace, keyspaceProgress, priority, maxAgents, color, isSmall, isCpuTask, useNewBench, skipKeyspace, crackerBinaryId, crackerBinaryTypeId, taskWrapperId, isArchived, notes, staticChunks, chunkSize, forcePipe, usePreprocessor, preprocessorCommand)
+VALUES ('MD5-OneRule-Rockyou', '#HL# rockyou.txt -r OneRuleToRuleThemAll.rule --force', 600, 5, 0, 0, 100, 0, '', 0, 1, 1, 0, 1, 1, @tw, 0, '', 0, 0, 0, 0, '');
+SET @t = LAST_INSERT_ID();
+
+-- Link files to task
+INSERT INTO hashtopolis.FileTask (fileId, taskId) VALUES (1, @t);
+INSERT INTO hashtopolis.FileTask (fileId, taskId) VALUES (2, @t);
+
+-- Verify
+SELECT taskId, taskName, keyspace, priority, isCpuTask FROM hashtopolis.Task;
+\" hashtopolis"
+```
+
+#### STEP 14: Fix Permissions (If Needed)
+
+If benchmark or cracking fails with permission errors:
+
+```bash
+ssh ubuntu@$SERVER_IP "
+docker exec -u root hashtopolis-backend chmod -R 777 /var/lib/hashcat
+docker exec -u root hashtopolis-backend mkdir -p /usr/local/share/hashtopolis/crackers
+docker exec -u root hashtopolis-backend chmod -R 777 /usr/local/share/hashtopolis/crackers
+docker exec -u root hashtopolis-backend chmod -R 777 /usr/local/share/hashtopolis/files
+"
+```
+
+#### STEP 15: Monitor Progress
+
+```bash
+# One-time check
+ssh ubuntu@$SERVER_IP "docker exec hashtopolis-db mysql -uhashtopolis -p$DB_PASS -N -e '
+SELECT h.cracked, h.hashCount, t.keyspace, t.keyspaceProgress FROM hashtopolis.Hashlist h, hashtopolis.Task t WHERE h.hashlistId=1 AND t.taskId=1;
+' hashtopolis"
+
+# Continuous monitoring
+watch -n 60 "ssh ubuntu@$SERVER_IP \"docker exec hashtopolis-db mysql -uhashtopolis -p\$DB_PASS -N -e 'SELECT cracked, hashCount FROM hashtopolis.Hashlist WHERE hashlistId=1' hashtopolis\""
+```
+
+### Proxmox Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Workers connect to wrong IP | DHCP IP differs from terraform output | Update worker config.json with actual server IP |
+| Voucher not found | Voucher not created in DB | Create voucher via database INSERT |
+| Second worker fails to register | Voucher already consumed | Create unique voucher per worker |
+| Benchmark fails (exit 255) | PoCL compatibility | Add `--force` to attackCmd |
+| Files not downloading | Wrong path or permissions | Copy to `/usr/local/share/hashtopolis/files/`, set www-data ownership |
+| Permission denied on benchmark.pid | hashcat directory permissions | `chmod -R 777` on crackers directory |
+| Task has keyspace=1 | Files corrupted on workers | Delete worker files, reset task keyspace=0 |
+| Table not found (lowercase) | MySQL case sensitivity | Use exact table names: `Hashlist`, `Task`, `Agent` (not lowercase) |
 
 ## Quick Start
 
@@ -978,7 +1309,7 @@ curl -X POST http://SERVER:8080/api/user.php \
 - WorkingDirectory must be `/opt/hashtopolis-agent`
 - Run as root to avoid permission issues with hashcat
 
-### Python RecursionError Fix (Ubuntu 24.04 / Python 3.12)
+### Python RecursionError Fix (Ubuntu 24.04 / Python 3.12) - MUST ADD TO CLOUD-INIT
 
 The Hashtopolis Python agent can hit `RecursionError: maximum recursion depth exceeded` during HTTP requests on Python 3.12. This is a cookiejar bug triggered during agent registration.
 
@@ -989,7 +1320,9 @@ File "/usr/lib/python3.12/http/cookiejar.py", line 642, in eff_request_host
 RecursionError: maximum recursion depth exceeded
 ```
 
-**Fix:** Increase Python recursion limit in systemd service:
+**CRITICAL: Include this in cloud-init for ALL providers to prevent this issue during build!**
+
+**Fix:** Increase Python recursion limit in systemd service (add to worker cloud-init):
 ```bash
 # Update /etc/systemd/system/hashtopolis-agent.service
 [Service]

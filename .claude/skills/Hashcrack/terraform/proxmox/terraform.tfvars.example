@@ -1,0 +1,82 @@
+# =============================================================================
+# Hashcrack Proxmox Deployment Configuration - EXAMPLE
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+# =============================================================================
+
+# =============================================================================
+# Proxmox Connection
+# =============================================================================
+
+proxmox_url      = "https://192.168.99.205:8006"
+proxmox_user     = "root@pam"
+proxmox_password = "your-password-here"
+proxmox_insecure = true  # Allow self-signed certs (lab)
+
+# =============================================================================
+# Proxmox Resources
+# =============================================================================
+
+proxmox_node   = "proxmod-lab1"     # Node name from Proxmox UI
+template_id    = 9000               # VM ID of Ubuntu 24.04 cloud-init template
+storage_name   = "local-lvm"        # Storage for VM disks
+network_bridge = "vmbr0"            # Network bridge
+
+# =============================================================================
+# Infrastructure Naming
+# =============================================================================
+
+project_name = "hashcrack"
+environment  = "lab"
+
+# =============================================================================
+# VM ID Assignment
+# =============================================================================
+
+server_vmid       = 200   # VM ID for server
+worker_vmid_start = 210   # Starting VM ID for workers (210, 211, 212...)
+
+# =============================================================================
+# Server Configuration (2 vCPU, 4GB RAM for orchestration)
+# =============================================================================
+
+server_cpus      = 2
+server_memory_mb = 4096   # 4 GB
+server_disk_gb   = 50
+
+# =============================================================================
+# Worker Configuration
+# =============================================================================
+# i7-10710U: 12 cores total, 32GB RAM
+# Reserved: 2 vCPU + 4GB for server
+# Available: 10 vCPU + 28GB for workers
+# Config: 2 workers x 2 vCPU = 4 vCPU (conservative start)
+
+worker_count     = 2
+worker_cpus      = 2
+worker_memory_mb = 4096   # 4 GB each
+worker_disk_gb   = 30
+
+# =============================================================================
+# Hashtopolis Credentials
+# =============================================================================
+
+hashtopolis_admin_user     = "hashcrack"
+hashtopolis_admin_password = "Hashcrack2025Lab"  # Simple password, no special chars
+worker_voucher             = "PAI_PROXMOX_WORKER"
+
+# =============================================================================
+# SSH Access
+# =============================================================================
+
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+ssh_user       = "ubuntu"
+
+# =============================================================================
+# Network Configuration (Static IPs)
+# =============================================================================
+
+network_gateway = "192.168.99.1"
+network_prefix  = "192.168.99"
+server_ip       = "192.168.99.220/24"
+worker_ip_start = 221   # Workers get .221, .222, etc.
