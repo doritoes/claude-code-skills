@@ -6,7 +6,7 @@ resource "oci_core_instance" "cpu_workers" {
   count = var.cpu_worker_count
 
   compartment_id      = local.compartment_id
-  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[var.availability_domain_index].name
   display_name        = "${var.project_name}-cpu-worker-${count.index + 1}"
   shape               = var.cpu_worker_shape
 
@@ -76,7 +76,7 @@ resource "oci_core_instance" "gpu_workers" {
   count = var.gpu_worker_count
 
   compartment_id      = local.compartment_id
-  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[var.availability_domain_index].name
   display_name        = "${var.project_name}-gpu-worker-${count.index + 1}"
   shape               = var.gpu_worker_shape
 

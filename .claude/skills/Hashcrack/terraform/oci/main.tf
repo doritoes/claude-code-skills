@@ -117,7 +117,8 @@ resource "oci_core_subnet" "public" {
   prohibit_public_ip_on_vnic = false
   route_table_id             = oci_core_route_table.public.id
   security_list_ids          = [oci_core_security_list.hashcrack.id]
-  availability_domain        = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  # Regional subnet (no AD restriction) allows instances in any AD
+  # availability_domain      = data.oci_identity_availability_domains.ads.availability_domains[var.availability_domain_index].name
 
   freeform_tags = local.common_tags
 }

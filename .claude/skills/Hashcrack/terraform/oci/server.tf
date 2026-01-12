@@ -4,7 +4,7 @@
 
 resource "oci_core_instance" "hashtopolis_server" {
   compartment_id      = local.compartment_id
-  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[var.availability_domain_index].name
   display_name        = "${var.project_name}-server"
   shape               = var.server_shape
 

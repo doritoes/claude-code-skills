@@ -35,6 +35,12 @@ variable "compartment_ocid" {
   default     = ""
 }
 
+variable "availability_domain_index" {
+  description = "Index of availability domain to use (0, 1, or 2 for Ashburn)"
+  type        = number
+  default     = 0
+}
+
 # =============================================================================
 # Infrastructure Naming
 # =============================================================================

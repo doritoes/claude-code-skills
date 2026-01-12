@@ -103,9 +103,10 @@ write_files:
       done
 
       # Run the agent once to register (entry point is __main__.py)
+      # Use increased recursion limit to work around Python 3.12 cookiejar bug
       cd $AGENT_DIR
       echo "Registering agent with server..."
-      timeout 60 python3 __main__.py || echo "Initial registration attempt complete"
+      timeout 60 python3 -c "import sys; sys.setrecursionlimit(10000); exec(open('__main__.py').read())" || echo "Initial registration attempt complete"
 
       echo "Agent registration initiated"
 

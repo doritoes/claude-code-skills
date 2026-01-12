@@ -60,10 +60,100 @@ docker exec -u root hashtopolis-backend chmod -R 777 /usr/local/share/hashtopoli
 
 ## XCP-ng Specific
 
-**TOO_MANY_STORAGE_MIGRATES error:**
-- XCP-ng limits concurrent disk operations
-- Wait and retry `terraform apply`
-- Create workers in batches of 3-4
+### TOO_MANY_STORAGE_MIGRATES Error
+
+**Cause:** XCP-ng has a hard limit of 3 concurrent VM storage migrations.
+
+**Solution:**
+- Cannot be changed easily (requires XCP-ng tuning)
+- Run `terraform apply` multiple times if creating 4+ workers
+- 4th worker will fail on first apply, succeed on second
+- Expected behavior for 4-worker deployments
+
+### Python 3.12 RecursionError (CRITICAL)
+
+**Symptom:** Agent fails during registration with:
+```
+RecursionError: maximum recursion depth exceeded
+File "/usr/lib/python3.12/http/cookiejar.py", line 642, in eff_request_host
+```
+
+**Cause:** Python 3.12 cookiejar bug with Hashtopolis agent during HTTP requests.
+
+**Fix - Update systemd service:**
+```bash
+ssh ubuntu@WORKER_IP 'sudo bash -c "cat > /etc/systemd/system/hashtopolis-agent.service << EOF
+[Unit]
+Description=Hashtopolis Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hashtopolis-agent
+ExecStart=/usr/bin/python3 -c \"import sys; sys.setrecursionlimit(10000); exec(open(chr(95)+chr(95)+chr(109)+chr(97)+chr(105)+chr(110)+chr(95)+chr(95)+chr(46)+chr(112)+chr(121)).read())\"
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl restart hashtopolis-agent"'
+```
+
+**Note:** This fix should be included in cloud-init for all providers using Python 3.12+.
+
+### DHCP IP Discovery on XCP-ng
+
+**Problem:** Terraform doesn't know the DHCP-assigned IP.
+
+**Best Method - Use XO CLI:**
+```bash
+# List VMs and IPs
+xo-cli VM.get --server https://192.168.99.206 | grep -E "(name_label|mainIpAddress)"
+```
+
+**Alternative - Port scan:**
+```bash
+# Find server via port 8080
+for ip in $(seq 10 50); do
+  curl -s --connect-timeout 1 http://192.168.99.$ip:8080/ >/dev/null && echo "Server: 192.168.99.$ip"
+done
+```
+
+### Voucher Persistence Issues
+
+**Symptom:** Worker fails to register even with voucher created.
+
+**Cause:**
+- Terraform voucher may be deleted by Hashtopolis even with voucherDeletion=0
+- Race conditions when multiple workers register simultaneously
+
+**Solution:**
+1. Create ONE VOUCHER PER WORKER before terraform apply
+2. Use database INSERT with COMMIT:
+```sql
+INSERT INTO hashtopolis.RegVoucher (voucher, time)
+VALUES ('XCP_WORKER_1', UNIX_TIMESTAMP());
+INSERT INTO hashtopolis.RegVoucher (voucher, time)
+VALUES ('XCP_WORKER_2', UNIX_TIMESTAMP());
+COMMIT;
+```
+3. Verify with `SELECT voucher FROM hashtopolis.RegVoucher;`
+
+### XCP-ng SHA256 Test Results (2026-01-12)
+
+| Metric | Value |
+|--------|-------|
+| Workers | 4 × 4 vCPU = 16 vCPU |
+| Runtime | 5h 58m |
+| Cracked | 2161/5000 (43.2%) |
+| Speed | ~40 MH/s combined |
+| Rate | 6.0/min |
+
+**Fastest CPU test** - local hypervisor with dedicated resources outperforms all cloud providers.
 
 ## Resource Planning
 
