@@ -1,0 +1,9 @@
+# Cache files (regenerated on query)
+kev-cache.json
+msv-cache.json
+nvd-cve-*.json
+vendor-*.json
+vulncheck-*.json
+
+# Keep the software catalog
+!SoftwareCatalog.json
