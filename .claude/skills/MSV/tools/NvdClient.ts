@@ -323,6 +323,185 @@ export class NvdClient {
   }
 
   /**
+   * Search for CVEs by CPE name
+   * NVD API supports cpeName parameter for CPE-based searches
+   */
+  async searchByCpe(
+    cpe23: string,
+    options: { maxResults?: number; minCvss?: number } = {}
+  ): Promise<Array<{
+    cve: string;
+    description: string;
+    cvssScore: number | null;
+    severity: string | null;
+    fixedVersion: string | null;
+    affectedRange: string;
+    published: string;
+  }>> {
+    const { maxResults = 20, minCvss = 4.0 } = options;
+    const results: Array<{
+      cve: string;
+      description: string;
+      cvssScore: number | null;
+      severity: string | null;
+      fixedVersion: string | null;
+      affectedRange: string;
+      published: string;
+    }> = [];
+
+    // Create cache key from CPE
+    const cacheKey = `nvd-cpe-${cpe23.replace(/[^a-zA-Z0-9-]/g, "_")}`;
+    const cachePath = resolve(this.cacheDir, `${cacheKey}.json`);
+
+    // Check cache
+    if (existsSync(cachePath)) {
+      try {
+        const cached: CacheFile<NvdApiResponse> = JSON.parse(
+          readFileSync(cachePath, "utf-8")
+        );
+        if (new Date(cached.expiresAt) > new Date()) {
+          // Process cached results
+          return this.processCpeSearchResults(cached.data, minCvss, maxResults);
+        }
+      } catch {
+        // Cache corrupted, fetch fresh
+      }
+    }
+
+    await this.rateLimit();
+
+    // Extract vendor and product from CPE for keyword search
+    // CPE format: cpe:2.3:a:vendor:product:version:...
+    const cpeParts = cpe23.split(":");
+    const vendor = cpeParts[3] || "";
+    const product = cpeParts[4] || "";
+
+    // Use keywordSearch with vendor+product for better compatibility
+    // cpeName requires exact CPE match (no wildcards), which often fails
+    const searchKeyword = `${vendor} ${product}`.trim();
+    const url = `${NVD_BASE_URL}?keywordSearch=${encodeURIComponent(searchKeyword)}&resultsPerPage=${maxResults}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error("NVD rate limit exceeded. Try again later.");
+      }
+      throw new Error(`NVD API error: ${response.status} ${response.statusText}`);
+    }
+
+    const result: NvdApiResponse = await response.json();
+
+    // Cache the result
+    const cacheData: CacheFile<NvdApiResponse> = {
+      version: 1,
+      lastUpdated: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + CACHE_DURATION_MS).toISOString(),
+      source: url,
+      data: result,
+    };
+
+    writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
+
+    return this.processCpeSearchResults(result, minCvss, maxResults);
+  }
+
+  /**
+   * Process NVD API response into structured CVE results
+   */
+  private processCpeSearchResults(
+    result: NvdApiResponse,
+    minCvss: number,
+    maxResults: number
+  ): Array<{
+    cve: string;
+    description: string;
+    cvssScore: number | null;
+    severity: string | null;
+    fixedVersion: string | null;
+    affectedRange: string;
+    published: string;
+  }> {
+    const results: Array<{
+      cve: string;
+      description: string;
+      cvssScore: number | null;
+      severity: string | null;
+      fixedVersion: string | null;
+      affectedRange: string;
+      published: string;
+    }> = [];
+
+    if (!result.vulnerabilities) return results;
+
+    for (const vuln of result.vulnerabilities) {
+      const cve = vuln.cve;
+
+      // Get CVSS score
+      let cvssScore: number | null = null;
+      let severity: string | null = null;
+      if (cve.metrics?.cvssMetricV31?.[0]) {
+        cvssScore = cve.metrics.cvssMetricV31[0].cvssData.baseScore;
+        severity = cve.metrics.cvssMetricV31[0].cvssData.baseSeverity;
+      } else if (cve.metrics?.cvssMetricV30?.[0]) {
+        cvssScore = cve.metrics.cvssMetricV30[0].cvssData.baseScore;
+        severity = cve.metrics.cvssMetricV30[0].cvssData.baseSeverity;
+      }
+
+      // Filter by minimum CVSS (medium and above = 4.0+)
+      if (cvssScore !== null && cvssScore < minCvss) {
+        continue;
+      }
+
+      // Get description
+      const description = cve.descriptions?.find(d => d.lang === "en")?.value || "No description available";
+
+      // Extract version info from configurations
+      let fixedVersion: string | null = null;
+      let affectedRange = "unknown";
+
+      if (cve.configurations) {
+        for (const config of cve.configurations) {
+          for (const node of config.nodes) {
+            for (const match of node.cpeMatch) {
+              if (!match.vulnerable) continue;
+
+              if (match.versionEndExcluding) {
+                fixedVersion = match.versionEndExcluding;
+                if (match.versionStartIncluding) {
+                  affectedRange = `>= ${match.versionStartIncluding}, < ${match.versionEndExcluding}`;
+                } else {
+                  affectedRange = `< ${match.versionEndExcluding}`;
+                }
+              } else if (match.versionEndIncluding) {
+                affectedRange = `<= ${match.versionEndIncluding}`;
+                fixedVersion = `> ${match.versionEndIncluding}`;
+              }
+            }
+          }
+        }
+      }
+
+      results.push({
+        cve: cve.id,
+        description,
+        cvssScore,
+        severity,
+        fixedVersion,
+        affectedRange,
+        published: cve.published,
+      });
+
+      if (results.length >= maxResults) break;
+    }
+
+    // Sort by CVSS score descending (most critical first)
+    results.sort((a, b) => (b.cvssScore || 0) - (a.cvssScore || 0));
+
+    return results;
+  }
+
+  /**
    * Get Admiralty rating for NVD source
    */
   getAdmiraltyRating(): { reliability: "C"; credibility: 3 } {

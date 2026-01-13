@@ -492,8 +492,126 @@ async function queryMSV(
     evidence.push({ source: "CISA_KEV", hasData: false });
   }
 
-  // 3. Query NVD for version info if no vendor advisory or need more data
-  if (!hasVendorAdvisory || exploitedCves.some(c => c.inCisaKev && !c.fixedVersion)) {
+  // 3. Query VulnCheck by CPE if API key available and we need more CVE data
+  if (config.vulncheckApiKey && software.cpe23) {
+    if (options.verbose) console.log("Querying VulnCheck by CPE...");
+    try {
+      const vulnCheckClient = new VulnCheckClient(
+        { apiKey: config.vulncheckApiKey },
+        config.dataDir
+      );
+
+      // Query by CPE to find CVEs
+      const cpeResults = await vulnCheckClient.queryCpe(software.cpe23);
+
+      if (cpeResults.length > 0) {
+        if (!sources.includes("VulnCheck")) sources.push("VulnCheck");
+
+        for (const result of cpeResults) {
+          const existing = exploitedCves.find(c => c.cve === result.cve);
+          if (existing) {
+            // Update existing CVE with VulnCheck data
+            if (result.poc_available) existing.hasPoC = true;
+            if (result.cvss_v3) existing.cvssScore = result.cvss_v3;
+          } else {
+            // Add new CVE from VulnCheck
+            exploitedCves.push({
+              cve: result.cve,
+              description: result.description,
+              inCisaKev: result.vulncheck_kev || false,
+              hasPoC: result.poc_available || false,
+              cvssScore: result.cvss_v3 || result.cvss_v2,
+            });
+          }
+        }
+
+        evidence.push({
+          source: "VulnCheck",
+          hasData: true,
+          hasPoc: cpeResults.some(r => r.poc_available),
+        });
+      } else {
+        evidence.push({ source: "VulnCheck", hasData: false });
+      }
+    } catch (error) {
+      if (options.verbose) console.warn("VulnCheck query failed:", error);
+      evidence.push({ source: "VulnCheck", hasData: false });
+    }
+  }
+
+  // 3.5. If no CVEs found yet, query NVD directly by CPE (free API)
+  if (exploitedCves.length === 0 && software.cpe23) {
+    if (options.verbose) console.log("Querying NVD by CPE (no CVEs from other sources)...");
+    try {
+      const nvdClient = new NvdClient(config.dataDir);
+      const nvdCpeResults = await nvdClient.searchByCpe(software.cpe23, {
+        maxResults: 20,
+        minCvss: 4.0, // Medium severity and above
+      });
+
+      if (nvdCpeResults.length > 0) {
+        if (!sources.includes("NVD")) sources.push("NVD");
+
+        // Track fixed versions to determine MSV
+        const fixedVersions: string[] = [];
+
+        for (const result of nvdCpeResults) {
+          exploitedCves.push({
+            cve: result.cve,
+            description: result.description,
+            inCisaKev: false,
+            hasPoC: false,
+            cvssScore: result.cvssScore || undefined,
+            fixedVersion: result.fixedVersion && !result.fixedVersion.startsWith(">")
+              ? result.fixedVersion
+              : undefined,
+          });
+
+          if (result.fixedVersion && !result.fixedVersion.startsWith(">")) {
+            fixedVersions.push(result.fixedVersion);
+          }
+        }
+
+        // Determine MSV from fixed versions
+        if (fixedVersions.length > 0 && !minimumSafeVersion) {
+          // Sort and get highest fixed version
+          fixedVersions.sort((a, b) => {
+            const partsA = a.split(".").map(p => parseInt(p, 10) || 0);
+            const partsB = b.split(".").map(p => parseInt(p, 10) || 0);
+            const maxLen = Math.max(partsA.length, partsB.length);
+            for (let i = 0; i < maxLen; i++) {
+              const partA = partsA[i] || 0;
+              const partB = partsB[i] || 0;
+              if (partA !== partB) return partA - partB;
+            }
+            return 0;
+          });
+          minimumSafeVersion = fixedVersions[fixedVersions.length - 1];
+          recommendedVersion = minimumSafeVersion;
+        }
+
+        const maxCvss = Math.max(...nvdCpeResults.map(r => r.cvssScore || 0));
+        evidence.push({
+          source: "NVD",
+          hasData: true,
+          cvssScore: maxCvss > 0 ? maxCvss : undefined,
+        });
+
+        if (options.verbose) {
+          console.log(`Found ${nvdCpeResults.length} CVEs from NVD (CVSS >= 4.0)`);
+        }
+      } else {
+        evidence.push({ source: "NVD", hasData: false });
+        if (options.verbose) console.log("No CVEs found in NVD for this CPE");
+      }
+    } catch (error) {
+      if (options.verbose) console.warn("NVD CPE query failed:", error);
+      evidence.push({ source: "NVD", hasData: false });
+    }
+  }
+
+  // 4. Query NVD for version info if we have CVEs without fixed versions
+  if (exploitedCves.length > 0 && (!hasVendorAdvisory || exploitedCves.some(c => !c.fixedVersion))) {
     const nvdClient = new NvdClient(config.dataDir);
     const cvesToQuery = exploitedCves
       .filter(c => !c.fixedVersion)
@@ -541,7 +659,7 @@ async function queryMSV(
     }
   }
 
-  // 4. Query EPSS for exploitation probability
+  // 5. Query EPSS for exploitation probability
   if (exploitedCves.length > 0) {
     if (options.verbose) console.log("Querying EPSS...");
     const epssClient = new EpssClient(config.dataDir);
