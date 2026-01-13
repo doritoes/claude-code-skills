@@ -1100,7 +1100,38 @@ The password policy dramatically affects attack strategy. Key questions to ask:
 | Complexity requirements? | "3 of 4 classes" = predictable patterns |
 | Rotation period? | <90 days = increment/append behaviors |
 | Passphrase policy? | Changes entire attack strategy |
+| **Password manager deployed?** | Creates bimodal distribution - some users uncrackable |
+| Estimated manager adoption? | Sets realistic expectations for crack rate |
 | Account lockout? | N/A for offline cracking, but indicates security maturity |
+
+### Password Manager Impact
+
+**Password managers create a bimodal distribution in crack results.**
+
+| User Type | Password Characteristics | Crackability |
+|-----------|------------------------|--------------|
+| Manager users (minority) | 20+ char random, unique per site | Effectively uncrackable |
+| Non-manager users (majority) | Human-memorable, patterns | Standard attack vectors work |
+
+**What to expect by manager adoption:**
+
+| Adoption Rate | Expected Crack Rate | Notes |
+|---------------|---------------------|-------|
+| 0% (no manager) | 60-80% typical | All passwords human-generated |
+| 10-20% | 50-70% | Small uncrackable segment |
+| 30-50% | 40-55% | Significant uncrackable population |
+| 70%+ (mature program) | 20-40% | Most passwords are random |
+
+**Audit implications:**
+- **Don't chase the uncrackable** - Random 20+ char passwords won't fall to any attack
+- **Focus resources on the human segment** - Where patterns exist
+- **Set client expectations early** - "With 40% manager adoption, expect ~50% crack rate max"
+- **Identify manager vs non-manager** - If cracked passwords show patterns, the uncracked may be manager-generated
+
+**Identifying password manager usage in results:**
+- Cracked passwords show human patterns (words, dates, sequences)
+- Uncracked segment remains constant regardless of attack sophistication
+- No "near misses" in rule-based attacks for manager passwords
 
 ### Rotation-Based Attack Patterns
 
@@ -1182,10 +1213,14 @@ Before starting ANY password audit, confirm:
 - [ ] Complexity requirements (which classes required)
 - [ ] Rotation period (30/60/90/365 days)
 - [ ] Passphrase allowed/encouraged?
+- [ ] **Password manager deployed?** (enterprise-wide?)
+- [ ] **Estimated manager adoption rate?** (sets crack rate ceiling)
 - [ ] Previous breach data available for this org?
 - [ ] Any known password patterns from prior audits?
 
 **If policy unknown:** Start with comprehensive strategy, but ASK - policy knowledge can 10x efficiency.
+
+**If manager deployed:** Set realistic expectations upfront - manager-generated passwords are uncrackable.
 
 ## Attack Strategy
 
