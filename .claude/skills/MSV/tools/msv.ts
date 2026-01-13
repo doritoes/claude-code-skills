@@ -1161,12 +1161,66 @@ function cmdList(config: Config, category?: string): void {
   console.log("Filter by category: 'msv list --category browser'");
 }
 
+function cmdStats(config: Config): void {
+  const catalog = loadSoftwareCatalog(config);
+
+  // Count by category
+  const categories = new Map<string, number>();
+  const priorities = { critical: 0, high: 0, medium: 0, low: 0 };
+  const vendors = new Set<string>();
+
+  for (const sw of catalog.software) {
+    const cat = sw.category || "other";
+    categories.set(cat, (categories.get(cat) || 0) + 1);
+    priorities[sw.priority || "low"]++;
+    vendors.add(sw.vendor);
+  }
+
+  console.log(`
+MSV Software Catalog Statistics
+${"=".repeat(40)}
+
+Total Products:     ${catalog.software.length}
+Unique Vendors:     ${vendors.size}
+Last Updated:       ${catalog._metadata.lastUpdated.split("T")[0]}
+
+Priority Breakdown:
+  Critical:         ${priorities.critical}
+  High:             ${priorities.high}
+  Medium:           ${priorities.medium}
+  Low:              ${priorities.low}
+
+Categories:
+${Array.from(categories.entries())
+  .sort((a, b) => b[1] - a[1])
+  .map(([cat, count]) => `  ${cat.padEnd(20)} ${count}`)
+  .join("\n")}
+
+Top Vendors:
+${Array.from(vendors)
+  .map(v => ({
+    vendor: v,
+    count: catalog.software.filter(s => s.vendor === v).length
+  }))
+  .sort((a, b) => b.count - a.count)
+  .slice(0, 10)
+  .map(v => `  ${v.vendor.padEnd(20)} ${v.count}`)
+  .join("\n")}
+
+Data Sources:
+  ${catalog._metadata.sources.join("\n  ")}
+`);
+}
+
+const MSV_VERSION = "1.1.0";
+
 function showHelp(): void {
   console.log(`
-MSV - Minimum Safe Version Calculator
+MSV - Minimum Safe Version Calculator v${MSV_VERSION}
 
-Determines the lowest software version free of known-exploited vulnerabilities
-for Windows 11/Server software.
+Determines the lowest software version free of medium, high, and critical
+vulnerabilities for Windows 11/Server software. Prioritizes actively exploited
+vulnerabilities (CISA KEV) but also considers all significant CVEs.
 
 USAGE:
   msv <command> [options]
@@ -1175,9 +1229,25 @@ COMMANDS:
   query <software>     Query MSV for a specific software
   check <input>        Check compliance for software inventory
   batch <file>         Query MSV for multiple software from file
+  stats                Show catalog statistics
   refresh              Force refresh all caches
   list                 List supported software
+  list <category>      List software in a category
   help                 Show this help message
+
+SUPPORTED SOFTWARE (133+ products):
+  Browsers           Chrome, Edge, Firefox, Brave, Opera
+  PDF                Adobe Acrobat DC/2024/2020, Reader DC/2020, Foxit
+  Remote Access      PuTTY suite (8 tools), WinSCP, TeamViewer, AnyDesk
+  Monitoring         SolarWinds Orion (NPM, SAM, NCM, NTA, IPAM, VMAN, DPA)
+                     Serv-U, Web Help Desk, DameWare, Engineer's Toolset
+  Analytics          Tableau Desktop, Server, Prep, Bridge
+  Enterprise         Citrix, VMware, Splunk, CrowdStrike, Microsoft 365
+  Development        VS Code, Git, Node.js, Python, Docker, Terraform
+  Databases          PostgreSQL, MySQL, MariaDB, MongoDB, Redis
+  Web Servers        Apache, nginx, Tomcat, IIS
+  Security           KeePass, Bitwarden, 1Password, Malwarebytes
+  Adobe Enterprise   ColdFusion (15 KEV), Commerce/Magento, Experience Manager
 
 CHECK COMMAND:
   The 'check' command accepts input in multiple formats:
@@ -1204,27 +1274,35 @@ OPTIONS:
 
 EXAMPLES:
   msv query "Google Chrome"
-  msv query "Microsoft Edge" --format json
-  msv check "Chrome 120.0.1, Edge, Wireshark 4.2.0"
+  msv query "SolarWinds Serv-U" --format json
+  msv query "Adobe Acrobat DC"
+  msv check "Chrome 120.0.1, PuTTY 0.80, Wireshark 4.2.0"
   msv check inventory.csv --format markdown
-  msv check inventory.json --auto-add
-  msv batch software-list.txt --format markdown
-  msv refresh
-  msv list
+  msv stats
+  msv list monitoring
+  msv list remote_access
 
 COMPLIANCE STATUS:
   COMPLIANT      - Current version >= Minimum Safe Version
-  NON_COMPLIANT  - Current version < MSV (security risk)
+  NON_COMPLIANT  - Current version < MSV (upgrade required)
   OUTDATED       - Current version >= MSV but < Recommended
   UNKNOWN        - No current version provided or MSV not determined
-  NOT_FOUND      - Software not in catalog
+  NOT_FOUND      - Software not in catalog (use --auto-add to discover)
 
 ADMIRALTY RATINGS:
   A1 - Completely Reliable, Confirmed (CISA KEV active exploitation)
   A2 - Completely Reliable, Probably True (Vendor advisory)
   B2 - Usually Reliable, Probably True (VulnCheck PoC verified)
   B3 - Usually Reliable, Possibly True (High EPSS score)
-  C3 - Fairly Reliable, Possibly True (Critical CVSS)
+  C4 - Fairly Reliable, Doubtful (CVE data but no MSV determined)
+  F6 - Cannot be judged (No vulnerability data found)
+
+DATA SOURCES:
+  CISA KEV         Known Exploited Vulnerabilities (A1 rating)
+  Vendor Advisory  Direct from vendor security pages (A2 rating)
+  VulnCheck        PoC and exploit intelligence (B2 rating)
+  EPSS             Exploitation probability scores (B3 rating)
+  NVD              National Vulnerability Database (version data)
 
 ENVIRONMENT:
   VULNCHECK_API_KEY    VulnCheck API token (in .claude/.env)
@@ -1312,8 +1390,12 @@ async function main(): Promise<void> {
         await cmdRefresh();
         break;
 
+      case "stats":
+        cmdStats(config);
+        break;
+
       case "list":
-        cmdList(config, category);
+        cmdList(config, category || positionalArgs[1]);
         break;
 
       default:

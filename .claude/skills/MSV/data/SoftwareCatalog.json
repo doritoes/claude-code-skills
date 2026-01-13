@@ -4,7 +4,7 @@
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
     "lastUpdated": "2026-01-13T00:00:00Z",
     "lastChecked": "2026-01-13T00:00:00Z",
-    "totalEntries": 138,
+    "totalEntries": 133,
     "sources": [
       "CISA KEV Catalog (top vulnerable products)",
       "Enterprise patch management catalogs",
