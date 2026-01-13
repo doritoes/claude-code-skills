@@ -93,6 +93,91 @@ ssh -J ubuntu@SERVER_PUBLIC_IP ubuntu@WORKER_PRIVATE_IP
 | NAT Gateway | $30-45 | Plus per-GB charges |
 | Server File Proxy | $0 | Uses existing server |
 
+### Prerequisites - Cloud Provider CLIs
+
+**IMPORTANT: Install the CLI for your target cloud provider before deploying.**
+
+#### AWS CLI
+```powershell
+# Windows (PowerShell as Admin)
+msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi /quiet
+
+# Or via winget
+winget install Amazon.AWSCLI
+
+# Configure
+aws configure
+# Enter: Access Key ID, Secret Access Key, Region (us-east-1), Output format (json)
+
+# Verify
+aws sts get-caller-identity
+```
+
+#### Azure CLI
+```powershell
+# Windows (PowerShell as Admin)
+winget install Microsoft.AzureCLI
+
+# Or download MSI from: https://aka.ms/installazurecliwindows
+
+# Login
+az login
+
+# Set subscription (if multiple)
+az account set --subscription "Your Subscription Name"
+
+# Verify
+az account show
+```
+
+#### GCP CLI (gcloud)
+```powershell
+# Windows - Download installer from:
+# https://cloud.google.com/sdk/docs/install
+
+# Or via PowerShell
+(New-Object Net.WebClient).DownloadFile("https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe", "$env:TEMP\GoogleCloudSDKInstaller.exe")
+& "$env:TEMP\GoogleCloudSDKInstaller.exe"
+
+# Initialize and login
+gcloud init
+gcloud auth application-default login
+
+# Enable Compute API
+gcloud services enable compute.googleapis.com
+
+# Verify
+gcloud compute regions list
+```
+
+#### OCI CLI (Oracle Cloud)
+```powershell
+# Windows (PowerShell as Admin)
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+Invoke-WebRequest https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.ps1 -OutFile install.ps1
+./install.ps1 -AcceptAllDefaults
+
+# Restart terminal, then configure
+oci setup config
+# Enter: User OCID, Tenancy OCID, Region, generate new API key
+
+# Upload public key to OCI Console → User Settings → API Keys
+
+# Verify
+oci iam region list --output table
+```
+
+#### Terraform (Required for all providers)
+```powershell
+# Windows (winget)
+winget install Hashicorp.Terraform
+
+# Or download from: https://www.terraform.io/downloads
+
+# Verify
+terraform version
+```
+
 ### STEP-BY-STEP DEPLOYMENT PROCESS (FOLLOW EXACTLY)
 
 **STEP 1: Deploy Infrastructure**
@@ -805,40 +890,156 @@ hashcrack wordlist clear
 
 ## Passphrase Wordlist Sources
 
-Long passphrases (10+ chars) require specialized wordlists. Standard wordlists like rockyou focus on short passwords.
+Long passphrases (10+ chars) require specialized wordlists. As NIST 2025 guidelines push organizations toward 15+ character passphrases, predictable patterns are emerging in clusters. Users follow predictable patterns: song lyrics, movie quotes, memes, and initialisms.
 
-### Recommended Sources
+### Tier 1: Essential Passphrase Wordlists
 
-| Source | Size | Best For | URL |
-|--------|------|----------|-----|
-| **initstring/passphrase-wordlist** | 20M | Movie quotes, song lyrics, book titles | [GitHub Releases](https://github.com/initstring/passphrase-wordlist/releases) |
-| **berzerk0/Probable-Wordlists** | 350GB | Real breach data, 8-40 char passwords | [GitHub](https://github.com/berzerk0/Probable-Wordlists) |
-| **SecLists Passwords** | Various | Common credentials, NCSC 100k | [GitHub](https://github.com/danielmiessler/SecLists/tree/master/Passwords) |
-| **CrackStation** | 15GB | Comprehensive breach compilation | [crackstation.net](https://crackstation.net/crackstation-wordlist-password-cracking-dictionary.htm) |
+| Source | Size | Update Freq | Best For | URL |
+|--------|------|-------------|----------|-----|
+| **initstring/passphrase-wordlist** | 20M+ phrases | Periodic | Movie quotes, lyrics, book titles | [GitHub](https://github.com/initstring/passphrase-wordlist) |
+| **Have I Been Pwned** | 900M+ | Monthly | Real breach passwords (SHA1/NTLM) | [HIBP Passwords](https://haveibeenpwned.com/Passwords) |
+| **Kaonashi** | 2.35GB | Stable | Sorted by occurrence frequency | [GitHub](https://github.com/kaonashi-passwords/Kaonashi) |
+| **WeakPass** | Various | Active | Large wordlist collection | [weakpass.com](https://weakpass.com/) |
+| **CrackStation** | 15GB | Stable | Wikipedia + breaches + books | [crackstation.net](https://crackstation.net/crackstation-wordlist-password-cracking-dictionary.htm) |
 
-### initstring/passphrase-wordlist Contents
+### Tier 2: Dynamic/Trending Sources
 
-Compiled from multiple sources for passphrase cracking:
-- Wikipedia/Wiktionary articles
-- IMDB movie titles and quotes
-- Billboard music charts and artists
-- Famous book titles and phrases
-- Geographic location names
+These sources update frequently and capture current cultural trends:
+
+| Source | Update Freq | Content Type | Access |
+|--------|-------------|--------------|--------|
+| **Know Your Meme** | Daily | Meme phrases, catchphrases | [knowyourmeme.com](https://knowyourmeme.com/) |
+| **Urban Dictionary** | Daily | Slang, trending phrases | [urbandictionary.com](https://www.urbandictionary.com/) |
+| **Google Trends** | Real-time | Trending searches | [pytrends](https://github.com/GeneralMills/pytrends) |
+| **Billboard Charts** | Weekly | Song titles, artist names | [billboard.com](https://www.billboard.com/charts/) |
+| **IMDB** | Weekly | Movie/TV titles, character names | [imdb.com/interfaces](https://www.imdb.com/interfaces/) |
+
+### Tier 3: Specialized Tools
+
+| Tool | Purpose | URL |
+|------|---------|-----|
+| **LyricPass** | Generate wordlists from song lyrics | [GitHub](https://github.com/initstring/lyricpass) |
+| **Phraser** | N-gram/Markov chain phrase generation | [GitHub](https://github.com/Sparell/Phraser) |
+| **Mentalist** | GUI for custom wordlist creation | [GitHub](https://github.com/sc0tfree/mentalist) |
+| **PACK** | Analyze passwords for pattern masks | [GitHub](https://github.com/iphelix/pack) |
+| **Wordlust** | Combined dictionary (movies, lyrics, phrases) | [GitHub](https://github.com/frizb/Wordlust) |
+
+### initstring/passphrase-wordlist Details
+
+**20M+ phrases** compiled from dynamic and static sources (last updated July 2025):
+
+**Dynamic Sources (Updated Periodically):**
+- Wikipedia/Wiktionary article titles
 - Urban Dictionary entries
+- Know Your Meme database
+- IMDB movie/TV dataset
+- Billboard music charts
+- Global points of interest
 
-### Quick Download
+**Static Sources:**
+- Cornell Movie-Dialogs corpus
+- Book titles (Kaggle)
+- Famous quotes databases
+- Common English phrases
+
+**Hashcat Rules Included:**
+- `passphrase-rule1.rule` - Capitalization, spacing variations
+- `passphrase-rule2.rule` - Character substitutions, mutations
+- Together generate **1000+ permutations per phrase**
+
+### Initialism/Acronym Patterns
+
+Users often create passwords from **first letters of phrases**:
+
+| Phrase | Initialism Password |
+|--------|---------------------|
+| "To be or not to be" | `tbontb` or `Tbontb1!` |
+| "Live laugh love" | `lll` or `LLL2024` |
+| "Make America Great Again" | `maga` or `MAGA!` |
+| "You only live once" | `yolo` or `Yolo123` |
+| "What would Jesus do" | `wwjd` or `WWJD!` |
+
+**Detection Strategy:**
+1. Generate initialisms from known phrase lists
+2. Apply standard mutation rules (capitalize, add numbers/symbols)
+3. Run as high-priority pretask before brute force
+
+### 2025-2026 Trending Passphrase Patterns
+
+Based on NIST guidance pushing 15+ char passwords, these patterns are emerging:
+
+| Pattern | Example | Prevalence |
+|---------|---------|------------|
+| **Season+Year+Symbol** | `Winter2025!` | Very High |
+| **Phrase+Numbers** | `letmein123456` | High |
+| **Movie/Song Titles** | `MayTheForceBeWithYou` | Medium |
+| **Meme References** | `itsgivingmaincharacter` | Growing |
+| **Sports+Year** | `GoPackGo2025!` | Regional |
+| **3-4 Word Combos** | `correct horse battery` | Emerging |
+
+### Quick Download Commands
 
 ```bash
-# SecLists (common credentials)
-wget https://github.com/danielmiessler/SecLists/raw/master/Passwords/Common-Credentials/10k-most-common.txt
-
-# Passphrase wordlist (from releases)
-wget https://github.com/initstring/passphrase-wordlist/releases/download/v1.0/passphrases.txt.gz
+# Essential passphrase wordlist (20M+ phrases)
+wget https://github.com/initstring/passphrase-wordlist/releases/latest/download/passphrases.txt.gz
 gunzip passphrases.txt.gz
 
-# Top 1000 long passwords (custom extraction from breaches)
-# Focus on 10+ char passwords that appear frequently
+# Kaonashi (sorted by frequency - most effective first)
+wget https://github.com/kaonashi-passwords/Kaonashi/releases/download/v1.0/kaonashi.txt.7z
+
+# HIBP Pwned Passwords (NTLM format for AD audits)
+# Use the downloader tool for full 900M+ dataset
+git clone https://github.com/HaveIBeenPwned/PwnedPasswordsDownloader
+dotnet run -- -n -o pwned-passwords-ntlm
+
+# SecLists common credentials
+wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/10k-most-common.txt
+
+# Generate lyrics-based wordlist for specific artist
+pip install lyricpass
+lyricpass -a "Taylor Swift" -o taylor_swift_lyrics.txt
 ```
+
+### Recommended Attack Order for Passphrases
+
+| Priority | Attack | Wordlist | Expected Hits |
+|----------|--------|----------|---------------|
+| 1 | Direct passphrase | passphrases.txt | 5-10% |
+| 2 | Passphrase + rules | passphrases.txt + passphrase-rule1/2 | 10-20% |
+| 3 | Kaonashi top 10M | kaonashi-top10m.txt | 15-25% |
+| 4 | HIBP common | pwned-passwords-top1m.txt | 20-30% |
+| 5 | Initialism generation | Custom from phrases | 2-5% |
+| 6 | Trending + mutations | Urban Dict + rules | 1-3% |
+
+### Building Custom Trending Wordlists
+
+```python
+# Example: Generate wordlist from Google Trends
+from pytrends.request import TrendReq
+
+pytrends = TrendReq()
+# Get daily trending searches
+trending = pytrends.trending_searches(pn='united_states')
+
+# Save as wordlist
+with open('trending_phrases.txt', 'w') as f:
+    for phrase in trending[0]:
+        # Original
+        f.write(f"{phrase}\n")
+        # No spaces
+        f.write(f"{phrase.replace(' ', '')}\n")
+        # Lowercase no spaces
+        f.write(f"{phrase.replace(' ', '').lower()}\n")
+```
+
+### API Resources for Dynamic Wordlists
+
+| API | Data Type | Update Frequency |
+|-----|-----------|------------------|
+| [Google Trends API](https://developers.google.com/search/blog/2025/07/trends-api) | Search trends | Real-time |
+| [pytrends](https://github.com/GeneralMills/pytrends) | Google Trends (unofficial) | Real-time |
+| [Know Your Meme](https://knowyourmeme.com/) | Meme database | Daily |
+| [memes.com API](https://api.memes.com/trending) | Trending memes | Hourly |
 
 ### Pattern-Based Learning
 
@@ -886,6 +1087,105 @@ awk -F: 'length($2) >= 10 {print $2}' hashcat.potfile > long_passwords.txt
 # Find most common patterns
 sort long_passwords.txt | uniq -c | sort -rn | head -100
 ```
+
+## Password Policy Intelligence
+
+**CRITICAL: Always ask for the client's password policy before starting an audit.**
+
+The password policy dramatically affects attack strategy. Key questions to ask:
+
+| Question | Why It Matters |
+|----------|----------------|
+| Minimum length? | Sets brute force boundaries (8 vs 10 vs 15 char) |
+| Complexity requirements? | "3 of 4 classes" = predictable patterns |
+| Rotation period? | <90 days = increment/append behaviors |
+| Passphrase policy? | Changes entire attack strategy |
+| Account lockout? | N/A for offline cracking, but indicates security maturity |
+
+### Rotation-Based Attack Patterns
+
+**Short rotation (<90 days) creates predictable mutations:**
+
+| Pattern | Example | Rule |
+|---------|---------|------|
+| Incrementing numbers | `Password1` → `Password2` → `Password3` | `$0-9` sequence |
+| Appending same char | `Summer2024!` → `Summer2024!!` | `$!$!` |
+| Season cycling | `Winter2024` → `Spring2024` → `Summer2024` | Seasonal wordlist |
+| Month/Year increment | `January2024` → `February2024` | Date wordlist |
+| Adding special at end | `Password1` → `Password1!` → `Password1!!` | `$! $!! $!!!` |
+
+**Attack strategy for short rotation environments:**
+```bash
+# Generate increment rules
+for i in {1..99}; do echo "\$${i}"; done > increment.rule
+
+# Generate double-append rules
+echo '$!' > append.rule
+echo '$!$!' >> append.rule
+echo '$@' >> append.rule
+echo '$@$@' >> append.rule
+```
+
+### Passphrase Attack Variants
+
+**Passphrases appear in multiple forms - attack ALL variants:**
+
+| Form | Example | Hashcat Treatment |
+|------|---------|-------------------|
+| Spaces between words | `correct horse battery staple` | Direct wordlist entry |
+| No spaces | `correcthorsebatterystaple` | Direct wordlist entry |
+| Symbol separators | `correct-horse-battery-staple` | Rule: `ss- ss_ ss.` |
+| CamelCase | `CorrectHorseBatteryStaple` | Rule: `c` or titlecase |
+| First letter caps | `Correct Horse Battery Staple` | Each word capitalized |
+| L33t variants | `c0rr3ct h0rs3 b4tt3ry st4pl3` | L33t rules |
+
+**Passphrase rules file:**
+```bash
+# passphrase_variants.rule
+:                    # Original (with spaces)
+ss                   # Remove all spaces
+ss-                  # Replace space with dash
+ss_                  # Replace space with underscore
+ss.                  # Replace space with period
+c                    # Capitalize first letter
+C                    # Lowercase first, upper rest
+T0 T1 T2 T3         # Toggle case at positions
+sa@ se3 si1 so0     # L33t substitutions
+```
+
+**Quick passphrase attack setup:**
+```bash
+# Create passphrase variants from wordlist
+hashcat -m HASH_MODE hashes.txt passphrases.txt -r passphrase_variants.rule
+
+# Combine with common appends
+hashcat -m HASH_MODE hashes.txt passphrases.txt -r passphrase_variants.rule -r append.rule
+```
+
+### Policy-Driven Attack Priority
+
+| Policy Type | Priority Attacks |
+|-------------|------------------|
+| 8 char + complexity | Wordlist + best64, then `?u?l?l?l?l?l?d?s` masks |
+| 10 char + 3 of 4 | Heavy rules (OneRule), targeted wordlists |
+| 12+ char passphrase | Passphrase wordlists, phrase mutations, hybrid attacks |
+| 90-day rotation | Standard attacks, no increment focus |
+| 30-day rotation | Increment rules HIGH PRIORITY, append patterns |
+| AD with history | Previous passwords + increment (if available) |
+
+### Audit Kickoff Checklist
+
+Before starting ANY password audit, confirm:
+
+- [ ] Password policy document received
+- [ ] Minimum length requirement
+- [ ] Complexity requirements (which classes required)
+- [ ] Rotation period (30/60/90/365 days)
+- [ ] Passphrase allowed/encouraged?
+- [ ] Previous breach data available for this org?
+- [ ] Any known password patterns from prior audits?
+
+**If policy unknown:** Start with comprehensive strategy, but ASK - policy knowledge can 10x efficiency.
 
 ## Attack Strategy
 
