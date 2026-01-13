@@ -8,6 +8,10 @@
  * - Wireshark (wireshark.org/security/)
  * - Chrome (chromereleases.googleblog.com)
  * - Firefox (mozilla.org/security/advisories/)
+ * - SolarWinds (solarwinds.com/trust-center/security-advisories)
+ *   - Orion Platform, NPM, SAM, NCM, NTA, IPAM, VMAN, DPA, Log Analyzer
+ *   - Serv-U MFT, Access Rights Manager, Web Help Desk
+ *   - DameWare MRC/RS, Engineer's Toolset, Kiwi Syslog, SFTP/TFTP Server
  *
  * @author PAI (Personal AI Infrastructure)
  * @license MIT
@@ -302,6 +306,254 @@ export class ChromeAdvisoryFetcher extends VendorAdvisoryFetcher {
 }
 
 // =============================================================================
+// SolarWinds Advisory Fetcher
+// =============================================================================
+
+export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private readonly trustCenterUrl = "https://www.solarwinds.com/trust-center/security-advisories";
+  private readonly product: string;
+
+  // SolarWinds product name mappings for advisory filtering
+  private static readonly PRODUCT_NAMES: Record<string, string[]> = {
+    "orion_platform": ["orion", "orion platform"],
+    "serv-u": ["serv-u", "servu", "serv u"],
+    "access_rights_manager": ["access rights manager", "arm"],
+    "web_help_desk": ["web help desk", "whd"],
+    "network_performance_monitor": ["npm", "network performance monitor"],
+    "server_and_application_monitor": ["sam", "server and application monitor"],
+    "network_configuration_manager": ["ncm", "network configuration manager"],
+    "netflow_traffic_analyzer": ["nta", "netflow traffic analyzer"],
+    "ip_address_manager": ["ipam", "ip address manager"],
+    "virtualization_manager": ["vman", "virtualization manager"],
+    "database_performance_analyzer": ["dpa", "database performance analyzer"],
+    "log_analyzer": ["log analyzer", "la"],
+    "patch_manager": ["patch manager"],
+    "dameware_mini_remote_control": ["dameware", "mini remote control", "mrc"],
+    "dameware_remote_support": ["dameware remote support"],
+    "engineers_toolset": ["engineer's toolset", "engineers toolset", "ets"],
+    "kiwi_syslog_server": ["kiwi", "kiwi syslog"],
+    "sftp_scp_server": ["sftp", "scp"],
+    "tftp_server": ["tftp"],
+  };
+
+  constructor(cacheDir: string, product: string) {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `solarwinds-${this.product}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    // Fetch the Trust Center security advisories page
+    const response = await fetch(this.trustCenterUrl, {
+      headers: {
+        "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch SolarWinds security page: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const advisories = this.parseAdvisories(html);
+
+    // Filter advisories for this specific product
+    const productAdvisories = this.filterByProduct(advisories);
+
+    // Calculate MSV from fixed versions
+    const branches = this.calculateBranchMsv(productAdvisories);
+
+    const result: VendorAdvisoryResult = {
+      vendor: "solarwinds",
+      product: this.product,
+      advisories: productAdvisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: this.trustCenterUrl,
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+
+  private parseAdvisories(html: string): SecurityAdvisory[] {
+    const advisories: SecurityAdvisory[] = [];
+
+    // SolarWinds publishes CVEs with product name and version info
+    // Look for CVE patterns and extract surrounding context
+    const cveRegex = /CVE-\d{4}-\d+/gi;
+    const cveMatches = [...new Set(html.match(cveRegex) || [])];
+
+    for (const cve of cveMatches) {
+      // Find context around CVE
+      const cveIndex = html.indexOf(cve);
+      if (cveIndex === -1) continue;
+
+      const contextStart = Math.max(0, cveIndex - 500);
+      const contextEnd = Math.min(html.length, cveIndex + 1000);
+      const context = html.slice(contextStart, contextEnd);
+
+      const fixedVersions = this.extractVersions(context);
+      const products = this.extractProducts(context);
+
+      advisories.push({
+        id: cve,
+        title: `SolarWinds Security Advisory ${cve}`,
+        severity: this.extractSeverity(context),
+        affectedVersions: [],
+        fixedVersions,
+        cveIds: [cve.toUpperCase()],
+        publishedDate: this.extractDate(context) || new Date().toISOString().split("T")[0],
+        url: `https://nvd.nist.gov/vuln/detail/${cve}`,
+      });
+    }
+
+    return advisories;
+  }
+
+  private extractProducts(text: string): string[] {
+    const products: string[] = [];
+    const lower = text.toLowerCase();
+
+    for (const [productKey, names] of Object.entries(SolarWindsAdvisoryFetcher.PRODUCT_NAMES)) {
+      for (const name of names) {
+        if (lower.includes(name)) {
+          products.push(productKey);
+          break;
+        }
+      }
+    }
+
+    return products;
+  }
+
+  private filterByProduct(advisories: SecurityAdvisory[]): SecurityAdvisory[] {
+    const productNames = SolarWindsAdvisoryFetcher.PRODUCT_NAMES[this.product] || [this.product];
+
+    // For Orion Platform, include all Orion modules as they share the base platform
+    const orionModules = [
+      "orion_platform", "network_performance_monitor", "server_and_application_monitor",
+      "network_configuration_manager", "netflow_traffic_analyzer", "ip_address_manager",
+      "virtualization_manager", "database_performance_analyzer", "log_analyzer"
+    ];
+
+    const isOrionProduct = orionModules.includes(this.product);
+
+    return advisories.filter(adv => {
+      const text = `${adv.title} ${adv.id}`.toLowerCase();
+
+      // If this is an Orion product, also check for Orion platform advisories
+      if (isOrionProduct && (text.includes("orion") || text.includes("platform"))) {
+        return true;
+      }
+
+      for (const name of productNames) {
+        if (text.includes(name.toLowerCase())) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+  }
+
+  private extractVersions(text: string): string[] {
+    // SolarWinds versions typically follow patterns like:
+    // "2024.2.1" or "15.2.0" or "12.5.1 Hotfix 3"
+    const versionRegex = /\b(\d{4}\.\d+(?:\.\d+)?|\d+\.\d+(?:\.\d+)?)\b/g;
+    const matches = text.matchAll(versionRegex);
+    const versions = new Set<string>();
+
+    for (const match of matches) {
+      const version = match[1];
+      // Filter out years-only (2024, 2023, etc.) and common non-version numbers
+      if (!version.includes(".")) continue;
+      const major = parseInt(version.split(".")[0], 10);
+      // SolarWinds uses both year-based (2024.x.x) and traditional (15.x.x) versioning
+      if ((major >= 2019 && major <= 2030) || (major >= 8 && major <= 30)) {
+        versions.add(version);
+      }
+    }
+
+    return Array.from(versions);
+  }
+
+  private extractSeverity(text: string): SecurityAdvisory["severity"] {
+    const lower = text.toLowerCase();
+    if (lower.includes("critical")) return "critical";
+    if (lower.includes("high")) return "high";
+    if (lower.includes("medium") || lower.includes("moderate")) return "medium";
+    if (lower.includes("low")) return "low";
+    return "unknown";
+  }
+
+  private extractDate(text: string): string | null {
+    // Look for date patterns: YYYY-MM-DD, MM/DD/YYYY, Month DD, YYYY
+    const datePatterns = [
+      /(\d{4}-\d{2}-\d{2})/,
+      /(\d{1,2}\/\d{1,2}\/\d{4})/,
+      /(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/i,
+    ];
+
+    for (const pattern of datePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        try {
+          const date = new Date(match[0]);
+          if (!isNaN(date.getTime())) {
+            return date.toISOString().split("T")[0];
+          }
+        } catch {
+          // Continue to next pattern
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private calculateBranchMsv(advisories: SecurityAdvisory[]): BranchMsv[] {
+    // Collect all fixed versions
+    const allVersions = new Set<string>();
+    for (const adv of advisories) {
+      for (const v of adv.fixedVersions) {
+        allVersions.add(v);
+      }
+    }
+
+    // Group by branch and find highest version per branch
+    const branchVersions = new Map<string, string[]>();
+    for (const version of allVersions) {
+      const branch = this.getBranch(version);
+      if (!branchVersions.has(branch)) {
+        branchVersions.set(branch, []);
+      }
+      branchVersions.get(branch)!.push(version);
+    }
+
+    // For each branch, MSV is the highest fixed version
+    const results: BranchMsv[] = [];
+    for (const [branch, versions] of branchVersions) {
+      versions.sort((a, b) => this.compareVersions(a, b));
+      const highest = versions[versions.length - 1];
+      results.push({
+        branch,
+        msv: highest,
+        latest: highest,
+      });
+    }
+
+    // Sort branches descending
+    results.sort((a, b) => this.compareVersions(b.branch, a.branch));
+
+    return results;
+  }
+}
+
+// =============================================================================
 // Factory
 // =============================================================================
 
@@ -318,6 +570,10 @@ export function getVendorFetcher(
     case "google:chrome":
       return new ChromeAdvisoryFetcher(cacheDir);
     default:
+      // Check for SolarWinds products
+      if (vendor.toLowerCase() === "solarwinds") {
+        return new SolarWindsAdvisoryFetcher(cacheDir, product);
+      }
       return null;
   }
 }

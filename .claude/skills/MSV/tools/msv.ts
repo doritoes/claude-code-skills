@@ -431,10 +431,30 @@ async function queryMSV(
   const kevClient = new CisaKevClient(config.dataDir);
 
   try {
-    const kevEntries = await kevClient.findByProduct(
+    // Try multiple search terms to improve KEV matching
+    // KEV uses simple product names like "Orion" not "orion_platform"
+    const searchTerms = [
       software.product,
-      software.vendor
-    );
+      software.product.replace(/_/g, " "),  // orion_platform -> orion platform
+      software.product.split("_")[0],        // orion_platform -> orion
+      software.displayName.split(" ").slice(-1)[0], // "SolarWinds Orion Platform" -> "Platform"
+      ...software.aliases,
+    ];
+
+    let kevEntries: KevEntry[] = [];
+    const seenCves = new Set<string>();
+
+    for (const term of searchTerms) {
+      if (!term || term.length < 3) continue;
+      const entries = await kevClient.findByProduct(term, software.vendor);
+      for (const entry of entries) {
+        if (!seenCves.has(entry.cveID)) {
+          seenCves.add(entry.cveID);
+          kevEntries.push(entry);
+        }
+      }
+      if (kevEntries.length > 0) break; // Stop on first match
+    }
 
     if (kevEntries.length > 0) {
       sources.push("CISA KEV");
