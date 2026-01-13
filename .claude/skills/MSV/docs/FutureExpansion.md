@@ -190,7 +190,204 @@ Action: CRITICAL UPGRADE - Remote code execution vulnerability
 
 ---
 
-## 5. IoT Devices (Future)
+## 5. AppThreat/vulnerability-db Integration
+
+**Scope:** Offline-capable multi-source vulnerability database backend
+
+**Project:** [github.com/AppThreat/vulnerability-db](https://github.com/AppThreat/vulnerability-db)
+**Status:** Active, v6.5.1 (Dec 2025), MIT License
+**Language:** Python 3.10+
+
+### Rationale
+
+AppThreat/vulnerability-db represents a paradigm shift from real-time API queries to a pre-compiled SQLite database approach. This could fundamentally enhance MSV's capabilities:
+
+1. **Offline Operation** - No API rate limits, no network dependency
+2. **Multi-Source Aggregation** - NVD + OSV + GitHub + Linux distros in one query
+3. **Speed** - Local SQLite queries vs. 6-second NVD rate limits
+4. **Coverage** - 12 Linux distros, npm, PyPI, Go, Rust, and more
+5. **Standards-Based** - CVE 5.2 schema, PURL, CPE, VERS formats
+
+### Key Features
+
+| Feature | Benefit for MSV |
+|---------|-----------------|
+| Pre-built SQLite databases | ~700MB apps-only, refreshed every 6 hours |
+| Multi-format queries | CPE, PURL, CVE ID, git URL all supported |
+| CVE 5.2 schema | Structured access to descriptions, affected versions, fixes |
+| Custom vulnerability data | Add private CVEs, override false positives |
+| CycloneDX SBOM processing | Batch vulnerability assessment |
+| MCP server | AI/LLM integration built-in |
+
+### Data Sources Aggregated
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 AppThreat vulnerability-db                   │
+├─────────────────────────────────────────────────────────────┤
+│  NVD (2002-present)  │  OSV (Google)  │  GitHub Advisories  │
+├──────────────────────┼────────────────┼─────────────────────┤
+│  Linux vuln-list:                                           │
+│  Alpine, Debian, Ubuntu, RHEL, CentOS, Rocky, Alma,         │
+│  Oracle, Amazon, SUSE, Photon, Chainguard                   │
+├─────────────────────────────────────────────────────────────┤
+│  Ecosystems: npm, PyPI, Go, Rust, Maven, NuGet, Cargo       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Integration Architecture
+
+```
+Current MSV Architecture:
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│ CISA KEV │───▶│ VulnCheck│───▶│   NVD    │───▶│   EPSS   │
+│  (API)   │    │  (API)   │    │  (API)   │    │  (API)   │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘
+     │               │               │               │
+     └───────────────┴───────────────┴───────────────┘
+                           │
+                    Rate Limited, Online Required
+
+Proposed Hybrid Architecture:
+┌─────────────────────────────────────────────────────────────┐
+│              AppThreat SQLite Database (Primary)             │
+│         ~700MB, refreshed daily, offline queries             │
+└─────────────────────────────────────────────────────────────┘
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+    ┌──────────────────┐      ┌──────────────────┐
+    │   Fast Offline   │      │  API Enrichment  │
+    │   CVE Lookup     │      │  (KEV, EPSS)     │
+    └──────────────────┘      └──────────────────┘
+```
+
+### Implementation Approach
+
+**Phase 1: Database Integration**
+```typescript
+// New: AppThreatClient.ts
+interface AppThreatConfig {
+  databasePath: string;      // Path to data.vdb6
+  indexPath: string;         // Path to data.index.vdb6
+  autoUpdate: boolean;       // Download if stale
+  maxAgeDays: number;        // Staleness threshold
+}
+
+class AppThreatClient {
+  async searchByCpe(cpe: string): Promise<VulnResult[]>;
+  async searchByPurl(purl: string): Promise<VulnResult[]>;
+  async searchByCveId(cveId: string): Promise<CVE52>;
+  async needsUpdate(): Promise<boolean>;
+  async downloadDatabase(): Promise<void>;
+}
+```
+
+**Phase 2: Query Flow Enhancement**
+```
+1. Check AppThreat SQLite (instant, offline)
+2. Enrich with CISA KEV status (is it actively exploited?)
+3. Enrich with EPSS scores (exploitation probability)
+4. Fall back to live APIs only if SQLite miss
+```
+
+**Phase 3: New Capabilities**
+- SBOM-based batch vulnerability assessment
+- PURL support for package manager ecosystems (npm, PyPI, NuGet)
+- Linux server software coverage
+- Private vulnerability tracking
+
+### Benefits
+
+| Benefit | Impact | Notes |
+|---------|--------|-------|
+| **Offline capability** | Critical | Air-gapped environments, travel, outages |
+| **Query speed** | High | Milliseconds vs. seconds per query |
+| **No rate limits** | High | Batch thousands of queries instantly |
+| **Multi-source confidence** | High | Cross-reference NVD + OSV + GitHub |
+| **Ecosystem expansion** | High | npm, PyPI, Go, Rust, Maven support |
+| **Linux coverage** | Medium | Server software (nginx, Apache, etc.) |
+| **SBOM integration** | Medium | CycloneDX/SPDX batch processing |
+| **CVE 5.2 schema** | Medium | Structured data, better parsing |
+| **Private CVEs** | Medium | Internal vulnerability tracking |
+
+### Expected Challenges
+
+| Challenge | Severity | Mitigation |
+|-----------|----------|------------|
+| **Database size** | Medium | ~700MB download; use apps-only variant |
+| **Staleness** | Medium | 6-hour refresh cycle; supplement with KEV API |
+| **Windows CPE gaps** | Medium | NVD still primary for Windows desktop apps |
+| **Python dependency** | Low | Use SQLite directly from TypeScript/Bun |
+| **Schema learning curve** | Low | CVE 5.2 is well-documented |
+| **Initial download** | Low | One-time 700MB; incremental updates |
+
+### Database Access from TypeScript
+
+The `.vdb6` files are standard SQLite databases. Direct access from Bun/TypeScript:
+
+```typescript
+import { Database } from "bun:sqlite";
+
+const db = new Database("data.vdb6", { readonly: true });
+
+// Query by CPE
+const results = db.query(`
+  SELECT cve_id, source_data
+  FROM vulnerabilities
+  WHERE cpe_match LIKE ?
+`).all("%putty%");
+
+// Parse CVE 5.2 JSON
+for (const row of results) {
+  const cve = JSON.parse(row.source_data);
+  console.log(cve.containers.cna.descriptions[0].value);
+}
+```
+
+### New CLI Commands (Proposed)
+
+```bash
+# Database management
+msv db update              # Download/update AppThreat database
+msv db status              # Show database version, age, size
+msv db search "putty"      # Direct database search
+
+# SBOM processing
+msv sbom scan bom.json     # Scan CycloneDX SBOM for vulnerabilities
+msv sbom generate          # Generate SBOM from installed software
+
+# Package ecosystem queries
+msv query "pkg:npm/lodash@4.17.20"
+msv query "pkg:pypi/requests@2.28.0"
+```
+
+### Comparison: Current vs. With AppThreat
+
+| Metric | Current (API-only) | With AppThreat |
+|--------|-------------------|----------------|
+| Query latency | 6-30 seconds | <100ms |
+| Offline support | None | Full |
+| Rate limits | 5 req/30s (NVD) | Unlimited |
+| Data sources | 4 (KEV, NVD, EPSS, VulnCheck) | 15+ |
+| Ecosystems | Windows desktop | Windows + npm + PyPI + Go + Linux |
+| Batch queries | Minutes | Seconds |
+| Coverage freshness | Real-time | 6 hours |
+
+### Priority Assessment
+
+| Factor | Rating | Justification |
+|--------|--------|---------------|
+| Value add | **HIGH** | Transforms MSV from online-only to hybrid |
+| Implementation effort | **MEDIUM** | SQLite integration straightforward |
+| Maintenance burden | **LOW** | Upstream project actively maintained |
+| Risk | **LOW** | MIT license, standard formats |
+
+**Recommendation:** HIGH PRIORITY - This integration would be transformative for MSV's capabilities, enabling offline operation, batch processing, and ecosystem expansion beyond Windows desktop software.
+
+---
+
+## 6. IoT Devices (Future)
 
 **Scope:** Smart home devices that may affect corporate security
 
@@ -211,6 +408,7 @@ Action: CRITICAL UPGRADE - Remote code execution vulnerability
 
 | Category | Priority | Effort | Impact |
 |----------|----------|--------|--------|
+| **AppThreat Integration** | **CRITICAL** | Medium | **Transformative** - Offline, speed, ecosystems |
 | Home Routers | HIGH | Medium | High - WFH security |
 | Electron Apps | HIGH | Medium | High - Enterprise tools |
 | Browser Extensions | MEDIUM | High | Medium - Hard to inventory |
@@ -260,8 +458,17 @@ Action: CRITICAL UPGRADE - Remote code execution vulnerability
 
 - These are ideas for future development, not current capabilities
 - Each category requires significant research and data source integration
+- **AppThreat integration is the recommended next step** - it enables all other expansions
 - Router firmware tracking would provide unique value for WFH security programs
 - Electron app tracking could leverage existing Chromium KEV data
+
+## References
+
+- [AppThreat/vulnerability-db](https://github.com/AppThreat/vulnerability-db) - Multi-source SQLite vulnerability database
+- [CISA KEV Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) - Known exploited vulnerabilities
+- [NVD API 2.0](https://nvd.nist.gov/developers/vulnerabilities) - National Vulnerability Database
+- [CVE 5.2 Schema](https://cveproject.github.io/cve-schema/schema/docs/) - Standard vulnerability format
+- [Package URL (PURL)](https://github.com/package-url/purl-spec) - Universal package identifier
 
 ---
 
