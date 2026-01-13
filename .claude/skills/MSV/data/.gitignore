@@ -2,6 +2,7 @@
 kev-cache.json
 msv-cache.json
 nvd-cve-*.json
+nvd-cpe-*.json
 vendor-*.json
 vulncheck-*.json
 
