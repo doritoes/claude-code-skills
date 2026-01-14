@@ -56,6 +56,11 @@ import {
   type CpeMatch,
   type DiscoveryResult,
 } from "./SoftwareDiscovery";
+import {
+  AppThreatClient,
+  getMinimumSafeVersion as getAppThreatMsv,
+  type VulnResult as AppThreatVulnResult,
+} from "./AppThreatClient";
 
 // =============================================================================
 // Types
@@ -426,6 +431,64 @@ async function queryMSV(
     }
   }
 
+  // 1.5. Query AppThreat SQLite database (offline, fast)
+  // Only query if we don't have vendor advisory data and CPE is available
+  let appThreatQueried = false;
+  if (!hasVendorAdvisory && software.cpe23) {
+    const appThreatClient = new AppThreatClient();
+    if (appThreatClient.isDatabaseAvailable()) {
+      if (options.verbose) console.log("Querying AppThreat database (offline)...");
+      try {
+        const appThreatResults = await appThreatClient.searchByCpe(software.cpe23, {
+          minCvss: 4.0, // Medium severity and above
+          excludeMalware: true,
+        });
+
+        if (appThreatResults.length > 0) {
+          appThreatQueried = true;
+          sources.push("AppThreat");
+
+          // Calculate MSV from AppThreat results
+          const appThreatMsv = getAppThreatMsv(appThreatResults);
+          if (appThreatMsv && !minimumSafeVersion) {
+            minimumSafeVersion = appThreatMsv;
+            recommendedVersion = appThreatMsv;
+          }
+
+          // Add CVEs from AppThreat
+          for (const result of appThreatResults) {
+            if (!exploitedCves.find(c => c.cve === result.cveId)) {
+              exploitedCves.push({
+                cve: result.cveId,
+                description: result.description,
+                fixedVersion: result.fixedVersion || undefined,
+                inCisaKev: false, // Will be enriched by KEV query
+                hasPoC: false,
+                cvssScore: result.cvssScore || undefined,
+              });
+            }
+          }
+
+          const maxCvss = Math.max(...appThreatResults.map(r => r.cvssScore || 0));
+          evidence.push({
+            source: "AppThreat",
+            hasData: true,
+            cvssScore: maxCvss > 0 ? maxCvss : undefined,
+          });
+
+          if (options.verbose) {
+            console.log(`  Found ${appThreatResults.length} CVEs from AppThreat, MSV: ${appThreatMsv}`);
+          }
+        }
+        appThreatClient.close();
+      } catch (error) {
+        if (options.verbose) console.warn("AppThreat query failed:", error);
+      }
+    } else if (options.verbose) {
+      console.log("AppThreat database not available (run: vdb --download-image)");
+    }
+  }
+
   // 2. Query CISA KEV (always check for active exploitation)
   if (options.verbose) console.log("Querying CISA KEV...");
   const kevClient = new CisaKevClient(config.dataDir);
@@ -697,6 +760,7 @@ async function queryMSV(
       if (s === "NVD") return "nvd";
       if (s === "CISA KEV") return "cisa_kev";
       if (s === "VulnCheck") return "vulncheck";
+      if (s === "AppThreat") return "appthreat";
       return "none";
     }) as any[],
     hasVendorAdvisory,
@@ -1330,6 +1394,127 @@ Data Sources:
 `);
 }
 
+// =============================================================================
+// Database Management
+// =============================================================================
+
+async function cmdDb(subcommand: string | undefined, options: QueryOptions): Promise<void> {
+  const client = new AppThreatClient();
+
+  switch (subcommand) {
+    case "status":
+      cmdDbStatus(client);
+      break;
+
+    case "update":
+      await cmdDbUpdate();
+      break;
+
+    case "query":
+      console.log("Usage: msv query <software> to search the database");
+      break;
+
+    default:
+      console.log(`
+AppThreat Database Management
+${"=".repeat(40)}
+
+COMMANDS:
+  msv db status        Show database status and metadata
+  msv db update        Download or update the database
+
+The AppThreat database provides offline vulnerability queries with:
+- Multi-source data (NVD + OSV + GitHub advisories)
+- Fast millisecond queries (no API rate limits)
+- VERS format for version ranges
+`);
+  }
+}
+
+function cmdDbStatus(client: AppThreatClient): void {
+  const available = client.isDatabaseAvailable();
+
+  console.log(`
+AppThreat Database Status
+${"=".repeat(40)}
+`);
+
+  if (!available) {
+    console.log(`Status:        ${"\x1b[33m"}NOT INSTALLED${RESET_COLOR}
+Location:      C:\\Users\\<user>\\AppData\\Local\\vdb\\vdb\\
+
+To install, run:
+  pip install appthreat-vulnerability-db[oras]
+  vdb --download-image
+`);
+    return;
+  }
+
+  const size = client.getDatabaseSize();
+  const needsUpdate = client.needsUpdate();
+  const metadata = client.getMetadata();
+
+  const statusColor = needsUpdate ? "\x1b[33m" : "\x1b[32m";
+  const statusText = needsUpdate ? "NEEDS UPDATE" : "UP TO DATE";
+
+  console.log(`Status:        ${statusColor}${statusText}${RESET_COLOR}
+Database Size: ${size.totalMB} MB (data: ${Math.round(size.dataSize / (1024 * 1024))} MB, index: ${Math.round(size.indexSize / (1024 * 1024))} MB)
+Last Modified: ${metadata?.createdUtc?.split("T")[0] || "Unknown"}
+Max Age:       7 days
+Location:      C:\\Users\\sethh\\AppData\\Local\\vdb\\vdb\\
+
+Data Sources:
+  - NVD (National Vulnerability Database)
+  - OSV (Open Source Vulnerability)
+  - GitHub Security Advisories
+
+Admiralty Rating: B2 (Usually Reliable, Probably True)
+`);
+
+  // Quick test query
+  console.log("Testing database...");
+  client.searchByCpe("cpe:2.3:a:*:putty:*", { limit: 1 }).then((results) => {
+    if (results.length > 0) {
+      console.log(`Database test: ${"\x1b[32m"}PASS${RESET_COLOR} (found ${results[0].cveId})`);
+    } else {
+      console.log(`Database test: ${"\x1b[33m"}WARNING${RESET_COLOR} (no results for test query)`);
+    }
+  });
+}
+
+async function cmdDbUpdate(): Promise<void> {
+  console.log("Updating AppThreat vulnerability database...");
+  console.log("This downloads ~700MB compressed from ghcr.io/appthreat/vdbxz-app\n");
+
+  // Execute vdb --download-image using child process
+  const { spawn } = await import("node:child_process");
+
+  const vdbProcess = spawn("vdb", ["--download-image"], {
+    stdio: "inherit",
+    shell: true,
+  });
+
+  return new Promise((resolve, reject) => {
+    vdbProcess.on("close", (code) => {
+      if (code === 0) {
+        console.log("\nDatabase updated successfully!");
+        console.log("Run 'msv db status' to verify.");
+        resolve();
+      } else {
+        console.error(`\nDatabase update failed with code ${code}`);
+        console.error("Make sure vdb is installed: pip install appthreat-vulnerability-db[oras]");
+        reject(new Error(`vdb exited with code ${code}`));
+      }
+    });
+
+    vdbProcess.on("error", (err) => {
+      console.error("\nFailed to run vdb:", err.message);
+      console.error("Make sure vdb is installed: pip install appthreat-vulnerability-db[oras]");
+      reject(err);
+    });
+  });
+}
+
 const MSV_VERSION = "1.1.0";
 
 function showHelp(): void {
@@ -1351,6 +1536,8 @@ COMMANDS:
   refresh              Force refresh all caches
   list                 List supported software
   list <category>      List software in a category
+  db status            Show AppThreat database status
+  db update            Download/update AppThreat database
   help                 Show this help message
 
 SUPPORTED SOFTWARE (133+ products):
@@ -1514,6 +1701,10 @@ async function main(): Promise<void> {
 
       case "list":
         cmdList(config, category || positionalArgs[1]);
+        break;
+
+      case "db":
+        await cmdDb(positionalArgs[1], options);
         break;
 
       default:

@@ -236,7 +236,7 @@ export const RESET_COLOR = "\x1b[0m";
 // MSV-Specific Rating
 // =============================================================================
 
-export type MsvDataSource = "vendor_advisory" | "nvd" | "cisa_kev" | "vulncheck" | "none";
+export type MsvDataSource = "vendor_advisory" | "nvd" | "cisa_kev" | "vulncheck" | "appthreat" | "none";
 
 export interface MsvRatingInput {
   dataSources: MsvDataSource[];
@@ -284,6 +284,12 @@ export function calculateMsvRating(input: MsvRatingInput): AdmiraltyRating {
       credibility = 2;
       description = "Vendor advisory confirms MSV";
     }
+  }
+  // AppThreat data (aggregated sources: NVD + OSV + GitHub)
+  else if (input.dataSources.includes("appthreat") && input.msvDetermined) {
+    reliability = "B";
+    credibility = 2;
+    description = "MSV determined from AppThreat multi-source database";
   }
   // NVD data with version info
   else if (input.dataSources.includes("nvd") && input.msvDetermined) {
