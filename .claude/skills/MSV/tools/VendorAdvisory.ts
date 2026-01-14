@@ -21,6 +21,12 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -139,9 +145,11 @@ export class WiresharkAdvisoryFetcher extends VendorAdvisoryFetcher {
     if (cached) return cached;
 
     // Fetch the security page
-    const response = await fetch(this.securityUrl);
+    const response = await fetch(this.securityUrl, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok) {
-      throw new Error(`Failed to fetch Wireshark security page: ${response.status}`);
+      throw new Error(`Wireshark advisory error: fetch failed (${response.status})`);
     }
 
     const html = await response.text();
@@ -351,10 +359,11 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
       headers: {
         "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
       },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch SolarWinds security page: ${response.status}`);
+      throw new Error(`SolarWinds advisory error: fetch failed (${response.status})`);
     }
 
     const html = await response.text();

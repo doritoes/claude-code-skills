@@ -93,7 +93,7 @@ export class CisaKevClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
-      throw new Error(`Failed to fetch KEV catalog: ${response.status} ${response.statusText}`);
+      throw new Error(`CISA KEV error: fetch failed (${response.status} ${response.statusText})`);
     }
 
     const catalog: KevCatalog = await response.json();
