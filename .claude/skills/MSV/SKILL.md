@@ -1,6 +1,6 @@
 ---
 name: MSV
-version: 1.1.0
+version: 1.2.0
 description: Minimum Safe Version calculator for Windows software. USE WHEN user needs safe software versions OR user asks about vulnerability-free versions OR user mentions patching decisions OR user wants minimum version to upgrade to OR user asks about KEV vulnerabilities for specific software. Queries CISA KEV, VulnCheck, AppThreat, EPSS to determine lowest version free of known-exploited vulnerabilities.
 ---
 
@@ -8,19 +8,48 @@ description: Minimum Safe Version calculator for Windows software. USE WHEN user
 
 Determine the lowest software version free of known-exploited vulnerabilities for Windows 11/Server software. Uses Admiralty Code ratings to convey confidence.
 
-## Prerequisites
+## First-Time Setup
 
-- **Bun** runtime (https://bun.sh)
-- **VulnCheck API Key** (optional, for enhanced PoC data) - set in `.claude/.env`
-- **AppThreat Database** (optional, for offline queries) - install with `pip install appthreat-vulnerability-db[oras] && vdb --download-image`
+**For detailed installation instructions, see `SETUP.md`.**
+
+### Quick Setup (Minimum Required)
+
+1. **Install Bun** (required runtime):
+   ```bash
+   # Windows PowerShell
+   powershell -c "irm bun.sh/install.ps1 | iex"
+
+   # macOS/Linux
+   curl -fsSL https://bun.sh/install | bash
+   ```
+
+2. **Verify installation**:
+   ```bash
+   bun --version  # Should show 1.x.x
+   ```
+
+3. **Test MSV** (from skill directory):
+   ```bash
+   bun run tools/msv.ts query "chrome"
+   ```
+
+### Optional Enhancements
+
+| Enhancement | Purpose | Setup |
+|-------------|---------|-------|
+| VulnCheck API | Exploit/PoC intelligence | Free key at vulncheck.com, set `VULNCHECK_API_KEY` |
+| AppThreat DB | Offline queries, faster | `pip install appthreat-vulnerability-db[oras] && vdb --download-image` |
+| NVD API Key | Higher rate limits | Free key at nvd.nist.gov, set `NVD_API_KEY` |
+
+See `SETUP.md` for complete instructions, troubleshooting, and `.env.example` for all config options.
 
 ## Quick Start
 
 ```bash
-# Run the CLI directly
-bun run .claude/skills/MSV/tools/msv.ts query "chrome"
+# Run the CLI directly (from skill directory)
+bun run tools/msv.ts query "chrome"
 
-# Or create an alias
+# Or create an alias for easier use
 alias msv="bun run ~/.claude/skills/MSV/tools/msv.ts"
 msv query "putty"
 ```
@@ -143,3 +172,41 @@ See `docs/AddingSoftware.md` for complete guide.
   "platforms": ["windows"]
 }
 ```
+
+## File Structure
+
+```
+MSV/
+├── SKILL.md              # This file - skill definition
+├── SETUP.md              # Installation & setup guide
+├── .env.example          # Environment variable template
+├── .gitignore            # Git ignore rules
+├── tools/
+│   ├── msv.ts            # Main CLI entrypoint
+│   ├── msv.test.ts       # Test suite (bun test)
+│   ├── CisaKevClient.ts  # CISA KEV API client
+│   ├── EpssClient.ts     # EPSS API client
+│   ├── NvdClient.ts      # NVD API client
+│   ├── VulnCheckClient.ts # VulnCheck API client
+│   ├── AppThreatClient.ts # Offline DB client
+│   ├── VendorAdvisory.ts  # Vendor advisory fetchers
+│   ├── VersionCompare.ts  # Version comparison utils
+│   ├── AdmiraltyScoring.ts # Rating calculation
+│   └── ...
+├── data/
+│   └── SoftwareCatalog.json  # Supported software definitions
+└── docs/
+    ├── AddingSoftware.md     # How to add new software
+    └── FutureExpansion.md    # Roadmap & future plans
+```
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "bun: command not found" | Install Bun: `curl -fsSL https://bun.sh/install \| bash` |
+| "Software catalog not found" | Ensure `data/SoftwareCatalog.json` exists |
+| "NVD rate limit exceeded" | Wait 30 seconds, or install AppThreat DB for offline queries |
+| Tests failing | Run `bun test tools/msv.test.ts --verbose` for details |
+
+See `SETUP.md` for comprehensive troubleshooting guide.
