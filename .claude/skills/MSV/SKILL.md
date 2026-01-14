@@ -1,39 +1,39 @@
 ---
 name: MSV
-description: Minimum Safe Version calculator for Windows software. USE WHEN user needs safe software versions OR user asks about vulnerability-free versions OR user mentions patching decisions OR user wants minimum version to upgrade to OR user asks about KEV vulnerabilities for specific software. Queries CISA KEV, VulnCheck, EPSS to determine lowest version free of known-exploited vulnerabilities.
+version: 1.1.0
+description: Minimum Safe Version calculator for Windows software. USE WHEN user needs safe software versions OR user asks about vulnerability-free versions OR user mentions patching decisions OR user wants minimum version to upgrade to OR user asks about KEV vulnerabilities for specific software. Queries CISA KEV, VulnCheck, AppThreat, EPSS to determine lowest version free of known-exploited vulnerabilities.
 ---
 
 # MSV (Minimum Safe Version)
 
 Determine the lowest software version free of known-exploited vulnerabilities for Windows 11/Server software. Uses Admiralty Code ratings to convey confidence.
 
-## Workflow Routing
+## Prerequisites
 
-**When executing a workflow, do BOTH of these:**
+- **Bun** runtime (https://bun.sh)
+- **VulnCheck API Key** (optional, for enhanced PoC data) - set in `.claude/.env`
+- **AppThreat Database** (optional, for offline queries) - install with `pip install appthreat-vulnerability-db[oras] && vdb --download-image`
 
-1. **Call the notification script** (for observability tracking):
-   ```bash
-   ~/.claude/Tools/SkillWorkflowNotification WORKFLOWNAME MSV
-   ```
+## Quick Start
 
-2. **Output the text notification** (for user visibility):
-   ```
-   Running the **WorkflowName** workflow from the **MSV** skill...
-   ```
+```bash
+# Run the CLI directly
+bun run .claude/skills/MSV/tools/msv.ts query "chrome"
 
-| Workflow | Trigger | File |
-|----------|---------|------|
-| **Query** | "msv for", "safe version", "minimum version" | `workflows/Query.md` |
-| **Batch** | "check all", "batch query", "from file" | `workflows/Batch.md` |
-| **Refresh** | "refresh cache", "update vuln data" | `workflows/Refresh.md` |
+# Or create an alias
+alias msv="bun run ~/.claude/skills/MSV/tools/msv.ts"
+msv query "putty"
+```
 
 ## Data Sources (Priority Order)
 
 | Source | Auth | Admiralty | Purpose |
 |--------|------|-----------|---------|
+| Vendor Advisory | None | A2 | Vendor-confirmed versions (Wireshark, etc.) |
+| AppThreat | None | B2 | Offline multi-source database (NVD+OSV+GitHub) |
 | CISA KEV | None | A1 | Active exploitation ground truth |
 | VulnCheck | API Key | B2 | Public PoC tracking |
-| MSRC | None | A2 | Windows-specific patches |
+| NVD | None | C3 | CVE version data |
 | EPSS | None | B3 | Exploitation probability |
 
 ## Admiralty Code Ratings
@@ -54,12 +54,20 @@ Determine the lowest software version free of known-exploited vulnerabilities fo
 msv query "Google Chrome"
 msv query "Microsoft Edge" --format json
 
+# Compliance check (with installed versions)
+msv check inventory.csv --csv
+
 # Batch query
 msv batch software-list.txt --format markdown
 
+# Database management (AppThreat)
+msv db status              # Show database status
+msv db update              # Download/update database
+
 # Cache management
-msv refresh
-msv list
+msv refresh                # Refresh API caches
+msv list                   # List supported software
+msv stats                  # Show catalog statistics
 ```
 
 ## Output Format

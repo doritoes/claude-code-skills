@@ -1,0 +1,19 @@
+# MSV Skill .gitignore
+
+# Cache files (regenerated on use)
+data/*.json
+!data/SoftwareCatalog.json
+
+# Temp files from Claude Code
+tmpclaude-*
+
+# Environment files (may contain API keys)
+.env
+.env.local
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

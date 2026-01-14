@@ -17,7 +17,8 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { CisaKevClient, type KevEntry } from "./CisaKevClient";
 import { VulnCheckClient, type VulnCheckCve } from "./VulnCheckClient";
 import { EpssClient, type EpssScore } from "./EpssClient";
@@ -1461,7 +1462,7 @@ To install, run:
 Database Size: ${size.totalMB} MB (data: ${Math.round(size.dataSize / (1024 * 1024))} MB, index: ${Math.round(size.indexSize / (1024 * 1024))} MB)
 Last Modified: ${metadata?.createdUtc?.split("T")[0] || "Unknown"}
 Max Age:       7 days
-Location:      C:\\Users\\sethh\\AppData\\Local\\vdb\\vdb\\
+Location:      ${join(homedir(), "AppData", "Local", "vdb", "vdb")}
 
 Data Sources:
   - NVD (National Vulnerability Database)
