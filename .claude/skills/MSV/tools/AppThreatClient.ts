@@ -185,6 +185,7 @@ export class AppThreatClient {
       const ageDays = ageMs / (1000 * 60 * 60 * 24);
       return ageDays > this.config.maxAgeDays;
     } catch {
+      // Database stat failed - assume needs update
       return true;
     }
   }
@@ -210,6 +211,7 @@ export class AppThreatClient {
         startYear: 2018,
       };
     } catch {
+      // Metadata read failed - return null (database may not exist)
       return null;
     }
   }
@@ -228,6 +230,7 @@ export class AppThreatClient {
         totalMB: Math.round(totalBytes / (1024 * 1024)),
       };
     } catch {
+      // Stat failed - return zeros (database may not exist)
       return { dataSize: 0, indexSize: 0, totalMB: 0 };
     }
   }

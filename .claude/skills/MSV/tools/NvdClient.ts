@@ -103,6 +103,7 @@ interface CacheFile<T> {
 const NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0";
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 const REQUEST_DELAY_MS = 6000; // 6 seconds between requests (rate limit)
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
 // =============================================================================
 // Client
@@ -158,7 +159,9 @@ export class NvdClient {
     await this.rateLimit();
 
     const url = `${NVD_BASE_URL}?cveId=${encodeURIComponent(cveId)}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       if (response.status === 403) {
@@ -381,7 +384,9 @@ export class NvdClient {
     const searchKeyword = `${vendor} ${product}`.trim();
     const url = `${NVD_BASE_URL}?keywordSearch=${encodeURIComponent(searchKeyword)}&resultsPerPage=${maxResults}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       if (response.status === 403) {

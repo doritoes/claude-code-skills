@@ -51,6 +51,7 @@ interface CacheFile<T> {
 
 const KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
 const CACHE_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
 // =============================================================================
 // Client
@@ -88,7 +89,9 @@ export class CisaKevClient {
     }
 
     // Fetch fresh data
-    const response = await fetch(KEV_URL);
+    const response = await fetch(KEV_URL, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch KEV catalog: ${response.status} ${response.statusText}`);
     }

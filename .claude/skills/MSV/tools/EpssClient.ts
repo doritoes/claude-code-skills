@@ -55,6 +55,7 @@ interface CacheFile<T> {
 
 const EPSS_BASE_URL = "https://api.first.org/data/v1/epss";
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
 // =============================================================================
 // Client
@@ -94,7 +95,9 @@ export class EpssClient {
 
     // Fetch from API
     const url = `${EPSS_BASE_URL}?cve=${encodeURIComponent(cveId)}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       throw new Error(`EPSS API error: ${response.status} ${response.statusText}`);
@@ -139,7 +142,9 @@ export class EpssClient {
 
     const cveList = cveIds.join(",");
     const url = `${EPSS_BASE_URL}?cve=${encodeURIComponent(cveList)}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       throw new Error(`EPSS API error: ${response.status} ${response.statusText}`);
