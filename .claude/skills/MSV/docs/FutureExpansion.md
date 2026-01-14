@@ -662,6 +662,7 @@ msv import osquery software.json --report compliance.csv
 
 | Category | Priority | Effort | Impact | Status |
 |----------|----------|--------|--------|--------|
+| **Community Release Fixes** | **CRITICAL** | Low | **Blocking** | 🔴 4 critical, 6 high issues |
 | **AppThreat Integration** | **DONE** | Medium | **Transformative** | ✅ Implemented |
 | **Wazuh/osquery Integration** | **HIGH** | Medium | High - Enterprise workflows | Planned |
 | Home Routers | HIGH | Medium | High - WFH security | Planned |
@@ -706,6 +707,263 @@ msv import osquery software.json --report compliance.csv
   "notes": "Electron-based. Check embedded Chromium version."
 }
 ```
+
+---
+
+## 8. Community Release Readiness - Critical Review
+
+**Review Date:** 2026-01-14
+**Methodology:** THE ALGORITHM (THOROUGH effort)
+**Scope:** Architecture, code quality, documentation, user experience
+
+This section documents issues that must be addressed before packaging MSV as a community-shareable skill pack.
+
+### Executive Summary
+
+| Severity | Count | Status |
+|----------|-------|--------|
+| **CRITICAL** | 4 | Must fix before release |
+| **HIGH** | 6 | Should fix before release |
+| **MEDIUM** | 5 | Nice to have |
+| **LOW** | 4 | Future improvements |
+
+**Overall Assessment:** MSV is functionally solid but has several issues that would cause friction for community users. The most critical issues are missing infrastructure files (.gitignore, empty workflows) and hardcoded paths.
+
+---
+
+### CRITICAL Issues (Blocking Release)
+
+These issues will cause the skill to fail or confuse users immediately.
+
+#### C1. Missing .gitignore File
+**Impact:** Cache files, temp files, and sensitive data committed to git
+**Location:** `.claude/skills/MSV/` (missing)
+**Evidence:**
+- 50+ NVD CVE cache files in `data/` directory
+- `msv-cache.json` with query results
+- `tmpclaude-*` temp files in root and tools directories
+
+**Fix Required:**
+```gitignore
+# MSV .gitignore
+data/*.json
+!data/SoftwareCatalog.json
+tmpclaude-*
+*.log
+.env
+```
+
+#### C2. Empty Workflows Directory
+**Impact:** SKILL.md references non-existent workflow files
+**Location:** `workflows/` directory is empty
+**Evidence:** SKILL.md lines 24-28 reference:
+- `workflows/Query.md` - does not exist
+- `workflows/Batch.md` - does not exist
+- `workflows/Refresh.md` - does not exist
+
+**Fix Required:** Either create the workflow files or remove references from SKILL.md.
+
+#### C3. Hardcoded User Path in Output
+**Impact:** Shows developer's username to all users
+**Location:** `tools/msv.ts:1464`
+**Evidence:**
+```typescript
+Location:      C:\\Users\\sethh\\AppData\\Local\\vdb\\vdb\\
+```
+
+**Fix Required:** Use dynamic path resolution:
+```typescript
+Location:      ${join(homedir(), 'AppData', 'Local', 'vdb', 'vdb')}
+```
+
+#### C4. Debug Script in Production
+**Impact:** Confuses users, clutters codebase
+**Location:** `tools/query-nvd.ts`
+**Evidence:** 38-line test script with hardcoded Wireshark query, not used by main CLI
+
+**Fix Required:** Delete `tools/query-nvd.ts` or move to `tests/` directory.
+
+---
+
+### HIGH Priority Issues (Should Fix)
+
+These issues affect reliability and user experience.
+
+#### H1. No Timeout on HTTP Requests
+**Impact:** Requests can hang indefinitely, blocking the CLI
+**Location:** `CisaKevClient.ts`, `NvdClient.ts`, `EpssClient.ts`
+**Evidence:** Only `VulnCheckClient.ts` implements timeout handling
+
+**Fix Required:** Add timeout to all fetch calls:
+```typescript
+const response = await fetch(url, {
+  signal: AbortSignal.timeout(30000) // 30 second timeout
+});
+```
+
+#### H2. Silent Error Swallowing
+**Impact:** Errors hidden from users, hard to debug
+**Location:** 10+ empty `catch {}` blocks across codebase
+**Evidence:**
+```
+AppThreatClient.ts:187, 212, 230
+CisaKevClient.ts:85
+EpssClient.ts:90
+MsvCache.ts:68
+NvdClient.ts:153, 366
+```
+
+**Fix Required:** At minimum, log errors to stderr:
+```typescript
+} catch (error) {
+  console.error(`[MSV] Error: ${error.message}`);
+  return null;
+}
+```
+
+#### H3. SKILL.md Outdated - Missing AppThreat
+**Impact:** Documentation doesn't reflect actual capabilities
+**Location:** `SKILL.md` Data Sources table (lines 30-37)
+**Evidence:** AppThreat (B2 rating, offline queries) not listed despite being integrated
+
+**Fix Required:** Update Data Sources table to include AppThreat.
+
+#### H4. Temp Files Polluting Directories
+**Impact:** Unprofessional appearance, confuses users
+**Location:** Root directory and tools/
+**Evidence:**
+```
+tmpclaude-24af-cwd, tmpclaude-2f3e-cwd, tmpclaude-562d-cwd
+tmpclaude-87b4-cwd, tmpclaude-b01f-cwd, tmpclaude-e230-cwd
+```
+
+**Fix Required:** Clean up temp files, add to .gitignore.
+
+#### H5. No Version Number in Skill
+**Impact:** Users can't track which version they have
+**Location:** SKILL.md, package metadata
+**Evidence:** Version only defined in `msv.ts:1518` as `MSV_VERSION = "1.1.0"`
+
+**Fix Required:** Add version to SKILL.md frontmatter and create CHANGELOG.md.
+
+#### H6. No Installation/Setup Documentation
+**Impact:** Users don't know prerequisites
+**Location:** Missing
+**Evidence:** No mention of:
+- Bun runtime requirement
+- VulnCheck API key setup (optional but recommended)
+- AppThreat database installation
+- Windows-only limitation
+
+**Fix Required:** Create `docs/Installation.md` or add to SKILL.md.
+
+---
+
+### MEDIUM Priority Issues (Nice to Have)
+
+These issues affect code quality but don't block usage.
+
+#### M1. No Test Suite
+**Impact:** No confidence in refactoring, hard to verify fixes
+**Location:** Missing `tests/` directory
+**Evidence:** 5,900 lines of TypeScript with 0 tests
+
+**Fix Required:** Add basic test coverage for:
+- Version comparison logic
+- Admiralty rating calculation
+- Software catalog lookup
+
+#### M2. Inconsistent Error Messages
+**Impact:** Confusing user experience
+**Evidence:** Mix of `Error:`, `Failed to`, `[MSV]` prefixes
+
+**Fix Required:** Standardize error message format.
+
+#### M3. 86 Console.log Statements
+**Impact:** Noisy output, no log level control
+**Evidence:** `grep -c "console.log\|console.error"` = 86
+
+**Fix Required:** Consider structured logging with verbosity levels.
+
+#### M4. Type Safety - 3 Uses of `any`
+**Impact:** Minor type safety concern
+**Evidence:** `grep -c "any"` = 3
+
+**Fix Required:** Replace with proper types.
+
+#### M5. Large Main File (56KB)
+**Impact:** Hard to maintain, navigate
+**Location:** `tools/msv.ts` - 1,700+ lines
+**Evidence:** Contains CLI, business logic, formatting, and output all in one file
+
+**Fix Required:** Consider splitting into smaller modules.
+
+---
+
+### LOW Priority Issues (Future)
+
+These are improvements for future iterations.
+
+#### L1. Windows-Only Support
+**Impact:** Limits community adoption
+**Evidence:** Skill description says "Windows 11/Server software"
+
+**Future:** Consider adding macOS/Linux software support.
+
+#### L2. No Caching Configuration
+**Impact:** Users can't customize cache behavior
+**Evidence:** TTLs hardcoded in source
+
+**Future:** Add configuration file for cache TTLs.
+
+#### L3. No Progress Indicators for Long Operations
+**Impact:** Users unsure if CLI is working
+**Evidence:** Batch queries can take minutes with no feedback
+
+**Future:** Add progress bars or status updates.
+
+#### L4. No Shell Completion
+**Impact:** CLI usability
+**Evidence:** No bash/zsh/fish completion scripts
+
+**Future:** Add shell completion for commands and software names.
+
+---
+
+### Recommended Fix Order
+
+**Phase 1: Critical Fixes (Before Any Sharing)**
+1. Create `.gitignore` with proper patterns
+2. Remove `query-nvd.ts` debug script
+3. Fix hardcoded path in `msv.ts:1464`
+4. Either create workflow files OR remove references from SKILL.md
+5. Clean up all `tmpclaude-*` temp files
+
+**Phase 2: High Priority (Before Public Release)**
+1. Add timeouts to all HTTP clients
+2. Replace empty catch blocks with error logging
+3. Update SKILL.md with AppThreat data source
+4. Add version to SKILL.md and create CHANGELOG.md
+5. Create `docs/Installation.md` with prerequisites
+
+**Phase 3: Quality Improvements**
+1. Add basic test suite
+2. Standardize error messages
+3. Consider splitting `msv.ts` into modules
+
+---
+
+### Code Metrics Summary
+
+| Metric | Value | Assessment |
+|--------|-------|------------|
+| TypeScript LOC | 5,900 | Substantial codebase |
+| Source files | 15 | Reasonable modularity |
+| HTTP clients | 5 | Good separation |
+| Catch blocks | 29 | Mostly silent (issue) |
+| Console statements | 86 | Too many for CLI tool |
+| Test files | 0 | Critical gap |
+| Documentation files | 4 | Adequate |
 
 ---
 
