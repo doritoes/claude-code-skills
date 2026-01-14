@@ -387,7 +387,261 @@ msv query "pkg:pypi/requests@2.28.0"
 
 ---
 
-## 6. IoT Devices (Future)
+## 6. Wazuh/osquery Endpoint Integration
+
+**Scope:** Import software inventory from enterprise endpoint visibility tools
+
+**Project References:**
+- [Wazuh](https://wazuh.com/) - Open source SIEM/XDR with agent-based inventory
+- [osquery](https://osquery.io/) - Facebook's endpoint visibility tool (SQL interface)
+
+**Status:** Planned
+**Priority:** HIGH - Enables real enterprise workflows
+
+### Rationale
+
+MSV is only useful if you can feed it real software inventory data. Enterprise tools like Wazuh and osquery provide this data but use different naming conventions than MSV's catalog.
+
+1. **Bridge the gap** - Connect endpoint visibility to vulnerability assessment
+2. **Normalize naming** - Map "Google Chrome for Enterprise" → "chrome"
+3. **Batch processing** - Assess hundreds of endpoints in seconds
+4. **Compliance reporting** - Generate audit-ready reports
+
+### Supported Tools (Priority Order)
+
+| Tool | License | Complexity | Data Quality |
+|------|---------|------------|--------------|
+| **osquery standalone** | Apache 2.0 | Low | High |
+| **Wazuh** | GPL v2 | Medium | High |
+| **Velociraptor** | AGPL v3 | Medium | High |
+| **Fleet** | MIT | Medium | High |
+
+### osquery Data Format
+
+```sql
+-- Windows software inventory query
+SELECT name, version, publisher, install_date
+FROM programs;
+
+-- Output example:
+-- name                        | version           | publisher
+-- Google Chrome               | 120.0.6099.130    | Google LLC
+-- PuTTY release 0.78          | 0.78.0.0          | Simon Tatham
+-- 7-Zip 23.01 (x64)           | 23.01             | Igor Pavlov
+-- IBM MQ                      | 9.3.0.15          | IBM Corp
+```
+
+### Integration Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Endpoint Sources                          │
+├──────────────┬──────────────┬──────────────┬────────────────┤
+│   osquery    │    Wazuh     │ Velociraptor │   Fleet        │
+│   (JSON)     │   (API/CSV)  │    (JSON)    │   (API)        │
+└──────┬───────┴──────┬───────┴──────┬───────┴───────┬────────┘
+       │              │              │               │
+       └──────────────┴──────────────┴───────────────┘
+                              │
+                              ▼
+               ┌──────────────────────────────┐
+               │   MSV Import Adapter Layer    │
+               │  ┌────────────────────────┐  │
+               │  │  Name Normalizer       │  │
+               │  │  - Fuzzy matching      │  │
+               │  │  - Publisher mapping   │  │
+               │  │  - Version extraction  │  │
+               │  └────────────────────────┘  │
+               └──────────────────────────────┘
+                              │
+                              ▼
+               ┌──────────────────────────────┐
+               │      MSV Compliance Check     │
+               │  - Map to catalog entries    │
+               │  - Query AppThreat/APIs      │
+               │  - Generate report           │
+               └──────────────────────────────┘
+```
+
+### Name Normalization Challenge
+
+| osquery Output | Expected MSV Input | Mapping Strategy |
+|----------------|-------------------|------------------|
+| `Google Chrome` | `chrome` | Direct alias match |
+| `PuTTY release 0.78` | `putty` | Regex extraction |
+| `7-Zip 23.01 (x64)` | `7-zip` | Strip version/arch |
+| `Microsoft Edge` | `edge` | Publisher + name |
+| `IBM MQ Explorer` | `ibm_mq` | Fuzzy match |
+| `Adobe Acrobat Reader DC` | `acrobat_reader_dc` | Alias lookup |
+
+### Implementation Approach
+
+**Phase 1: osquery Adapter**
+```typescript
+// New: OsqueryAdapter.ts
+interface OsqueryProgram {
+  name: string;
+  version: string;
+  publisher?: string;
+  install_date?: string;
+}
+
+interface NormalizedSoftware {
+  originalName: string;
+  msvId: string | null;       // Matched catalog ID
+  version: string;
+  confidence: number;         // 0-1 match confidence
+  matchMethod: 'exact' | 'alias' | 'fuzzy' | 'publisher';
+}
+
+class OsqueryAdapter {
+  async parseJsonExport(path: string): Promise<OsqueryProgram[]>;
+  async normalize(programs: OsqueryProgram[]): Promise<NormalizedSoftware[]>;
+  async generateComplianceInput(normalized: NormalizedSoftware[]): Promise<string>;
+}
+```
+
+**Phase 2: Name Normalizer**
+```typescript
+// New: SoftwareNormalizer.ts
+class SoftwareNormalizer {
+  // Exact alias match from catalog
+  matchByAlias(name: string): string | null;
+
+  // Publisher-based matching
+  matchByPublisher(name: string, publisher: string): string | null;
+
+  // Fuzzy string matching (Levenshtein distance)
+  matchFuzzy(name: string, threshold: number): string | null;
+
+  // Extract version from name (e.g., "7-Zip 23.01" → "23.01")
+  extractVersion(name: string): string | null;
+
+  // Clean name for matching (lowercase, remove version/arch)
+  cleanName(name: string): string;
+}
+```
+
+**Phase 3: CLI Commands**
+```bash
+# Import from osquery JSON export
+msv import osquery software.json
+
+# Import from Wazuh API
+msv import wazuh --server https://wazuh.local --agent agent-001
+
+# Import with manual mapping review
+msv import osquery software.json --review
+
+# Generate mapping report (shows unmatched software)
+msv import osquery software.json --dry-run
+```
+
+### Output Formats
+
+**Compliance Report:**
+```
+Endpoint Software Compliance Report
+Generated: 2026-01-14 10:30:00
+Source: osquery export (workstation-001)
+================================================================================
+
+SUMMARY
+  Total Software: 45
+  Matched to Catalog: 38 (84%)
+  Compliant: 31
+  Non-Compliant: 5
+  Unknown (no MSV data): 2
+  Unmatched: 7
+
+NON-COMPLIANT SOFTWARE
+  Software              Installed    MSV Required    Gap
+  ─────────────────────────────────────────────────────────
+  Google Chrome         120.0.6099   131.0.6778      CRITICAL
+  PuTTY                 0.78         0.81            HIGH
+  7-Zip                 23.01        25.00           MEDIUM
+  IBM MQ                9.3.0.15     9.4.0.7         MEDIUM
+  Firefox               128.0        133.0           MEDIUM
+
+UNMATCHED SOFTWARE (add to catalog or ignore)
+  - Microsoft Visual C++ 2019 Redistributable
+  - Intel Graphics Driver
+  - Dell SupportAssist
+  - HP Wolf Security
+  ...
+```
+
+**CSV Export:**
+```csv
+software,installed_version,msv_required,status,match_confidence
+Google Chrome,120.0.6099.130,131.0.6778.204,NON_COMPLIANT,1.0
+PuTTY,0.78,0.81,NON_COMPLIANT,0.95
+7-Zip,23.01,25.00,NON_COMPLIANT,1.0
+Microsoft Edge,120.0.2210.91,120.0.2210.91,COMPLIANT,1.0
+```
+
+### Wazuh-Specific Integration
+
+```bash
+# Wazuh syscollector packages query
+GET /syscollector/{agent_id}/packages
+
+# Response includes:
+{
+  "name": "google-chrome-stable",
+  "version": "120.0.6099.130-1",
+  "vendor": "Google LLC",
+  "install_time": "2024-01-15T10:30:00Z"
+}
+```
+
+### Quick Start (Lab Setup)
+
+```powershell
+# 1. Install osquery on Windows
+winget install osquery.osquery
+
+# 2. Export software inventory
+osqueryi --json "SELECT name, version, publisher FROM programs" > software.json
+
+# 3. Run MSV compliance check (future command)
+msv import osquery software.json --report compliance.csv
+```
+
+### Benefits
+
+| Benefit | Impact |
+|---------|--------|
+| **Real enterprise data** | Stop using synthetic test data |
+| **Automated pipeline** | Scheduled compliance checks |
+| **Gap identification** | Find software not in catalog |
+| **Audit trail** | Historical compliance tracking |
+| **Multi-endpoint** | Aggregate across fleet |
+
+### Expected Challenges
+
+| Challenge | Severity | Mitigation |
+|-----------|----------|------------|
+| Name variations | HIGH | Fuzzy matching + alias expansion |
+| Version format inconsistency | MEDIUM | Robust version parser |
+| Unmatched software | MEDIUM | Manual mapping workflow |
+| Wazuh API auth | LOW | Support API key + basic auth |
+| Large datasets | LOW | Streaming/pagination |
+
+### Priority Assessment
+
+| Factor | Rating | Justification |
+|--------|--------|---------------|
+| Value add | **HIGH** | Enables real enterprise use cases |
+| Implementation effort | **MEDIUM** | Name normalization is the hard part |
+| Maintenance burden | **LOW** | osquery format is stable |
+| Risk | **LOW** | Open source, well-documented APIs |
+
+**Recommendation:** HIGH PRIORITY - This integration transforms MSV from a manual lookup tool into an automated compliance pipeline. Start with osquery standalone (simplest), then add Wazuh support.
+
+---
+
+## 7. IoT Devices (Future)
 
 **Scope:** Smart home devices that may affect corporate security
 
@@ -406,14 +660,15 @@ msv query "pkg:pypi/requests@2.28.0"
 
 ## Implementation Priority
 
-| Category | Priority | Effort | Impact |
-|----------|----------|--------|--------|
-| **AppThreat Integration** | **CRITICAL** | Medium | **Transformative** - Offline, speed, ecosystems |
-| Home Routers | HIGH | Medium | High - WFH security |
-| Electron Apps | HIGH | Medium | High - Enterprise tools |
-| Browser Extensions | MEDIUM | High | Medium - Hard to inventory |
-| Microsoft Store | LOW | Low | Low - Auto-updates |
-| IoT Devices | LOW | High | Low - Scope creep |
+| Category | Priority | Effort | Impact | Status |
+|----------|----------|--------|--------|--------|
+| **AppThreat Integration** | **DONE** | Medium | **Transformative** | ✅ Implemented |
+| **Wazuh/osquery Integration** | **HIGH** | Medium | High - Enterprise workflows | Planned |
+| Home Routers | HIGH | Medium | High - WFH security | Planned |
+| Electron Apps | HIGH | Medium | High - Enterprise tools | Planned |
+| Browser Extensions | MEDIUM | High | Medium - Hard to inventory | Idea |
+| Microsoft Store | LOW | Low | Low - Auto-updates | Idea |
+| IoT Devices | LOW | High | Low - Scope creep | Idea |
 
 ---
 
@@ -456,9 +711,9 @@ msv query "pkg:pypi/requests@2.28.0"
 
 ## Notes
 
-- These are ideas for future development, not current capabilities
+- AppThreat integration is now complete (✅) - enables offline queries, batch processing
+- **Wazuh/osquery integration is the recommended next step** - enables real enterprise workflows
 - Each category requires significant research and data source integration
-- **AppThreat integration is the recommended next step** - it enables all other expansions
 - Router firmware tracking would provide unique value for WFH security programs
 - Electron app tracking could leverage existing Chromium KEV data
 
@@ -472,4 +727,4 @@ msv query "pkg:pypi/requests@2.28.0"
 
 ---
 
-*Last Updated: 2026-01-13*
+*Last Updated: 2026-01-14*
