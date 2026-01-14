@@ -4,7 +4,7 @@
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
     "lastUpdated": "2026-01-13T00:00:00Z",
     "lastChecked": "2026-01-13T00:00:00Z",
-    "totalEntries": 133,
+    "totalEntries": 134,
     "sources": [
       "CISA KEV Catalog (top vulnerable products)",
       "Enterprise patch management catalogs",
@@ -635,6 +635,19 @@
       "platforms": ["windows", "server"],
       "notes": "Log forwarding agent.",
       "lastChecked": "2026-01-13"
+    },
+    {
+      "id": "ibm_mq",
+      "displayName": "IBM MQ",
+      "vendor": "ibm",
+      "product": "mq",
+      "cpe23": "cpe:2.3:a:ibm:mq:*:*:*:*:*:*:*:*",
+      "category": "enterprise",
+      "priority": "high",
+      "aliases": ["ibm mq", "websphere mq", "mq series", "ibm message queue"],
+      "platforms": ["windows", "server"],
+      "notes": "Enterprise messaging middleware. 192+ CVEs tracked. Legacy name: WebSphere MQ.",
+      "lastChecked": "2026-01-14"
     },
     {
       "id": "crowdstrike",
