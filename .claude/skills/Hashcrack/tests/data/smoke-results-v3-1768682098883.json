@@ -1,0 +1,13 @@
+[
+  {
+    "provider": "Proxmox",
+    "status": "pass",
+    "deployTime": 835,
+    "crackTime": 90,
+    "totalTime": 948,
+    "crackedCount": 6,
+    "totalHashes": 6,
+    "agentCount": 2,
+    "workersEngaged": 2
+  }
+]

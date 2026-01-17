@@ -66,7 +66,7 @@ use_preemptible  = true                   # Use preemptible instances (~50% chea
 # =============================================================================
 
 hashtopolis_admin_user     = "hashcrack"
-hashtopolis_admin_password = "Hashcrack2025Lab"  # Use simple password (no special chars)
+hashtopolis_admin_password = "CHANGE_ME"  # Use simple password (no special chars)
 worker_voucher             = "PAI_OCI_WORKER_1"
 
 # =============================================================================

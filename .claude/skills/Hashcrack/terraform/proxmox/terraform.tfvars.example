@@ -8,7 +8,7 @@
 # Proxmox Connection
 # =============================================================================
 
-proxmox_url      = "https://192.168.99.205:8006"
+proxmox_url      = "https://YOUR_PROXMOX_IP:8006"
 proxmox_user     = "root@pam"
 proxmox_password = "your-password-here"
 proxmox_insecure = true  # Allow self-signed certs (lab)
@@ -17,7 +17,7 @@ proxmox_insecure = true  # Allow self-signed certs (lab)
 # Proxmox Resources
 # =============================================================================
 
-proxmox_node   = "proxmod-lab1"     # Node name from Proxmox UI
+proxmox_node   = "your-node-name"     # Node name from Proxmox UI
 template_id    = 9000               # VM ID of Ubuntu 24.04 cloud-init template
 storage_name   = "local-lvm"        # Storage for VM disks
 network_bridge = "vmbr0"            # Network bridge
@@ -62,7 +62,7 @@ worker_disk_gb   = 30
 # =============================================================================
 
 hashtopolis_admin_user     = "hashcrack"
-hashtopolis_admin_password = "Hashcrack2025Lab"  # Simple password, no special chars
+hashtopolis_admin_password = "CHANGE_ME"  # Simple password, no special chars
 worker_voucher             = "PAI_PROXMOX_WORKER"
 
 # =============================================================================
@@ -76,7 +76,7 @@ ssh_user       = "ubuntu"
 # Network Configuration (Static IPs)
 # =============================================================================
 
-network_gateway = "192.168.99.1"
-network_prefix  = "192.168.99"
-server_ip       = "192.168.99.220/24"
+network_gateway = "192.168.1.1"
+network_prefix  = "192.168.1"
+server_ip       = "192.168.1.220/24"
 worker_ip_start = 221   # Workers get .221, .222, etc.

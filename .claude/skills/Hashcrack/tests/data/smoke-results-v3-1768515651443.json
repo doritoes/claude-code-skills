@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 2,
+    "workersEngaged": 0,
+    "error": "FAIL: Only cracked 0/47 (0.0%) - need 100%",
+    "failReason": "INSUFFICIENT_CRACK_RATE"
+  }
+]

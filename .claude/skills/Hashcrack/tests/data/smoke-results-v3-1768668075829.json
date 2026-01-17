@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 2,
+    "workersEngaged": 0,
+    "error": "EARLY FAIL: No chunks after 90s - agents may not be picking up task",
+    "failReason": "AGENT_REGISTRATION_FAILED"
+  }
+]

@@ -15,7 +15,7 @@ output "server_ip" {
 
 output "server_url" {
   description = "Hashtopolis web UI URL"
-  value       = try("https://${xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]}:8080", "pending")
+  value       = try("http://${xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]}:8080", "pending")
   depends_on  = [time_sleep.wait_for_server_ip]
 }
 
@@ -95,7 +95,7 @@ output "ansible_inventory" {
         }
       }
       vars = {
-        hashtopolis_server_url = try("https://${xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]}:8080", "pending")
+        hashtopolis_server_url = try("http://${xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]}:8080", "pending")
         ansible_ssh_common_args = "-o StrictHostKeyChecking=no"
       }
     }
@@ -118,7 +118,7 @@ output "deployment_summary" {
     ║  Server:                                                         ║
     ║    Name: ${xenorchestra_vm.hashtopolis_server.name_label}
     ║    IP:   ${try(xenorchestra_vm.hashtopolis_server.ipv4_addresses[0], "pending")}
-    ║    URL:  https://${try(xenorchestra_vm.hashtopolis_server.ipv4_addresses[0], "pending")}:8080
+    ║    URL:  http://${try(xenorchestra_vm.hashtopolis_server.ipv4_addresses[0], "pending")}:8080
     ║                                                                  ║
     ║  Workers: ${var.worker_count} deployed
     ║    ${join("\n    ", [for w in xenorchestra_vm.workers : "${w.name_label}: ${try(w.ipv4_addresses[0], "pending")}"])}

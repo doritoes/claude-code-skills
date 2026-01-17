@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 0,
+    "workersEngaged": 0,
+    "error": "Not enough test hashes: 6 (need 40+)",
+    "failReason": "UNKNOWN"
+  }
+]

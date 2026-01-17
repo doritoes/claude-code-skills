@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 2,
+    "workersEngaged": 0,
+    "error": "Files not accessible via getFile.php - workers won't be able to download them!",
+    "failReason": "SINGLE_WORKER_ONLY"
+  }
+]

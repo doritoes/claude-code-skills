@@ -48,6 +48,8 @@ When executing this skill, follow these critical procedures:
 | **Workers can't download hashcat** | Use server as file proxy - don't pay for NAT Gateway (see Networking Best Practices) |
 | **PoCL/hashcat benchmark fails** | Cloud CPU workers need `--force` flag in attackCmd (PoCL 1.8 compatibility issue) |
 | **keyspace=1 (task exhausts immediately)** | Files on worker corrupted - delete `/opt/hashtopolis-agent/files/*`, reset task keyspace=0 |
+| **Rule attack keyspace wrong** | Agents calculate keyspace as wordlist_lines only, ignoring rules multiplier. Fix: `UPDATE Task SET keyspace = wordlist_lines × rules_lines` immediately after task creation |
+| **CRLF line endings in hash/wordlist files** | Windows files have `\r\n` (CRLF) endings. Hashes get stored with trailing `\r`, causing 0% crack rate. Fix: use `dos2unix` on files or `.trim()` each line before inserting |
 | **"No task available!" after benchmark** | Check agent isActive=1, task priority>0, TaskWrapper priority>0 |
 | **Deleting tasks breaks things** | ANTI-PATTERN - archive tasks instead: `UPDATE Task SET isArchived=1, priority=0` |
 | **Files show "ERR3 - file not present"** | Copy files to `/usr/local/share/hashtopolis/files/` with www-data ownership (see Step 6) |

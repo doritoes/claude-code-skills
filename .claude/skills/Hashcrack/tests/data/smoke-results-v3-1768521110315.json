@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 2,
+    "workersEngaged": 0,
+    "error": "error is not defined",
+    "failReason": "UNKNOWN"
+  }
+]

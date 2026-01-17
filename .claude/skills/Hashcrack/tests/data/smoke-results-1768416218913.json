@@ -1,0 +1,7 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "error": "Failed with exit code 1"
+  }
+]

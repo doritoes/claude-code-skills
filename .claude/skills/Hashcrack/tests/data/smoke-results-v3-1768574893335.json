@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 2,
+    "workersEngaged": 0,
+    "error": "Failed to get file IDs from API response",
+    "failReason": "UNKNOWN"
+  }
+]

@@ -11,7 +11,7 @@ Performance data from multi-cloud testing (2026-01).
 | GCP | 4 | 16 | ~8h | 2161 (43.2%) | 4.5/min | ~40 MH/s |
 | Azure | 4 | 16 | 9h 41m | 2161 (43.2%) | 3.7/min | ~40 MH/s |
 | **OCI** | 4 | 32 (16 OCPU) | 7h 21m | 2161 (43.2%) | 4.9/min | ~62 MH/s |
-| **XCP-ng** | 4 | 16 | 5h 58m | 2161 (43.2%) | 6.0/min | ~40 MH/s |
+| **XCP-ng** | 4 | 16 | 6h 5m | 2163 (43.3%) | 5.9/min | ~40 MH/s |
 
 ## Key Findings
 

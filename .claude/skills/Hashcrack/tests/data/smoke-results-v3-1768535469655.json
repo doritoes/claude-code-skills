@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 2,
+    "workersEngaged": 1,
+    "error": "FAIL: Only 1 worker(s) cracked hashes - need both workers to engage",
+    "failReason": "SINGLE_WORKER_ONLY"
+  }
+]

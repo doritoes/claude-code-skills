@@ -117,13 +117,16 @@ write_files:
         sleep 10
       done
 
-      # Create initial voucher for workers
-      echo "Server ready. Voucher code: ${voucher_code}"
+      # Create initial voucher for workers in database
+      echo "Creating voucher in database: ${voucher_code}"
+      docker exec hashtopolis-db mysql -u hashtopolis -p"${db_password}" -e \
+        "INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('${voucher_code}', UNIX_TIMESTAMP());"
+      echo "Voucher created successfully"
 
       # Save credentials to file for retrieval
       cat > /opt/hashtopolis/credentials.json << 'CREDS'
       {
-        "url": "https://$(hostname -I | awk '{print $1}'):8080",
+        "url": "http://$(hostname -I | awk '{print $1}'):8080",
         "admin_user": "${admin_user}",
         "admin_password": "${admin_password}",
         "voucher_code": "${voucher_code}",
@@ -187,7 +190,7 @@ runcmd:
 final_message: |
   Hashtopolis server provisioning complete!
 
-  Server URL: https://$${hostname}:8080
+  Server URL: http://$${hostname}:8080
   Admin User: ${admin_user}
   Voucher: ${voucher_code}
 

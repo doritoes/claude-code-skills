@@ -59,7 +59,7 @@ output "hashtopolis_credentials" {
   description = "Hashtopolis login credentials"
   depends_on  = [time_sleep.wait_for_server_ip]
   value = {
-    url      = try("https://${xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]}:8080", "pending")
+    url      = try("http://${xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]}:8080", "pending")
     username = var.hashtopolis_admin_user
     password = local.admin_password
   }

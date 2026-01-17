@@ -1,0 +1,7 @@
+[
+  {
+    "provider": "OCI",
+    "status": "fail",
+    "error": "Server did not become ready after 5 minutes"
+  }
+]

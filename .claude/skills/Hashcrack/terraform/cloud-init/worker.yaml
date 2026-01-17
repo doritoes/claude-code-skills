@@ -146,24 +146,19 @@ write_files:
 
 # Run commands after boot
 runcmd:
-  # Start qemu-guest-agent early for Proxmox IP reporting
+  # Start qemu-guest-agent early for Proxmox/XCP-ng IP reporting
   - systemctl enable qemu-guest-agent
-  - systemctl start qemu-guest-agent
+  - systemctl start qemu-guest-agent || true
 
   # Create directories
   - mkdir -p /opt/hashcrack/agent
   - mkdir -p /opt/hashcrack/wordlists
 
-  # Install agent
+  # Install agent (downloads and configures)
   - /opt/hashcrack/install-agent.sh
 
-  # Wait for server (give it time to start)
-  - sleep 120
-
-  # Register agent
-  - /opt/hashcrack/register-agent.sh || echo "Registration will retry via systemd"
-
-  # Enable and start agent service
+  # Enable and start agent service IMMEDIATELY after install
+  # The agent itself waits for server connectivity and retries
   - systemctl daemon-reload
   - systemctl enable hashtopolis-agent.service
   - systemctl start hashtopolis-agent.service

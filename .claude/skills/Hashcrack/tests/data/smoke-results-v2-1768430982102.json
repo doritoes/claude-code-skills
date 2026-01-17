@@ -1,0 +1,8 @@
+[
+  {
+    "provider": "XCP-ng",
+    "status": "fail",
+    "agentCount": 0,
+    "error": "No agents registered after 5 minutes - cannot crack without workers"
+  }
+]
