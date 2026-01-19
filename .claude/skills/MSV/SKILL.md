@@ -1,6 +1,6 @@
 ---
 name: MSV
-version: 1.2.0
+version: 1.3.0
 description: Minimum Safe Version calculator for Windows software. USE WHEN user needs safe software versions OR user asks about vulnerability-free versions OR user mentions patching decisions OR user wants minimum version to upgrade to OR user asks about KEV vulnerabilities for specific software. Queries CISA KEV, VulnCheck, AppThreat, EPSS to determine lowest version free of known-exploited vulnerabilities.
 ---
 
@@ -39,7 +39,23 @@ Determine the lowest software version free of known-exploited vulnerabilities fo
 |-------------|---------|-------|
 | VulnCheck API | Exploit/PoC intelligence | Free key at vulncheck.com, set `VULNCHECK_API_KEY` |
 | AppThreat DB | Offline queries, faster | `pip install appthreat-vulnerability-db[oras] && vdb --download-image` |
-| NVD API Key | Higher rate limits | Free key at nvd.nist.gov, set `NVD_API_KEY` |
+| **NVD API Key** | **10x faster batch queries** | Free key at nvd.nist.gov, set `NVD_API_KEY` |
+
+### NVD API Key (Recommended)
+
+The NVD API has strict rate limits. **Getting a free API key provides 10x throughput:**
+
+| Mode | Rate Limit | Batch of 100 Products |
+|------|------------|----------------------|
+| Without key | 5 req/30s | ~10 minutes |
+| **With key** | 50 req/30s | **~1 minute** |
+
+**Get your free key:** https://nvd.nist.gov/developers/request-an-api-key
+
+The MSV client includes:
+- **Token bucket rate limiting** - Proactively prevents 429 errors
+- **Exponential backoff** - Automatic retry on rate limit hits (2s → 4s → 8s → 16s → 32s)
+- **Request queuing** - Smooth request distribution
 
 See `SETUP.md` for complete instructions, troubleshooting, and `.env.example` for all config options.
 
@@ -62,7 +78,7 @@ msv query "putty"
 | AppThreat | None | B2 | Offline multi-source database (NVD+OSV+GitHub) |
 | CISA KEV | None | A1 | Active exploitation ground truth |
 | VulnCheck | API Key | B2 | Public PoC tracking |
-| NVD | None | C3 | CVE version data |
+| NVD | Optional | C3 | CVE version data (API key = 10x rate limit) |
 | EPSS | None | B3 | Exploitation probability |
 
 ## Admiralty Code Ratings
@@ -206,7 +222,8 @@ MSV/
 |---------|----------|
 | "bun: command not found" | Install Bun: `curl -fsSL https://bun.sh/install \| bash` |
 | "Software catalog not found" | Ensure `data/SoftwareCatalog.json` exists |
-| "NVD rate limit exceeded" | Wait 30 seconds, or install AppThreat DB for offline queries |
+| "NVD rate limit exceeded" | Get free API key (10x faster): https://nvd.nist.gov/developers/request-an-api-key |
+| Slow batch queries | Set `NVD_API_KEY` for 50 req/30s (vs 5 req/30s without key) |
 | Tests failing | Run `bun test tools/msv.test.ts --verbose` for details |
 
 See `SETUP.md` for comprehensive troubleshooting guide.

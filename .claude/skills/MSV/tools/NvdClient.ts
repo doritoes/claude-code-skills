@@ -102,8 +102,66 @@ interface CacheFile<T> {
 
 const NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0";
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
-const REQUEST_DELAY_MS = 6000; // 6 seconds between requests (rate limit)
 const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+
+// Rate limit constants (NVD official limits)
+// Without API key: 5 requests per 30 seconds
+// With API key: 50 requests per 30 seconds
+const RATE_LIMIT_WINDOW_MS = 30000; // 30 second window
+const RATE_LIMIT_NO_KEY = 5;  // 5 requests per 30 seconds without key
+const RATE_LIMIT_WITH_KEY = 50; // 50 requests per 30 seconds with key
+
+// Retry constants
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 2000; // Start with 2 second delay
+const MAX_BACKOFF_MS = 60000; // Max 60 second delay
+const BACKOFF_MULTIPLIER = 2;
+
+// =============================================================================
+// Rate Limiter (Token Bucket)
+// =============================================================================
+
+class TokenBucketRateLimiter {
+  private tokens: number;
+  private maxTokens: number;
+  private refillRate: number; // tokens per ms
+  private lastRefill: number;
+
+  constructor(maxTokens: number, windowMs: number) {
+    this.maxTokens = maxTokens;
+    this.tokens = maxTokens;
+    this.refillRate = maxTokens / windowMs;
+    this.lastRefill = Date.now();
+  }
+
+  private refill(): void {
+    const now = Date.now();
+    const elapsed = now - this.lastRefill;
+    const tokensToAdd = elapsed * this.refillRate;
+    this.tokens = Math.min(this.maxTokens, this.tokens + tokensToAdd);
+    this.lastRefill = now;
+  }
+
+  async acquire(): Promise<void> {
+    this.refill();
+
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return;
+    }
+
+    // Wait for token to become available
+    const waitTime = Math.ceil((1 - this.tokens) / this.refillRate);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    this.refill();
+    this.tokens -= 1;
+  }
+
+  getAvailableTokens(): number {
+    this.refill();
+    return Math.floor(this.tokens);
+  }
+}
 
 // =============================================================================
 // Client
@@ -111,10 +169,24 @@ const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
 export class NvdClient {
   private cacheDir: string;
-  private lastRequestTime = 0;
+  private rateLimiter: TokenBucketRateLimiter;
+  private apiKey: string | null;
+  private verbose: boolean;
 
-  constructor(cacheDir: string) {
+  constructor(cacheDir: string, options?: { verbose?: boolean }) {
     this.cacheDir = cacheDir;
+    this.verbose = options?.verbose ?? false;
+
+    // Check for API key in environment
+    this.apiKey = process.env.NVD_API_KEY || null;
+
+    // Configure rate limiter based on API key presence
+    const rateLimit = this.apiKey ? RATE_LIMIT_WITH_KEY : RATE_LIMIT_NO_KEY;
+    this.rateLimiter = new TokenBucketRateLimiter(rateLimit, RATE_LIMIT_WINDOW_MS);
+
+    if (this.verbose && this.apiKey) {
+      console.log("NVD API key detected - using higher rate limit (50 req/30s)");
+    }
 
     if (!existsSync(cacheDir)) {
       mkdirSync(cacheDir, { recursive: true });
@@ -122,17 +194,80 @@ export class NvdClient {
   }
 
   /**
-   * Rate limit requests to avoid NVD throttling
+   * Execute a fetch with rate limiting and exponential backoff on 429
    */
-  private async rateLimit(): Promise<void> {
-    const now = Date.now();
-    const elapsed = now - this.lastRequestTime;
-    if (elapsed < REQUEST_DELAY_MS) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, REQUEST_DELAY_MS - elapsed)
-      );
+  private async fetchWithRetry(url: string, operation: string): Promise<Response> {
+    let lastError: Error | null = null;
+    let backoffMs = INITIAL_BACKOFF_MS;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      // Wait for rate limit token
+      await this.rateLimiter.acquire();
+
+      try {
+        const headers: Record<string, string> = {};
+        if (this.apiKey) {
+          headers["apiKey"] = this.apiKey;
+        }
+
+        const response = await fetch(url, {
+          headers,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+
+        // Success
+        if (response.ok) {
+          return response;
+        }
+
+        // Rate limited - apply exponential backoff
+        if (response.status === 429 || response.status === 403) {
+          const retryAfter = response.headers.get("Retry-After");
+          const waitTime = retryAfter
+            ? parseInt(retryAfter, 10) * 1000
+            : backoffMs;
+
+          if (this.verbose) {
+            console.log(
+              `NVD rate limit hit (${response.status}), attempt ${attempt}/${MAX_RETRIES}, ` +
+              `waiting ${Math.round(waitTime / 1000)}s before retry...`
+            );
+          }
+
+          if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            backoffMs = Math.min(backoffMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
+            continue;
+          }
+        }
+
+        // Other HTTP errors
+        throw new Error(`NVD API error: ${response.status} ${response.statusText}`);
+      } catch (error) {
+        lastError = error as Error;
+
+        // Network errors - retry with backoff
+        if ((error as Error).name === "TimeoutError" ||
+            (error as Error).message?.includes("fetch failed")) {
+          if (this.verbose) {
+            console.log(
+              `NVD request timeout/failed for ${operation}, attempt ${attempt}/${MAX_RETRIES}, ` +
+              `waiting ${Math.round(backoffMs / 1000)}s before retry...`
+            );
+          }
+
+          if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            backoffMs = Math.min(backoffMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
+            continue;
+          }
+        }
+
+        throw error;
+      }
     }
-    this.lastRequestTime = Date.now();
+
+    throw lastError || new Error(`NVD API failed after ${MAX_RETRIES} retries`);
   }
 
   /**
@@ -142,7 +277,7 @@ export class NvdClient {
     const cacheKey = `nvd-cve-${cveId.replace(/[^a-zA-Z0-9-]/g, "_")}`;
     const cachePath = resolve(this.cacheDir, `${cacheKey}.json`);
 
-    // Check cache
+    // Check cache first
     if (existsSync(cachePath)) {
       try {
         const cached: CacheFile<NvdCve> = JSON.parse(
@@ -152,24 +287,14 @@ export class NvdClient {
           return cached.data;
         }
       } catch {
-        // Cache corrupted
+        // Cache corrupted, fetch fresh
       }
     }
-
-    await this.rateLimit();
 
     const url = `${NVD_BASE_URL}?cveId=${encodeURIComponent(cveId)}`;
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
 
-    if (!response.ok) {
-      if (response.status === 403) {
-        throw new Error("NVD rate limit exceeded. Try again later.");
-      }
-      throw new Error(`NVD API error: ${response.status} ${response.statusText}`);
-    }
-
+    // Use rate-limited fetch with retry
+    const response = await this.fetchWithRetry(url, `getCve(${cveId})`);
     const result: NvdApiResponse = await response.json();
 
     if (!result.vulnerabilities || result.vulnerabilities.length === 0) {
@@ -371,8 +496,6 @@ export class NvdClient {
       }
     }
 
-    await this.rateLimit();
-
     // Extract vendor and product from CPE for keyword search
     // CPE format: cpe:2.3:a:vendor:product:version:...
     const cpeParts = cpe23.split(":");
@@ -384,17 +507,8 @@ export class NvdClient {
     const searchKeyword = `${vendor} ${product}`.trim();
     const url = `${NVD_BASE_URL}?keywordSearch=${encodeURIComponent(searchKeyword)}&resultsPerPage=${maxResults}`;
 
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      if (response.status === 403) {
-        throw new Error("NVD rate limit exceeded. Try again later.");
-      }
-      throw new Error(`NVD API error: ${response.status} ${response.statusText}`);
-    }
-
+    // Use rate-limited fetch with retry
+    const response = await this.fetchWithRetry(url, `searchByCpe(${searchKeyword})`);
     const result: NvdApiResponse = await response.json();
 
     // Cache the result
@@ -504,6 +618,21 @@ export class NvdClient {
     results.sort((a, b) => (b.cvssScore || 0) - (a.cvssScore || 0));
 
     return results;
+  }
+
+  /**
+   * Get rate limit status for monitoring
+   */
+  getRateLimitStatus(): {
+    hasApiKey: boolean;
+    maxRequestsPer30s: number;
+    availableTokens: number;
+  } {
+    return {
+      hasApiKey: !!this.apiKey,
+      maxRequestsPer30s: this.apiKey ? RATE_LIMIT_WITH_KEY : RATE_LIMIT_NO_KEY,
+      availableTokens: this.rateLimiter.getAvailableTokens(),
+    };
   }
 
   /**

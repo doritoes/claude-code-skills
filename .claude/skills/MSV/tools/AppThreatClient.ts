@@ -157,7 +157,7 @@ export class AppThreatClient {
     this.config = {
       databasePath: config?.databasePath || join(vdbDir, DATA_FILE),
       indexPath: config?.indexPath || join(vdbDir, INDEX_FILE),
-      maxAgeDays: config?.maxAgeDays || 7,
+      maxAgeDays: config?.maxAgeDays || 2, // 48 hours default
     };
   }
 
@@ -188,6 +188,181 @@ export class AppThreatClient {
       // Database stat failed - assume needs update
       return true;
     }
+  }
+
+  /**
+   * Get database age in hours
+   */
+  getDatabaseAgeHours(): number | null {
+    if (!this.isDatabaseAvailable()) return null;
+
+    try {
+      const stats = statSync(this.config.databasePath);
+      const ageMs = Date.now() - stats.mtimeMs;
+      return ageMs / (1000 * 60 * 60);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Auto-update database if older than threshold (default 48 hours)
+   * Returns true if update was performed, false otherwise
+   */
+  async ensureFreshDatabase(maxAgeHours: number = 48, verbose: boolean = false): Promise<boolean> {
+    // Check if database exists
+    if (!this.isDatabaseAvailable()) {
+      if (verbose) console.log("AppThreat database not found, downloading...");
+      return this.downloadDatabase(verbose);
+    }
+
+    // Check age
+    const ageHours = this.getDatabaseAgeHours();
+    if (ageHours === null || ageHours > maxAgeHours) {
+      if (verbose) {
+        const ageStr = ageHours ? `${Math.round(ageHours)} hours old` : "age unknown";
+        console.log(`AppThreat database ${ageStr}, updating...`);
+      }
+      return this.downloadDatabase(verbose);
+    }
+
+    return false; // No update needed
+  }
+
+  /**
+   * Download/update the database using vdb CLI or oras directly
+   */
+  private async downloadDatabase(verbose: boolean = false): Promise<boolean> {
+    const { spawn, execSync } = await import("node:child_process");
+    const { mkdirSync } = await import("node:fs");
+
+    // First, try using vdb CLI
+    const vdbResult = await this.tryVdbCli(verbose);
+    if (vdbResult) return true;
+
+    // If vdb fails, try oras directly (more likely to be available)
+    const orasResult = await this.tryOrasDownload(verbose);
+    if (orasResult) return true;
+
+    // Both methods failed - provide clear installation guidance
+    if (verbose) {
+      console.error("\n" + "=".repeat(60));
+      console.error("AppThreat Database Installation Required");
+      console.error("=".repeat(60));
+      console.error("\nOption 1: Install vdb CLI (recommended)");
+      console.error("  pip install appthreat-vulnerability-db[oras]");
+      console.error("  vdb --download-image");
+      console.error("\nOption 2: Install oras CLI and download manually");
+      console.error("  winget install oras");
+      console.error("  # or: choco install oras");
+      console.error("  oras pull ghcr.io/appthreat/vdbxz-app:latest");
+      console.error("\nOption 3: Use pipx (isolated environment)");
+      console.error("  pipx install appthreat-vulnerability-db[oras]");
+      console.error("  vdb --download-image");
+      console.error("\nThe database will be stored in:");
+      console.error(`  ${DEFAULT_VDB_DIR}`);
+      console.error("=".repeat(60) + "\n");
+    }
+
+    return false;
+  }
+
+  /**
+   * Try to download using vdb CLI or Python module
+   */
+  private async tryVdbCli(verbose: boolean): Promise<boolean> {
+    const { spawn } = await import("node:child_process");
+
+    // First try the vdb command directly
+    const vdbResult = await new Promise<boolean>((resolve) => {
+      const vdbProcess = spawn("vdb", ["--download-image"], {
+        stdio: verbose ? "inherit" : "pipe",
+        shell: true,
+      });
+
+      vdbProcess.on("close", (code) => {
+        resolve(code === 0);
+      });
+
+      vdbProcess.on("error", () => {
+        resolve(false);
+      });
+    });
+
+    if (vdbResult) {
+      if (verbose) console.log("AppThreat database updated successfully via vdb");
+      return true;
+    }
+
+    // Fallback: try running vdb via Python module (works when vdb not in PATH)
+    if (verbose) console.log("Trying vdb via Python module...");
+
+    const pythonCmd = `python -c "import sys; sys.argv = ['vdb', '--download-image']; from vdb.cli import main; main()"`;
+
+    return new Promise((resolve) => {
+      const pythonProcess = spawn(pythonCmd, [], {
+        stdio: verbose ? "inherit" : "pipe",
+        shell: true,
+      });
+
+      pythonProcess.on("close", (code) => {
+        if (code === 0) {
+          if (verbose) console.log("AppThreat database updated successfully via Python");
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      });
+
+      pythonProcess.on("error", () => {
+        resolve(false);
+      });
+    });
+  }
+
+  /**
+   * Try to download using oras CLI directly
+   */
+  private async tryOrasDownload(verbose: boolean): Promise<boolean> {
+    const { spawn } = await import("node:child_process");
+    const { mkdirSync, existsSync, renameSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+
+    // Ensure target directory exists
+    if (!existsSync(DEFAULT_VDB_DIR)) {
+      try {
+        mkdirSync(DEFAULT_VDB_DIR, { recursive: true });
+      } catch {
+        return false;
+      }
+    }
+
+    return new Promise((resolve) => {
+      if (verbose) console.log("Attempting download via oras CLI...");
+
+      // oras pull downloads to current directory, so we need to cd first
+      const orasProcess = spawn(
+        "oras",
+        ["pull", "ghcr.io/appthreat/vdbxz-app:latest", "--output", DEFAULT_VDB_DIR],
+        {
+          stdio: verbose ? "inherit" : "pipe",
+          shell: true,
+        }
+      );
+
+      orasProcess.on("close", (code) => {
+        if (code === 0) {
+          if (verbose) console.log("AppThreat database downloaded successfully via oras");
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      });
+
+      orasProcess.on("error", () => {
+        resolve(false);
+      });
+    });
   }
 
   /**
@@ -525,13 +700,35 @@ export class AppThreatClient {
 }
 
 /**
- * Get the minimum safe version from a list of vulnerabilities
+ * Check if a string looks like a valid software version
+ * Rejects git commit hashes, plain numbers, and other non-version strings
  */
+function isValidVersion(version: string): boolean {
+  // Must contain at least one dot (e.g., "5.13", "6.3.3")
+  if (!version.includes(".")) return false;
+
+  // Reject if it looks like a git commit hash (40 hex chars or prefix)
+  if (/^[0-9a-f]{7,40}$/i.test(version)) return false;
+
+  // Reject if it contains hash-like segments (e.g., "49d876f2c5fc")
+  if (/[a-f]{4,}/i.test(version)) return false;
+
+  // Must start with a digit
+  if (!/^\d/.test(version)) return false;
+
+  // Reject versions that are too long (likely garbage data)
+  if (version.length > 20) return false;
+
+  return true;
+}
+
 export function getMinimumSafeVersion(results: VulnResult[]): string | null {
   const fixedVersions: string[] = [];
 
   for (const result of results) {
-    if (result.fixedVersion && !result.fixedVersion.startsWith(">")) {
+    if (result.fixedVersion &&
+        !result.fixedVersion.startsWith(">") &&
+        isValidVersion(result.fixedVersion)) {
       fixedVersions.push(result.fixedVersion);
     }
   }

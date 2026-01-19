@@ -34,6 +34,18 @@ export interface MsvCacheEntry {
   confidence: "high" | "medium" | "low" | "none";
   lastUpdated: string;
   notes?: string;
+  // v2 fields
+  justification?: string;          // Human-readable reason for MSV determination
+  cveCount?: number;               // Number of CVEs analyzed
+  hasKevCves?: boolean;            // True if any CVEs are in CISA KEV
+  sourceResults?: SourceResult[];  // Per-source query results
+}
+
+export interface SourceResult {
+  source: string;           // e.g., "AppThreat", "CISA KEV"
+  queried: boolean;         // Whether this source was actually queried
+  cveCount: number;         // Number of CVEs found from this source
+  note?: string;            // Additional context (e.g., "no API key")
 }
 
 export interface MsvCacheFile {
@@ -133,6 +145,20 @@ export class MsvCache {
       existing.lastUpdated = new Date().toISOString();
       if (entry.confidence && this.confidenceRank(entry.confidence) > this.confidenceRank(existing.confidence)) {
         existing.confidence = entry.confidence;
+      }
+
+      // Update v2 fields (always use latest data for these)
+      if (entry.justification) {
+        existing.justification = entry.justification;
+      }
+      if (entry.cveCount !== undefined) {
+        existing.cveCount = entry.cveCount;
+      }
+      if (entry.hasKevCves !== undefined) {
+        existing.hasKevCves = entry.hasKevCves;
+      }
+      if (entry.sourceResults && entry.sourceResults.length > 0) {
+        existing.sourceResults = entry.sourceResults;
       }
     } else {
       cache.entries[entry.productId] = entry;

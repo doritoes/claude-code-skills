@@ -7,10 +7,28 @@ This guide helps you install and configure the MSV (Minimum Safe Version) skill 
 | Requirement | Version | Required | Notes |
 |-------------|---------|----------|-------|
 | **Bun** | 1.0+ | Yes | JavaScript/TypeScript runtime |
-| **Python** | 3.8+ | Optional | Only for AppThreat offline database |
-| **Node.js** | 18+ | Optional | Alternative to Bun (slower) |
+| **Python** | 3.9+ | Yes | Required for AppThreat vulnerability database |
+| **Disk Space** | 3GB+ | Yes | AppThreat database (~2.5GB) |
 
-## Installation Steps
+## Quick Install (Recommended)
+
+Run the automated install script:
+
+**Windows (PowerShell as Administrator):**
+```powershell
+cd ~/.claude/skills/MSV
+.\install.ps1
+```
+
+This script:
+1. Verifies Python and Bun are installed
+2. Installs the AppThreat vulnerability database package
+3. Downloads the vulnerability database (~700MB download, ~2.5GB expanded)
+4. Verifies the installation
+
+**After installation, MSV will automatically keep the database updated.**
+
+## Manual Installation Steps
 
 ### Step 1: Install Bun Runtime
 
@@ -103,43 +121,13 @@ bun test msv.test.ts
  0 fail
 ```
 
-## Optional Enhancements
+### Step 5: Install AppThreat Database (Required)
 
-### Option A: VulnCheck API Key (Recommended)
+The AppThreat vulnerability database provides offline CVE data from NVD, OSV, and GitHub advisories.
 
-VulnCheck provides enhanced exploit/PoC intelligence. Free tier available.
+**MSV will automatically attempt to download the database on first run.** If automatic download fails, use one of these methods:
 
-1. **Get API Key:** Sign up at https://vulncheck.com (free tier available)
-
-2. **Add to environment:**
-
-   **Windows (PowerShell):**
-   ```powershell
-   # Add to your PowerShell profile or set permanently:
-   $env:VULNCHECK_API_KEY = "vulncheck_your_key_here"
-   ```
-
-   **macOS/Linux:**
-   ```bash
-   # Add to ~/.bashrc or ~/.zshrc:
-   export VULNCHECK_API_KEY="vulncheck_your_key_here"
-   ```
-
-   **Or create `.claude/.env` file:**
-   ```bash
-   # Create file at ~/.claude/.env
-   VULNCHECK_API_KEY=vulncheck_your_key_here
-   ```
-
-3. **Verify:**
-   ```bash
-   bun run tools/msv.ts query "chrome"
-   # Should show "VulnCheck" in Sources if working
-   ```
-
-### Option B: AppThreat Offline Database (Advanced)
-
-For faster queries and offline capability, install the AppThreat vulnerability database.
+#### Option A: Using vdb CLI (Recommended)
 
 1. **Install Python package:**
    ```bash
@@ -149,22 +137,101 @@ For faster queries and offline capability, install the AppThreat vulnerability d
 2. **Download the database:**
    ```bash
    vdb --download-image
+   # Or use MSV command:
+   bun run tools/msv.ts db update
    ```
-   This downloads ~2GB to `~/AppData/Local/vdb/vdb/` (Windows) or `~/.local/share/vdb/` (Linux/macOS).
+
+#### Option B: Using oras CLI (No Python Required)
+
+1. **Install oras:**
+   ```powershell
+   # Windows (via winget)
+   winget install oras
+
+   # Windows (via Chocolatey)
+   choco install oras
+
+   # macOS
+   brew install oras
+   ```
+
+2. **Download the database:**
+   ```bash
+   oras pull ghcr.io/appthreat/vdbxz-app:latest --output ~/AppData/Local/vdb/vdb
+   ```
+
+#### Option C: Using pipx (Isolated Python Environment)
+
+1. **Install with pipx:**
+   ```bash
+   pipx install appthreat-vulnerability-db[oras]
+   ```
+
+2. **Download the database:**
+   ```bash
+   vdb --download-image
+   ```
+
+#### Database Location
+
+The database is stored at:
+- Windows: `C:\Users\<user>\AppData\Local\vdb\vdb\`
+- Linux/macOS: `~/.local/share/vdb/`
+
+This downloads ~700MB and expands to ~2.5GB.
+
+#### Verify Installation
+
+```bash
+bun run tools/msv.ts db status
+# Should show "UP TO DATE" and database size
+```
+
+### Automatic Database Updates
+
+**MSV automatically updates the database when it's older than 48 hours.**
+
+When you run any MSV query:
+- If database is < 48 hours old: Uses cached data (fast)
+- If database is > 48 hours old: Auto-downloads fresh data, then queries
+- If database is missing: Prompts you to install
+
+You can also manually update:
+```bash
+bun run tools/msv.ts db update
+# or directly:
+vdb --download-image
+```
+
+## Optional Enhancements
+
+### VulnCheck API Key (Recommended)
+
+VulnCheck provides enhanced exploit/PoC intelligence. Free tier available.
+
+1. **Get API Key:** Sign up at https://vulncheck.com (free tier available)
+
+2. **Add to environment:**
+
+   **Windows (PowerShell):**
+   ```powershell
+   $env:VULNCHECK_API_KEY = "vulncheck_your_key_here"
+   ```
+
+   **macOS/Linux:**
+   ```bash
+   export VULNCHECK_API_KEY="vulncheck_your_key_here"
+   ```
+
+   **Or create `.claude/.env` file:**
+   ```
+   VULNCHECK_API_KEY=vulncheck_your_key_here
+   ```
 
 3. **Verify:**
    ```bash
-   bun run tools/msv.ts db status
-   # Should show database location and statistics
-   ```
-
-4. **Keep updated:**
-   ```bash
-   # Update database periodically:
-   vdb --download-image
-
-   # Or use MSV command:
-   bun run tools/msv.ts db update
+   bun run tools/msv.ts query "chrome"
+   # Should show "VulnCheck" in Sources if working
    ```
 
 ## Environment Variables Reference
@@ -172,8 +239,21 @@ For faster queries and offline capability, install the AppThreat vulnerability d
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VULNCHECK_API_KEY` | No | VulnCheck API key for PoC intelligence |
-| `NVD_API_KEY` | No | NVD API key for higher rate limits |
+| `NVD_API_KEY` | No | NVD API key for 10x higher rate limits (50 req/30s vs 5 req/30s) |
 | `MSV_CACHE_DIR` | No | Custom cache directory (default: skill's data/ folder) |
+
+### NVD API Key (Recommended for Batch Operations)
+
+The NVD API key increases your rate limit from 5 to 50 requests per 30 seconds.
+
+1. **Get API Key:** Request at https://nvd.nist.gov/developers/request-an-api-key
+2. **Add to environment:**
+   ```bash
+   export NVD_API_KEY="your-nvd-api-key"
+   ```
+   Or add to `.claude/.env` file.
+
+Without an API key, batch operations on large inventories may be slow due to rate limiting.
 
 ## Troubleshooting
 
