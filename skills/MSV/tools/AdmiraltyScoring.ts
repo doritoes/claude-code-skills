@@ -232,6 +232,37 @@ export function getRatingColor(rating: AdmiraltyRating): string {
 
 export const RESET_COLOR = "\x1b[0m";
 
+/**
+ * Get inline rating description for display
+ * Returns a short, user-friendly explanation of the rating
+ */
+export function getInlineRatingDescription(rating: AdmiraltyRating): string {
+  const { reliability, credibility } = rating;
+
+  // Map common ratings to clear descriptions
+  const descriptions: Record<string, string> = {
+    "A1": "Confirmed - Active Exploitation",
+    "A2": "Confirmed - Vendor Advisory",
+    "B2": "Reliable - Multiple Sources",
+    "B3": "Reliable - High Risk",
+    "C3": "Moderate - Critical Severity",
+    "C4": "Moderate - Partial Data",
+    "D5": "Low Confidence",
+    "F6": "Cannot Judge - Insufficient Data",
+  };
+
+  return descriptions[rating.rating] || `${RELIABILITY_LABELS[reliability]}, ${CREDIBILITY_LABELS[credibility]}`;
+}
+
+/**
+ * Format rating with inline description for terminal
+ */
+export function formatRatingWithDescription(rating: AdmiraltyRating): string {
+  const color = getRatingColor(rating);
+  const inline = getInlineRatingDescription(rating);
+  return `${color}${rating.rating}${RESET_COLOR} (${inline})`;
+}
+
 // =============================================================================
 // MSV-Specific Rating
 // =============================================================================

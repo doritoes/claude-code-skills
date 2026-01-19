@@ -26,20 +26,36 @@ import {
   calculateAdmiraltyRating,
   calculateMsvRating,
   getRatingColor,
+  getInlineRatingDescription,
+  formatRatingWithDescription,
   RESET_COLOR,
   type AdmiraltyRating,
   type EvidenceSource,
   type MsvRatingInput,
 } from "./AdmiraltyScoring";
 import {
+  generateAction,
+  formatActionBox,
+  type ActionGuidance,
+  type ActionInput,
+} from "./ActionGuidance";
+import {
+  calculateRiskScore,
+  formatRiskScore,
+  riskScoreToJson,
+  type RiskScore,
+  type RiskScoreInput,
+} from "./RiskScoring";
+import {
   findMinimumSafeVersion,
   compareVersions,
   sortVersions,
 } from "./VersionCompare";
 import { NvdClient, type VersionInfo } from "./NvdClient";
-import { MsvCache, type MsvCacheEntry, type MsvBranch } from "./MsvCache";
+import { MsvCache, type MsvCacheEntry, type MsvBranch, type SourceResult } from "./MsvCache";
 import { getVendorFetcher, type VendorAdvisoryResult } from "./VendorAdvisory";
 import { parseFile, parseInput, parseDirectList, type SoftwareInput } from "./InputParser";
+import { ChocolateyClient } from "./ChocolateyClient";
 import {
   checkCompliance,
   generateSummary,
@@ -75,10 +91,13 @@ interface Config {
   vulncheckApiKey?: string;
 }
 
+type BatchFilter = "kev" | "urgent" | "stale" | "undetermined" | "all";
+
 interface QueryOptions {
   format: "text" | "json" | "markdown" | "csv";
   verbose: boolean;
   forceRefresh: boolean;
+  filter?: BatchFilter;
 }
 
 interface MSVResult {
@@ -87,6 +106,7 @@ interface MSVResult {
   platform: string;
   minimumSafeVersion: string | null;   // Lowest safe version (oldest you can safely run)
   recommendedVersion: string | null;    // Highest safe version (latest, best protection)
+  latestVersion: string | null;         // Latest available version (from catalog or vendor)
   branches: BranchMsvResult[];
   admiraltyRating: AdmiraltyRating;
   justification: string;
@@ -96,6 +116,28 @@ interface MSVResult {
   queriedAt: string;
   fromCache: boolean;
   dataAge?: DataFreshness;
+  // v2 fields
+  hasKevCves: boolean;                  // True if any CVEs are in CISA KEV
+  sourceResults: SourceResult[];        // Per-source query results
+  action?: ActionGuidance;              // Generated action guidance
+  riskScore?: RiskScore;                // Aggregate risk score (0-100)
+  // v3 fields - variant support
+  hasVariants?: boolean;                // True if this product has variant tracks
+  variantInfo?: VariantInfo;            // Information about variants
+}
+
+interface VariantInfo {
+  parentProduct: string;                // e.g., "Adobe Acrobat Reader"
+  variants: VariantMsv[];               // MSV info for each variant
+  trackHelp: string;                    // Help text explaining how to identify track
+}
+
+interface VariantMsv {
+  id: string;                           // e.g., "acrobat_reader_dc"
+  displayName: string;                  // e.g., "Adobe Acrobat Reader DC"
+  track: string;                        // e.g., "Continuous (DC)"
+  msv: string | null;                   // Minimum safe version
+  versionPattern: string;               // e.g., "24.x.x.x (builds >10000)"
 }
 
 interface DataFreshness {
@@ -110,6 +152,7 @@ interface BranchMsvResult {
   branch: string;
   msv: string;
   latest: string;
+  noSafeVersion?: boolean;  // True if MSV > latest (no safe version available yet)
 }
 
 interface ExploitedCVE {
@@ -136,6 +179,11 @@ interface SoftwareMapping {
   platforms: string[];
   notes?: string;
   lastChecked?: string;
+  variants?: string[];  // List of variant IDs for products with multiple tracks
+  versionPattern?: string;  // Regex to filter valid versions (e.g., "^7\\." for PowerShell 7)
+  osComponent?: boolean;  // True if this is a Windows OS component (updates via Windows Update only)
+  eol?: boolean;  // True if this software is End of Life (no longer receiving security patches)
+  latestVersion?: string;  // Known latest version for display (manually maintained)
 }
 
 interface SoftwareCatalog {
@@ -243,6 +291,199 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
   return null;
 }
 
+/**
+ * Get variant products for a software entry with variants defined
+ */
+function getVariants(software: SoftwareMapping, config: Config): SoftwareMapping[] {
+  if (!software.variants || software.variants.length === 0) {
+    return [];
+  }
+
+  const catalog = getSoftwareCatalogMap(config);
+  return software.variants
+    .map(id => catalog[id])
+    .filter(Boolean);
+}
+
+/**
+ * Detect Adobe product track from version number
+ */
+function detectAdobeTrack(version: string): { track: string; productSuffix: string } | null {
+  if (!version) return null;
+
+  const majorVersion = parseInt(version.split(".")[0], 10);
+
+  // Adobe Reader/Acrobat version patterns:
+  // 20.x.x.x = Classic Track 2020
+  // 24.x.x.x = Could be DC (continuous) or Classic Track 2024
+  // The differentiation is: DC uses build numbers like 24.005.20320
+  // Classic uses simpler numbering
+
+  if (majorVersion >= 20 && majorVersion < 24) {
+    return { track: "Classic 2020", productSuffix: "_2020" };
+  } else if (majorVersion >= 24) {
+    // DC versions have longer build numbers in third segment (>10000)
+    const parts = version.split(".");
+    if (parts.length >= 3) {
+      const buildNum = parseInt(parts[2], 10) || 0;
+      if (buildNum > 10000) {
+        return { track: "Continuous (DC)", productSuffix: "_dc" };
+      }
+    }
+    // Default to 2024 Classic for 24.x versions without DC-style builds
+    return { track: "Classic 2024", productSuffix: "_2024" };
+  }
+
+  return null;
+}
+
+/**
+ * Get variant info for Adobe products
+ */
+function getAdobeVariantInfo(isReader: boolean): VariantInfo {
+  const product = isReader ? "Adobe Acrobat Reader" : "Adobe Acrobat";
+  const prefix = isReader ? "acrobat_reader" : "acrobat";
+
+  return {
+    parentProduct: product,
+    variants: [
+      {
+        id: `${prefix}_dc`,
+        displayName: `${product} DC`,
+        track: "Continuous (DC)",
+        msv: null, // Will be filled by queries
+        versionPattern: "24.x.x.xxxxx (5-digit build)",
+      },
+      {
+        id: `${prefix}_2024`,
+        displayName: `${product} 2024`,
+        track: "Classic 2024",
+        msv: null,
+        versionPattern: "24.x.x.x (4-digit or less)",
+      },
+      {
+        id: `${prefix}_2020`,
+        displayName: `${product} 2020`,
+        track: "Classic 2020",
+        msv: null,
+        versionPattern: "20.x.x.x",
+      },
+    ],
+    trackHelp: `
+To identify your Adobe track:
+  1. Open ${product} → Help → About
+  2. Check the version number format:
+     • 24.005.20320 (5-digit build) = DC (Continuous)
+     • 24.001.30159 = Classic 2024
+     • 20.005.30636 = Classic 2020
+
+DC auto-updates and is recommended for most users.
+Classic tracks are for enterprises requiring longer patch cycles.
+`.trim(),
+  };
+}
+
+/**
+ * Get variant info for PowerShell products
+ */
+function getPowerShellVariantInfo(): VariantInfo {
+  return {
+    parentProduct: "PowerShell",
+    variants: [
+      {
+        id: "windows_powershell",
+        displayName: "Windows PowerShell 5.1",
+        track: "Built-in (Windows Update)",
+        msv: null, // Will be filled - though note: tied to Windows Update
+        versionPattern: "5.1.xxxxx.xxxx (tied to OS build)",
+      },
+      {
+        id: "powershell6",
+        displayName: "PowerShell 6 (EOL)",
+        track: "END OF LIFE - Upgrade Now!",
+        msv: null,
+        versionPattern: "6.x.x (unsupported since Sep 2020)",
+      },
+      {
+        id: "powershell7",
+        displayName: "PowerShell 7",
+        track: "Standalone (LTS: 7.4, Current: 7.5)",
+        msv: null,
+        versionPattern: "7.x.x",
+      },
+    ],
+    trackHelp: `
+To identify your PowerShell version:
+  Run: $PSVersionTable.PSVersion
+
+  • 5.1.xxxxx.xxxx = Windows PowerShell (built-in)
+    - Updated via Windows Update
+    - Cannot be removed from Windows
+    - Your version: tied to your Windows build
+
+  • 6.x.x = PowerShell 6 (END OF LIFE)
+    - No longer receiving security patches since Sep 2020
+    - UPGRADE TO POWERSHELL 7 IMMEDIATELY
+
+  • 7.x.x = PowerShell 7 (standalone)
+    - Separate installation from Microsoft
+    - LTS: 7.4.x (supported until Nov 2026)
+    - Current: 7.5.x (supported until May 2026)
+    - Can coexist with Windows PowerShell 5.1
+
+Windows PowerShell 5.1 security patches come through Windows Update.
+PowerShell 7 must be updated separately (winget, MSI, or Microsoft Update).
+`.trim(),
+  };
+}
+
+/**
+ * Query MSV for all variants of a product
+ */
+async function queryVariantMsvs(
+  variantInfo: VariantInfo,
+  options: QueryOptions,
+  config: Config
+): Promise<VariantInfo> {
+  const catalog = getSoftwareCatalogMap(config);
+  const msvCache = new MsvCache(config.dataDir);
+
+  for (const variant of variantInfo.variants) {
+    const software = catalog[variant.id];
+    if (!software) continue;
+
+    // Handle OS components specially - no MSV to track
+    if (software.osComponent) {
+      variant.msv = "Windows Update";
+      continue;
+    }
+
+    // Handle EOL products - urgent upgrade needed
+    if (software.eol) {
+      variant.msv = "⚠ UNSUPPORTED";
+      continue;
+    }
+
+    const productId = `${software.vendor}:${software.product}`.toLowerCase();
+
+    // Check cache first for quick results (unless force refresh)
+    const cached = msvCache.get(productId);
+    if (!options.forceRefresh && cached && cached.branches.length > 0 && cached.branches[0].msv !== "unknown") {
+      variant.msv = cached.branches[0].msv;
+    } else {
+      // Query for fresh data
+      try {
+        const result = await queryMSV(variant.id, { ...options, verbose: false }, config);
+        variant.msv = result.minimumSafeVersion;
+      } catch {
+        variant.msv = null;
+      }
+    }
+  }
+
+  return variantInfo;
+}
+
 // =============================================================================
 // Data Freshness
 // =============================================================================
@@ -285,6 +526,46 @@ function getFreshnessIndicator(freshness: DataFreshness): string {
 }
 
 // =============================================================================
+// Justification Generation
+// =============================================================================
+
+/**
+ * Generate a meaningful justification for the MSV result
+ */
+function generateJustification(
+  minimumSafeVersion: string | null,
+  cveCount: number,
+  hasKevCves: boolean,
+  dataSources: string[]
+): string {
+  // No MSV determined
+  if (!minimumSafeVersion) {
+    if (cveCount === 0) {
+      if (dataSources.length === 0) {
+        return "No vulnerability data sources available for this product";
+      }
+      return `No CVEs with CVSS ≥ 4.0 found. Product may be safe or lack CVE coverage in ${dataSources.join(", ")}`;
+    }
+    return `Found ${cveCount} CVEs but could not determine safe version from available data`;
+  }
+
+  // MSV determined
+  if (hasKevCves) {
+    return `MSV ${minimumSafeVersion} patches actively exploited vulnerabilities (CISA KEV)`;
+  }
+
+  if (dataSources.includes("Vendor Advisory")) {
+    return `Vendor advisory confirms ${minimumSafeVersion} as minimum safe version`;
+  }
+
+  if (dataSources.includes("AppThreat") || dataSources.includes("NVD")) {
+    return `MSV ${minimumSafeVersion} determined from ${cveCount} CVEs in vulnerability databases`;
+  }
+
+  return `MSV ${minimumSafeVersion} based on ${cveCount} analyzed CVEs`;
+}
+
+// =============================================================================
 // Query Orchestration
 // =============================================================================
 
@@ -301,6 +582,140 @@ async function queryMSV(
     );
   }
 
+  // OS COMPONENT HANDLING - Products updated via Windows Update only
+  if (software.osComponent) {
+    const now = new Date().toISOString();
+    return {
+      software: softwareInput,
+      displayName: software.displayName,
+      platform: software.platforms.join(", "),
+      minimumSafeVersion: "N/A (OS Component)",
+      recommendedVersion: "Keep Windows Updated",
+      latestVersion: software.latestVersion || null,
+      branches: [],
+      admiraltyRating: {
+        rating: "A2",
+        reliability: "A",
+        credibility: 2,
+        description: "OS component - security provided via Windows Update",
+      },
+      justification: `${software.displayName} is a built-in Windows component. Security patches are delivered through Windows Update cumulative updates, not as standalone software versions. Keep your Windows installation current to ensure security.`,
+      sources: ["Windows Update"],
+      cveCount: 0,
+      exploitedCves: [],
+      queriedAt: now,
+      fromCache: false,
+      dataAge: calculateDataFreshness(now, now),
+      hasKevCves: false,
+      sourceResults: [{
+        source: "OS Component",
+        queried: true,
+        cveCount: 0,
+        note: "Patched via Windows Update cumulative updates",
+      }],
+      action: {
+        action: "MONITOR",
+        symbol: "✓",
+        color: "\x1b[32m",  // Green
+        headline: "KEEP WINDOWS UPDATED",
+        message: `${software.displayName} security patches come through Windows Update cumulative updates. Ensure your system receives regular updates.`,
+        urgency: "info",
+      },
+    };
+  }
+
+  // EOL HANDLING - Products that are End of Life
+  if (software.eol) {
+    const now = new Date().toISOString();
+    return {
+      software: softwareInput,
+      displayName: software.displayName,
+      platform: software.platforms.join(", "),
+      minimumSafeVersion: "UNSUPPORTED",
+      recommendedVersion: "Upgrade to supported version",
+      latestVersion: null,  // No latest version for EOL products
+      branches: [],
+      admiraltyRating: {
+        rating: "A1",
+        reliability: "A",
+        credibility: 1,
+        description: "End of Life - no security patches available",
+      },
+      justification: `${software.displayName} has reached End of Life and no longer receives security patches. Any vulnerabilities discovered will NOT be patched. Immediate upgrade to a supported version is required.`,
+      sources: ["EOL Status"],
+      cveCount: 0,
+      exploitedCves: [],
+      queriedAt: now,
+      fromCache: false,
+      dataAge: calculateDataFreshness(now, now),
+      hasKevCves: false,
+      sourceResults: [{
+        source: "EOL Check",
+        queried: true,
+        cveCount: 0,
+        note: "Product is End of Life - no security support",
+      }],
+      action: {
+        action: "UPGRADE_CRITICAL",
+        symbol: "✗",
+        color: "\x1b[31m",  // Red
+        headline: "END OF LIFE - UPGRADE IMMEDIATELY",
+        message: `${software.displayName} is no longer supported. Upgrade to a current version immediately - no security patches are available.`,
+        urgency: "critical",
+      },
+    };
+  }
+
+  // VARIANT HANDLING - Check if this is a product with multiple tracks
+  if (software.variants && software.variants.length > 0) {
+    // Determine the product type for variant handling
+    const isAdobeReader = software.product === "acrobat_reader";
+    const isAdobeAcrobat = software.product === "acrobat" && software.vendor === "adobe";
+    const isPowerShell = software.product === "powershell" && software.vendor === "microsoft" && software.id === "powershell";
+
+    if (isAdobeReader || isAdobeAcrobat || isPowerShell) {
+      if (options.verbose) console.log("Detected product with multiple tracks, gathering variant MSVs...");
+
+      // Get variant info based on product type
+      let variantInfo: VariantInfo;
+      if (isPowerShell) {
+        variantInfo = getPowerShellVariantInfo();
+      } else {
+        variantInfo = getAdobeVariantInfo(isAdobeReader);
+      }
+      variantInfo = await queryVariantMsvs(variantInfo, options, config);
+
+      // Return a special result for variant products
+      const now = new Date().toISOString();
+      return {
+        software: softwareInput,
+        displayName: software.displayName,
+        platform: software.platforms.join(", "),
+        minimumSafeVersion: null,  // No single MSV for variant products
+        recommendedVersion: null,
+        latestVersion: software.latestVersion || null,
+        branches: [],
+        admiraltyRating: {
+          rating: "B2",
+          reliability: "B",
+          credibility: 2,
+          description: "Multiple product tracks - see variants for specific MSVs",
+        },
+        justification: "This product has multiple release tracks. Query specific variant for accurate MSV.",
+        sources: ["Multi-track product"],
+        cveCount: 0,
+        exploitedCves: [],
+        queriedAt: now,
+        fromCache: false,
+        dataAge: calculateDataFreshness(now, now),
+        hasKevCves: false,
+        sourceResults: [],
+        hasVariants: true,
+        variantInfo,
+      };
+    }
+  }
+
   // Initialize cache
   const msvCache = new MsvCache(config.dataDir);
   const productId = `${software.vendor}:${software.product}`.toLowerCase();
@@ -308,7 +723,17 @@ async function queryMSV(
   // Check cache first (unless force refresh)
   if (!options.forceRefresh) {
     const cached = msvCache.get(productId);
-    if (cached && !msvCache.needsRefresh(productId, 24)) {
+
+    // Validate cache entry is complete (not just time-based)
+    // Old cache entries may have empty branches - consider them stale
+    const cacheIsComplete = cached && (
+      // Has branch data with MSV
+      (cached.branches.length > 0 && cached.branches[0].msv !== "unknown") ||
+      // Or has v2 fields with explicit "no vulns" justification
+      (cached.cveCount === 0 && cached.justification?.includes("No CVEs"))
+    );
+
+    if (cached && cacheIsComplete && !msvCache.needsRefresh(productId, 24)) {
       if (options.verbose) console.log("Returning cached MSV result...");
 
       // Build result from cache
@@ -333,17 +758,23 @@ async function queryMSV(
         s === "vendor_advisory" || s === "Vendor Advisory"
       );
 
+      // Use cached cveCount if available, otherwise calculate from advisoriesChecked
+      const cveCount = cached.cveCount !== undefined
+        ? cached.cveCount
+        : cached.branches.reduce((sum, b) => sum + b.advisoriesChecked.length, 0);
+
       const ratingInput: MsvRatingInput = {
         dataSources: cached.dataSources.map(s => {
           if (s === "Vendor Advisory") return "vendor_advisory";
           if (s === "NVD") return "nvd";
           if (s === "CISA KEV") return "cisa_kev";
           if (s === "VulnCheck") return "vulncheck";
+          if (s === "AppThreat") return "appthreat";
           return s as any;
         }),
         hasVendorAdvisory,
-        hasCveData: cached.branches.length > 0,
-        cveCount: cached.branches.reduce((sum, b) => sum + b.advisoriesChecked.length, 0),
+        hasCveData: cveCount > 0 || cached.branches.length > 0,
+        cveCount,
         msvDetermined: minimumSafeVersion !== null,
       };
 
@@ -353,21 +784,93 @@ async function queryMSV(
         cached.branches[0]?.lastChecked
       );
 
+      // Use cached justification or generate meaningful one
+      const admiraltyRating = calculateMsvRating(ratingInput);
+      const justification = cached.justification || generateJustification(
+        minimumSafeVersion,
+        cveCount,
+        cached.hasKevCves || false,
+        cached.dataSources
+      );
+
+      // Build source results from cache - if not available, create placeholders
+      // that indicate the data came from cache without per-source details
+      let sourceResults: SourceResult[];
+      if (cached.sourceResults && cached.sourceResults.length > 0) {
+        sourceResults = cached.sourceResults;
+      } else {
+        // Generate source results from dataSources with note about cache
+        sourceResults = cached.dataSources.map(s => ({
+          source: s,
+          queried: true,
+          cveCount: 0,  // Unknown per-source count from old cache format
+          note: "cached (upgrade cache with --force)",
+        }));
+      }
+
+      // Generate action guidance
+      const branchesWithNoSafeVersion = branches.filter(b => b.noSafeVersion);
+      const actionInput: ActionInput = {
+        currentVersion: null,
+        minimumSafeVersion,
+        recommendedVersion,
+        admiraltyRating,
+        hasKevCves: cached.hasKevCves || false,
+        cveCount,
+        sources: cached.dataSources,
+        vendor: software.vendor,
+        branchesWithNoSafeVersion: branchesWithNoSafeVersion.length > 0 ? branchesWithNoSafeVersion : undefined,
+      };
+
+      // Try to get latest version from catalog or Chocolatey
+      let latestVersion = software.latestVersion || null;
+      if (!latestVersion) {
+        try {
+          const chocoClient = new ChocolateyClient(config.dataDir);
+          const chocoVersion = await chocoClient.getLatestVersion(software.id);
+          if (chocoVersion) {
+            latestVersion = chocoVersion;
+            if (options.verbose) console.log(`Latest version from Chocolatey: ${chocoVersion}`);
+          }
+        } catch {
+          // Chocolatey lookup failed, continue without latest version
+        }
+      }
+
+      // Calculate risk score from cached data
+      const riskScoreInput: RiskScoreInput = {
+        hasKevCves: cached.hasKevCves || false,
+        kevCveCount: cached.hasKevCves ? 1 : 0, // Approximate from cached flag
+        maxEpssScore: 0, // Not available in cache v1
+        avgEpssScore: 0,
+        cveCount,
+        maxCvssScore: 0, // Not available in cache v1
+        avgCvssScore: 0,
+        msvDetermined: minimumSafeVersion !== null,
+        hasPoCExploits: false, // Not tracked in cache v1
+        dataAge: dataAge?.ageHours || 0,
+      };
+
       return {
         software: softwareInput,
         displayName: software.displayName,
         platform: software.platforms.join(", "),
         minimumSafeVersion,
         recommendedVersion,
+        latestVersion,
         branches,
-        admiraltyRating: calculateMsvRating(ratingInput),
-        justification: `Cached result`,
+        admiraltyRating,
+        justification,
         sources: cached.dataSources,
-        cveCount: ratingInput.cveCount,
+        cveCount,
         exploitedCves: [],
         queriedAt: new Date().toISOString(),
         fromCache: true,
         dataAge,
+        hasKevCves: cached.hasKevCves || false,
+        sourceResults,
+        action: generateAction(actionInput),
+        riskScore: calculateRiskScore(riskScoreInput),
       };
     }
   }
@@ -375,10 +878,12 @@ async function queryMSV(
   const evidence: EvidenceSource[] = [];
   const exploitedCves: ExploitedCVE[] = [];
   const sources: string[] = [];
+  const sourceResults: SourceResult[] = [];  // Track per-source results
   const branches: BranchMsvResult[] = [];
   let minimumSafeVersion: string | null = null;   // Lowest safe version
   let recommendedVersion: string | null = null;    // Highest safe version
   let hasVendorAdvisory = false;
+  let hasKevCves = false;  // Track if any CVEs are in KEV
 
   // 1. Try vendor advisory first (most reliable source)
   if (options.verbose) console.log("Checking vendor advisory...");
@@ -394,10 +899,13 @@ async function queryMSV(
 
         // Use vendor advisory branches as primary MSV source
         for (const branch of vendorData.branches) {
+          // Detect if MSV > latest (no safe version available yet in this branch)
+          const noSafeVersion = compareVersions(branch.msv, branch.latest) > 0;
           branches.push({
             branch: branch.branch,
             msv: branch.msv,
             latest: branch.latest,
+            noSafeVersion,
           });
         }
 
@@ -423,12 +931,25 @@ async function queryMSV(
           }
         }
 
+        // Track source result
+        sourceResults.push({
+          source: "Vendor Advisory",
+          queried: true,
+          cveCount: vendorData.advisories.reduce((sum, adv) => sum + adv.cveIds.length, 0),
+        });
+
         if (options.verbose) {
           console.log(`  Found ${vendorData.advisories.length} advisories, ${branches.length} branches`);
         }
       }
     } catch (error) {
       if (options.verbose) console.warn("Vendor advisory fetch failed:", error);
+      sourceResults.push({
+        source: "Vendor Advisory",
+        queried: true,
+        cveCount: 0,
+        note: "fetch failed",
+      });
     }
   }
 
@@ -440,10 +961,24 @@ async function queryMSV(
     if (appThreatClient.isDatabaseAvailable()) {
       if (options.verbose) console.log("Querying AppThreat database (offline)...");
       try {
-        const appThreatResults = await appThreatClient.searchByCpe(software.cpe23, {
+        let appThreatResults = await appThreatClient.searchByCpe(software.cpe23, {
           minCvss: 4.0, // Medium severity and above
           excludeMalware: true,
         });
+
+        // Filter results by version pattern if specified (prevents data contamination)
+        // e.g., PowerShell 7 uses "^[67]\\." to filter out PowerShell Universal (2024.x)
+        if (software.versionPattern && appThreatResults.length > 0) {
+          const versionRegex = new RegExp(software.versionPattern);
+          const originalCount = appThreatResults.length;
+          appThreatResults = appThreatResults.filter(r => {
+            if (!r.fixedVersion) return true;  // Keep CVEs without fixed version
+            return versionRegex.test(r.fixedVersion);
+          });
+          if (options.verbose && originalCount !== appThreatResults.length) {
+            console.log(`  Filtered ${originalCount - appThreatResults.length} CVEs with invalid version patterns`);
+          }
+        }
 
         if (appThreatResults.length > 0) {
           appThreatQueried = true;
@@ -477,13 +1012,32 @@ async function queryMSV(
             cvssScore: maxCvss > 0 ? maxCvss : undefined,
           });
 
+          // Track source result
+          sourceResults.push({
+            source: "AppThreat",
+            queried: true,
+            cveCount: appThreatResults.length,
+          });
+
           if (options.verbose) {
             console.log(`  Found ${appThreatResults.length} CVEs from AppThreat, MSV: ${appThreatMsv}`);
           }
+        } else {
+          sourceResults.push({
+            source: "AppThreat",
+            queried: true,
+            cveCount: 0,
+          });
         }
         appThreatClient.close();
       } catch (error) {
         if (options.verbose) console.warn("AppThreat query failed:", error);
+        sourceResults.push({
+          source: "AppThreat",
+          queried: true,
+          cveCount: 0,
+          note: "query failed",
+        });
       }
     } else if (options.verbose) {
       console.log("AppThreat database not available (run: vdb --download-image)");
@@ -548,12 +1102,31 @@ async function queryMSV(
           });
         }
       }
+
+      // Track source result
+      sourceResults.push({
+        source: "CISA KEV",
+        queried: true,
+        cveCount: kevEntries.length,
+      });
     } else {
       evidence.push({ source: "CISA_KEV", hasData: false });
+      sourceResults.push({
+        source: "CISA KEV",
+        queried: true,
+        cveCount: 0,
+        note: "not in catalog",
+      });
     }
   } catch (error) {
     if (options.verbose) console.warn("CISA KEV query failed:", error);
     evidence.push({ source: "CISA_KEV", hasData: false });
+    sourceResults.push({
+      source: "CISA KEV",
+      queried: true,
+      cveCount: 0,
+      note: "query failed",
+    });
   }
 
   // 3. Query VulnCheck by CPE if API key available and we need more CVE data
@@ -594,12 +1167,30 @@ async function queryMSV(
           hasData: true,
           hasPoc: cpeResults.some(r => r.poc_available),
         });
+
+        // Track source result
+        sourceResults.push({
+          source: "VulnCheck",
+          queried: true,
+          cveCount: cpeResults.length,
+        });
       } else {
         evidence.push({ source: "VulnCheck", hasData: false });
+        sourceResults.push({
+          source: "VulnCheck",
+          queried: true,
+          cveCount: 0,
+        });
       }
     } catch (error) {
       if (options.verbose) console.warn("VulnCheck query failed:", error);
       evidence.push({ source: "VulnCheck", hasData: false });
+      sourceResults.push({
+        source: "VulnCheck",
+        queried: true,
+        cveCount: 0,
+        note: "query failed",
+      });
     }
   }
 
@@ -616,10 +1207,24 @@ async function queryMSV(
       if (nvdCpeResults.length > 0) {
         if (!sources.includes("NVD")) sources.push("NVD");
 
+        // Filter results by version pattern if specified (prevents data contamination)
+        let filteredResults = nvdCpeResults;
+        if (software.versionPattern) {
+          const versionRegex = new RegExp(software.versionPattern);
+          const originalCount = filteredResults.length;
+          filteredResults = filteredResults.filter(r => {
+            if (!r.fixedVersion) return true;  // Keep CVEs without fixed version
+            return versionRegex.test(r.fixedVersion);
+          });
+          if (options.verbose && originalCount !== filteredResults.length) {
+            console.log(`  Filtered ${originalCount - filteredResults.length} NVD CVEs with invalid version patterns`);
+          }
+        }
+
         // Track fixed versions to determine MSV
         const fixedVersions: string[] = [];
 
-        for (const result of nvdCpeResults) {
+        for (const result of filteredResults) {
           exploitedCves.push({
             cve: result.cve,
             description: result.description,
@@ -654,23 +1259,41 @@ async function queryMSV(
           recommendedVersion = minimumSafeVersion;
         }
 
-        const maxCvss = Math.max(...nvdCpeResults.map(r => r.cvssScore || 0));
+        const maxCvss = Math.max(...filteredResults.map(r => r.cvssScore || 0));
         evidence.push({
           source: "NVD",
           hasData: true,
           cvssScore: maxCvss > 0 ? maxCvss : undefined,
         });
 
+        // Track source result
+        sourceResults.push({
+          source: "NVD",
+          queried: true,
+          cveCount: filteredResults.length,
+        });
+
         if (options.verbose) {
-          console.log(`Found ${nvdCpeResults.length} CVEs from NVD (CVSS >= 4.0)`);
+          console.log(`Found ${filteredResults.length} CVEs from NVD (CVSS >= 4.0)`);
         }
       } else {
         evidence.push({ source: "NVD", hasData: false });
+        sourceResults.push({
+          source: "NVD",
+          queried: true,
+          cveCount: 0,
+        });
         if (options.verbose) console.log("No CVEs found in NVD for this CPE");
       }
     } catch (error) {
       if (options.verbose) console.warn("NVD CPE query failed:", error);
       evidence.push({ source: "NVD", hasData: false });
+      sourceResults.push({
+        source: "NVD",
+        queried: true,
+        cveCount: 0,
+        note: "query failed",
+      });
     }
   }
 
@@ -748,9 +1371,52 @@ async function queryMSV(
             cve.epssScore = score.epss;
           }
         }
+
+        // Track source result
+        sourceResults.push({
+          source: "EPSS",
+          queried: true,
+          cveCount: epssScores.length,
+          note: `max score: ${(maxEpss * 100).toFixed(1)}%`,
+        });
+      } else {
+        sourceResults.push({
+          source: "EPSS",
+          queried: true,
+          cveCount: 0,
+        });
       }
     } catch (error) {
       if (options.verbose) console.warn("EPSS query failed:", error);
+      sourceResults.push({
+        source: "EPSS",
+        queried: true,
+        cveCount: 0,
+        note: "query failed",
+      });
+    }
+  }
+
+  // Track KEV CVEs
+  hasKevCves = exploitedCves.some(c => c.inCisaKev);
+
+  // Build source results summary
+  // Add sources that weren't queried
+  const allPossibleSources = ["Vendor Advisory", "AppThreat", "CISA KEV", "VulnCheck", "NVD", "EPSS"];
+  for (const sourceName of allPossibleSources) {
+    if (!sourceResults.find(sr => sr.source === sourceName)) {
+      let note = "not queried";
+      if (sourceName === "VulnCheck" && !config.vulncheckApiKey) {
+        note = "no API key configured";
+      } else if (sourceName === "Vendor Advisory" && !getVendorFetcher(software.vendor, software.product, config.dataDir)) {
+        note = "no fetcher available";
+      }
+      sourceResults.push({
+        source: sourceName,
+        queried: false,
+        cveCount: 0,
+        note,
+      });
     }
   }
 
@@ -772,41 +1438,97 @@ async function queryMSV(
 
   const admiraltyRating = calculateMsvRating(ratingInput);
 
-  // Build justification
-  let justification = admiraltyRating.description;
-  if (exploitedCves.length > 0) {
-    const kevCount = exploitedCves.filter((c) => c.inCisaKev).length;
-    justification += `. Found ${exploitedCves.length} CVEs`;
-    if (kevCount > 0) {
-      justification += ` (${kevCount} actively exploited)`;
-    }
-  }
+  // Build meaningful justification (v2)
+  const justification = generateJustification(
+    minimumSafeVersion,
+    exploitedCves.length,
+    hasKevCves,
+    sources
+  );
 
-  // Update cache with new results
-  if (minimumSafeVersion || branches.length > 0) {
-    const cacheEntry: MsvCacheEntry = {
-      productId,
-      displayName: software.displayName,
-      vendor: software.vendor,
-      branches: branches.map(b => ({
-        branch: b.branch,
-        msv: b.msv,
-        latestKnown: b.latest,
-        lastChecked: new Date().toISOString(),
-        advisoriesChecked: exploitedCves.map(c => c.cve),
-      })),
-      dataSources: sources,
-      confidence: hasVendorAdvisory ? "high" : (exploitedCves.length > 0 ? "medium" : "low"),
-      lastUpdated: new Date().toISOString(),
-    };
+  // Generate action guidance
+  const branchesWithNoSafeVersion = branches.filter(b => b.noSafeVersion);
+  const actionInput: ActionInput = {
+    currentVersion: null,
+    minimumSafeVersion,
+    recommendedVersion,
+    admiraltyRating,
+    hasKevCves,
+    cveCount: exploitedCves.length,
+    sources,
+    vendor: software.vendor,
+    branchesWithNoSafeVersion: branchesWithNoSafeVersion.length > 0 ? branchesWithNoSafeVersion : undefined,
+  };
+  const action = generateAction(actionInput);
 
-    msvCache.update(cacheEntry);
-    if (options.verbose) console.log("Cache updated.");
-  }
+  // Calculate aggregate risk score
+  const kevCveCount = exploitedCves.filter(c => c.inCisaKev).length;
+  const epssScores = exploitedCves.map(c => c.epssScore || 0).filter(s => s > 0);
+  const cvssScores = exploitedCves.map(c => c.cvssScore || 0).filter(s => s > 0);
+
+  const riskScoreInput: RiskScoreInput = {
+    hasKevCves,
+    kevCveCount,
+    maxEpssScore: epssScores.length > 0 ? Math.max(...epssScores) : 0,
+    avgEpssScore: epssScores.length > 0 ? epssScores.reduce((a, b) => a + b, 0) / epssScores.length : 0,
+    cveCount: exploitedCves.length,
+    maxCvssScore: cvssScores.length > 0 ? Math.max(...cvssScores) : 0,
+    avgCvssScore: cvssScores.length > 0 ? cvssScores.reduce((a, b) => a + b, 0) / cvssScores.length : 0,
+    msvDetermined: minimumSafeVersion !== null,
+    hasPoCExploits: exploitedCves.some(c => c.hasPoC),
+    dataAge: 0, // Fresh query
+  };
+  const riskScore = calculateRiskScore(riskScoreInput);
+
+  // Update cache with new results (including v2 fields)
+  const cacheEntry: MsvCacheEntry = {
+    productId,
+    displayName: software.displayName,
+    vendor: software.vendor,
+    branches: branches.length > 0 ? branches.map(b => ({
+      branch: b.branch,
+      msv: b.msv,
+      latestKnown: b.latest,
+      lastChecked: new Date().toISOString(),
+      advisoriesChecked: exploitedCves.map(c => c.cve),
+    })) : [{
+      branch: "default",
+      msv: minimumSafeVersion || "unknown",
+      latestKnown: minimumSafeVersion || "unknown",
+      lastChecked: new Date().toISOString(),
+      advisoriesChecked: exploitedCves.map(c => c.cve),
+    }],
+    dataSources: sources,
+    confidence: hasVendorAdvisory ? "high" : (exploitedCves.length > 0 ? "medium" : "low"),
+    lastUpdated: new Date().toISOString(),
+    // v2 fields
+    justification,
+    cveCount: exploitedCves.length,
+    hasKevCves,
+    sourceResults: sourceResults.filter(sr => sr.queried),
+  };
+
+  msvCache.update(cacheEntry);
+  if (options.verbose) console.log("Cache updated.");
 
   // Fresh data - just queried
   const now = new Date().toISOString();
   const dataAge = calculateDataFreshness(now, now);
+
+  // Try to get latest version from catalog or Chocolatey
+  let latestVersion = software.latestVersion || null;
+  if (!latestVersion) {
+    try {
+      const chocoClient = new ChocolateyClient(config.dataDir);
+      const chocoVersion = await chocoClient.getLatestVersion(software.id);
+      if (chocoVersion) {
+        latestVersion = chocoVersion;
+        if (options.verbose) console.log(`Latest version from Chocolatey: ${chocoVersion}`);
+      }
+    } catch {
+      // Chocolatey lookup failed, continue without latest version
+    }
+  }
 
   return {
     software: softwareInput,
@@ -814,6 +1536,7 @@ async function queryMSV(
     platform: software.platforms.join(", "),
     minimumSafeVersion,
     recommendedVersion,
+    latestVersion,
     branches,
     admiraltyRating,
     justification,
@@ -823,6 +1546,10 @@ async function queryMSV(
     queriedAt: now,
     fromCache: false,
     dataAge,
+    hasKevCves,
+    sourceResults,
+    action,
+    riskScore,
   };
 }
 
@@ -831,68 +1558,164 @@ async function queryMSV(
 // =============================================================================
 
 function formatText(result: MSVResult): string {
-  const color = getRatingColor(result.admiraltyRating);
-  const lines = [
-    `Software: ${result.displayName} (${result.platform})`,
-    `Admiralty Rating: ${color}${result.admiraltyRating.rating}${RESET_COLOR}`,
-    `Justification: ${result.justification}`,
-    `Sources: ${result.sources.join(", ") || "None"}`,
-  ];
+  const lines: string[] = [];
+  const DIM = "\x1b[2m";
+  const BOLD = "\x1b[1m";
+  const CYAN = "\x1b[36m";
+  const YELLOW = "\x1b[33m";
+  const GREEN = "\x1b[32m";
+  const MAGENTA = "\x1b[35m";
 
-  // Insert version info after software name
-  if (result.minimumSafeVersion && result.recommendedVersion) {
-    if (result.minimumSafeVersion === result.recommendedVersion) {
-      // Single version (no branch data)
-      lines.splice(1, 0, `Minimum Safe Version: ${result.minimumSafeVersion}`);
-    } else {
-      // Multiple branches - show both min and recommended
-      lines.splice(1, 0, `Minimum Safe Version: ${result.minimumSafeVersion} (oldest safe)`);
-      lines.splice(2, 0, `Recommended Version: ${result.recommendedVersion} (latest safe)`);
-    }
-  } else if (result.minimumSafeVersion) {
-    lines.splice(1, 0, `Minimum Safe Version: ${result.minimumSafeVersion}`);
-  }
+  // Header
+  lines.push(`${BOLD}Software: ${result.displayName}${RESET_COLOR} (${result.platform})`);
+  lines.push("");
 
-  // Show branch information if available
-  if (result.branches.length > 0) {
+  // VARIANT PRODUCTS - Special handling for products with multiple tracks
+  if (result.hasVariants && result.variantInfo) {
+    lines.push(`${MAGENTA}━━━ MULTIPLE PRODUCT TRACKS ━━━${RESET_COLOR}`);
+    lines.push(`${DIM}This product has multiple release tracks with different MSVs.${RESET_COLOR}`);
     lines.push("");
-    lines.push("Version Branches:");
-    for (const branch of result.branches) {
-      lines.push(`  ${branch.branch}.x: MSV ${branch.msv} (latest: ${branch.latest})`);
+
+    lines.push(`${BOLD}MSV by Track:${RESET_COLOR}`);
+    for (const variant of result.variantInfo.variants) {
+      const msvDisplay = variant.msv
+        ? `${CYAN}${variant.msv}${RESET_COLOR}`
+        : `${YELLOW}Unknown${RESET_COLOR}`;
+      lines.push(`  ${variant.track.padEnd(18)} MSV: ${msvDisplay}`);
+      lines.push(`  ${DIM}${variant.versionPattern}${RESET_COLOR}`);
+      lines.push("");
     }
+
+    // How to identify your track
+    lines.push(`${BOLD}How to Identify Your Track:${RESET_COLOR}`);
+    for (const line of result.variantInfo.trackHelp.split("\n")) {
+      lines.push(`  ${line}`);
+    }
+    lines.push("");
+
+    // Suggest specific query
+    lines.push(`${BOLD}For Accurate MSV:${RESET_COLOR}`);
+    lines.push(`  Query the specific variant you have installed:`);
+    for (const variant of result.variantInfo.variants) {
+      lines.push(`    ${DIM}msv query "${variant.displayName}"${RESET_COLOR}`);
+    }
+    lines.push("");
+
+    // Data freshness footer
+    if (result.dataAge) {
+      const age = formatDataAge(result.dataAge);
+      const indicator = getFreshnessIndicator(result.dataAge);
+      lines.push(`${indicator} Data checked ${age}${result.fromCache ? " (cached)" : ""}`);
+    }
+
+    return lines.join("\n");
   }
 
-  // Show data freshness
+  // MSV Section - ALWAYS show, even if undetermined
+  if (result.minimumSafeVersion) {
+    if (result.minimumSafeVersion === result.recommendedVersion || !result.recommendedVersion) {
+      lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${CYAN}${result.minimumSafeVersion}${RESET_COLOR}`);
+    } else {
+      lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${CYAN}${result.minimumSafeVersion}${RESET_COLOR} ${DIM}(oldest safe)${RESET_COLOR}`);
+      lines.push(`${BOLD}Recommended Version:${RESET_COLOR}  ${CYAN}${result.recommendedVersion}${RESET_COLOR} ${DIM}(latest safe)${RESET_COLOR}`);
+    }
+  } else {
+    // CRITICAL FIX: Always show MSV field, explain why undetermined
+    lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${YELLOW}UNDETERMINED${RESET_COLOR}`);
+    if (result.cveCount === 0) {
+      lines.push(`${DIM}  Reason: No CVEs with CVSS ≥ 4.0 found in vulnerability databases${RESET_COLOR}`);
+    } else {
+      lines.push(`${DIM}  Reason: Found ${result.cveCount} CVEs but could not determine safe version${RESET_COLOR}`);
+    }
+  }
+  // Show latest available version (from catalog)
+  if (result.latestVersion) {
+    lines.push(`${BOLD}Latest Version:${RESET_COLOR}       ${GREEN}${result.latestVersion}${RESET_COLOR} ${DIM}(current release)${RESET_COLOR}`);
+  }
+  lines.push("");
+
+  // Confidence Rating - with inline description
+  const ratingDisplay = formatRatingWithDescription(result.admiraltyRating);
+  lines.push(`${BOLD}Confidence:${RESET_COLOR} ${ratingDisplay}`);
+  lines.push(`${DIM}Reason: ${result.justification}${RESET_COLOR}`);
+  lines.push("");
+
+  // Source Results - show what each source found
+  lines.push(`${BOLD}Sources Queried:${RESET_COLOR}`);
+  if (result.sourceResults && result.sourceResults.length > 0) {
+    for (const sr of result.sourceResults) {
+      const status = sr.queried
+        ? (sr.cveCount > 0 ? `${sr.cveCount} CVEs found` : "0 CVEs found")
+        : (sr.note || "not queried");
+      lines.push(`  ${sr.source.padEnd(12)} ${status}`);
+    }
+  } else {
+    // Fallback to simple source list
+    lines.push(`  ${result.sources.join(", ") || "None"}`);
+  }
+  lines.push("");
+
+  // Branch information if available
+  if (result.branches.length > 0) {
+    lines.push(`${BOLD}Version Branches:${RESET_COLOR}`);
+    for (const branch of result.branches) {
+      if (branch.noSafeVersion) {
+        // Critical warning: MSV > latest means no safe version exists in this branch
+        lines.push(`  ${RED}${branch.branch}.x: NO SAFE VERSION - MSV ${branch.msv} > latest ${branch.latest}${RESET_COLOR}`);
+        lines.push(`    ${DIM}${RED}⚠ Do not use this branch until ${branch.msv} is released${RESET_COLOR}`);
+      } else {
+        lines.push(`  ${branch.branch}.x: MSV ${branch.msv} (latest: ${branch.latest})`);
+      }
+    }
+    lines.push("");
+  }
+
+  // CVE Details (if any)
+  if (result.exploitedCves.length > 0) {
+    const kevCount = result.exploitedCves.filter(c => c.inCisaKev).length;
+    const header = kevCount > 0
+      ? `${BOLD}CVEs Analyzed (${result.cveCount}, ${kevCount} actively exploited):${RESET_COLOR}`
+      : `${BOLD}CVEs Analyzed (${result.cveCount}):${RESET_COLOR}`;
+    lines.push(header);
+
+    for (const cve of result.exploitedCves.slice(0, 10)) {
+      const markers = [];
+      if (cve.inCisaKev) markers.push("\x1b[31mKEV\x1b[0m");
+      if (cve.hasPoC) markers.push("PoC");
+      if (cve.epssScore) markers.push(`EPSS:${(cve.epssScore * 100).toFixed(1)}%`);
+      if (cve.fixedVersion) markers.push(`Fixed:${cve.fixedVersion}`);
+      const markerStr = markers.length > 0 ? ` [${markers.join(", ")}]` : "";
+      lines.push(`  ${cve.cve}${markerStr}`);
+    }
+    if (result.exploitedCves.length > 10) {
+      lines.push(`  ${DIM}... and ${result.exploitedCves.length - 10} more${RESET_COLOR}`);
+    }
+    lines.push("");
+  }
+
+  // Risk Score
+  if (result.riskScore) {
+    lines.push(formatRiskScore(result.riskScore));
+    lines.push("");
+  }
+
+  // ACTION BOX - the most important part
+  if (result.action) {
+    lines.push(formatActionBox(result.action));
+  }
+
+  // Data freshness footer
   if (result.dataAge) {
     const age = formatDataAge(result.dataAge);
     const indicator = getFreshnessIndicator(result.dataAge);
 
     if (result.dataAge.isCritical) {
-      lines.push("");
       lines.push(`${indicator} - Data last checked ${age}`);
-      lines.push(`  Run with --force to refresh vulnerability data`);
+      lines.push(`${DIM}  Run with --force to refresh vulnerability data${RESET_COLOR}`);
     } else if (result.dataAge.isStale) {
-      lines.push("");
       lines.push(`${indicator} - Last checked ${age}`);
-    } else if (result.fromCache) {
-      lines.push("");
+    } else {
       lines.push(`${indicator} Data checked ${age}${result.fromCache ? " (cached)" : ""}`);
-    }
-  }
-
-  if (result.exploitedCves.length > 0) {
-    lines.push("");
-    lines.push(`CVEs Analyzed (${result.cveCount}):`);
-    for (const cve of result.exploitedCves.slice(0, 10)) {
-      const markers = [];
-      if (cve.inCisaKev) markers.push("KEV");
-      if (cve.hasPoC) markers.push("PoC");
-      if (cve.epssScore) markers.push(`EPSS:${(cve.epssScore * 100).toFixed(1)}%`);
-      if (cve.fixedVersion) markers.push(`Fixed:${cve.fixedVersion}`);
-      lines.push(`  - ${cve.cve} [${markers.join(", ")}]`);
-    }
-    if (result.exploitedCves.length > 10) {
-      lines.push(`  ... and ${result.exploitedCves.length - 10} more`);
     }
   }
 
@@ -925,13 +1748,17 @@ function formatMarkdown(result: MSVResult): string {
     `| Platform | ${result.platform} |`,
     `| **Minimum Safe Version** | **${result.minimumSafeVersion || "Unknown"}** |`,
     `| **Recommended Version** | **${result.recommendedVersion || result.minimumSafeVersion || "Unknown"}** |`,
+    `| **Latest Version** | ${result.latestVersion || "N/A"} |`,
     `| Admiralty Rating | **${result.admiraltyRating.rating}** |`,
+    `| Risk Score | **${result.riskScore?.score || 0}/100 ${result.riskScore?.level || "INFO"}** |`,
     `| CVE Count | ${result.cveCount} |`,
     `| Sources | ${result.sources.join(", ")} |`,
     `| Data Freshness | ${dataStatus} |`,
     "",
     `**Justification:** ${result.justification}`,
-  ];
+    "",
+    result.riskScore ? `**Risk Recommendation:** ${result.riskScore.recommendation}` : "",
+  ].filter(Boolean);
 
   // Show branch information
   if (result.branches.length > 0) {
@@ -963,6 +1790,61 @@ function formatMarkdown(result: MSVResult): string {
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Format batch results as CSV for Excel/spreadsheet import
+ * Columns: Software, Display Name, Platform, MSV, Recommended, Latest,
+ *          CVE Count, Has KEV, Risk Score, Risk Level, Confidence, Action, Data Age
+ */
+function formatBatchCSV(results: MSVResult[]): string {
+  const headers = [
+    "Software",
+    "Display Name",
+    "Platform",
+    "Minimum Safe Version",
+    "Recommended Version",
+    "Latest Version",
+    "CVE Count",
+    "Has KEV",
+    "Risk Score",
+    "Risk Level",
+    "Confidence Rating",
+    "Action",
+    "Action Message",
+    "Data Age (hours)",
+  ];
+
+  const rows = results.map(result => {
+    // Escape CSV values (wrap in quotes if contains comma, quote, or newline)
+    const escape = (val: string | null | undefined): string => {
+      if (val === null || val === undefined) return "";
+      const str = String(val);
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    return [
+      escape(result.software),
+      escape(result.displayName),
+      escape(result.platform),
+      escape(result.minimumSafeVersion),
+      escape(result.recommendedVersion),
+      escape(result.latestVersion),
+      result.cveCount.toString(),
+      result.hasKevCves ? "Yes" : "No",
+      result.riskScore?.score?.toString() || "0",
+      escape(result.riskScore?.level || "INFO"),
+      escape(result.admiraltyRating?.rating),
+      escape(result.action?.action),
+      escape(result.action?.message),
+      result.dataAge?.ageHours?.toString() || "0",
+    ].join(",");
+  });
+
+  return [headers.join(","), ...rows].join("\n");
 }
 
 // =============================================================================
@@ -1014,16 +1896,56 @@ async function cmdBatch(
     }
   }
 
+  // Apply filter if specified
+  let filteredResults = results;
+  const filter = options.filter || "all";
+
+  if (filter !== "all") {
+    filteredResults = results.filter((r) => {
+      switch (filter) {
+        case "kev":
+          // Only products with CISA KEV CVEs
+          return r.hasKevCves || r.exploitedCves?.some(c => c.inCisaKev);
+        case "urgent":
+          // KEV CVEs OR high CVE count (>20) OR undetermined with CVEs
+          const hasKev = r.hasKevCves || r.exploitedCves?.some(c => c.inCisaKev);
+          const highCveCount = r.cveCount > 20;
+          const undeterminedWithCves = !r.minimumSafeVersion && r.cveCount > 0;
+          return hasKev || highCveCount || undeterminedWithCves;
+        case "stale":
+          // Products with stale data (>7 days)
+          return r.dataAge?.isStale || r.dataAge?.isCritical;
+        case "undetermined":
+          // Products where MSV could not be determined
+          return !r.minimumSafeVersion || r.minimumSafeVersion === "UNDETERMINED";
+        default:
+          return true;
+      }
+    });
+
+    // Show filter summary
+    const CYAN = "\x1b[36m";
+    const RESET = "\x1b[0m";
+    const DIM = "\x1b[2m";
+    console.log(`${CYAN}Filter: ${filter}${RESET} ${DIM}(${filteredResults.length}/${results.length} products)${RESET}\n`);
+  }
+
   if (options.format === "json") {
-    console.log(JSON.stringify(results, null, 2));
+    console.log(JSON.stringify(filteredResults, null, 2));
+  } else if (options.format === "csv") {
+    // CSV format - ideal for Excel/spreadsheet import
+    console.log(formatBatchCSV(filteredResults));
   } else if (options.format === "markdown") {
     console.log("# MSV Batch Results\n");
-    for (const result of results) {
+    if (filter !== "all") {
+      console.log(`> **Filter:** ${filter} (${filteredResults.length}/${results.length} products)\n`);
+    }
+    for (const result of filteredResults) {
       console.log(formatMarkdown(result));
       console.log("\n---\n");
     }
   } else {
-    for (const result of results) {
+    for (const result of filteredResults) {
       console.log(formatText(result));
       console.log("\n" + "=".repeat(60) + "\n");
     }
@@ -1118,6 +2040,7 @@ async function cmdCheck(
           currentVersion: item.currentVersion || null,
           minimumSafeVersion: null,
           recommendedVersion: null,
+          latestVersion: null,
           status: "NOT_FOUND",
           action: "investigate",
           actionMessage: discovery.message,
@@ -1133,6 +2056,7 @@ async function cmdCheck(
           currentVersion: item.currentVersion || null,
           minimumSafeVersion: null,
           recommendedVersion: null,
+          latestVersion: null,
           status: "NOT_FOUND",
           action: "investigate",
           actionMessage: discovery.message,
@@ -1161,6 +2085,7 @@ async function cmdCheck(
         currentVersion: item.currentVersion || null,
         minimumSafeVersion: msvResult.minimumSafeVersion,
         recommendedVersion: msvResult.recommendedVersion,
+        latestVersion: msvResult.latestVersion,
         status: compliance.status,
         action: compliance.action,
         actionMessage: compliance.message,
@@ -1183,6 +2108,7 @@ async function cmdCheck(
         currentVersion: item.currentVersion || null,
         minimumSafeVersion: null,
         recommendedVersion: null,
+        latestVersion: null,
         status: "ERROR",
         action: "investigate",
         actionMessage: "Query failed",
@@ -1452,16 +2378,18 @@ To install, run:
   }
 
   const size = client.getDatabaseSize();
-  const needsUpdate = client.needsUpdate();
+  const ageHours = client.getDatabaseAgeHours();
+  const needsUpdate = ageHours === null || ageHours > 48;
   const metadata = client.getMetadata();
 
   const statusColor = needsUpdate ? "\x1b[33m" : "\x1b[32m";
   const statusText = needsUpdate ? "NEEDS UPDATE" : "UP TO DATE";
+  const ageText = ageHours !== null ? `${Math.round(ageHours)} hours ago` : "Unknown";
 
   console.log(`Status:        ${statusColor}${statusText}${RESET_COLOR}
 Database Size: ${size.totalMB} MB (data: ${Math.round(size.dataSize / (1024 * 1024))} MB, index: ${Math.round(size.indexSize / (1024 * 1024))} MB)
-Last Modified: ${metadata?.createdUtc?.split("T")[0] || "Unknown"}
-Max Age:       7 days
+Last Modified: ${metadata?.createdUtc?.split("T")[0] || "Unknown"} (${ageText})
+Auto-Update:   48 hours (updates automatically when querying)
 Location:      ${join(homedir(), "AppData", "Local", "vdb", "vdb")}
 
 Data Sources:
@@ -1516,7 +2444,7 @@ async function cmdDbUpdate(): Promise<void> {
   });
 }
 
-const MSV_VERSION = "1.1.0";
+const MSV_VERSION = "1.2.0";
 
 function showHelp(): void {
   console.log(`
@@ -1541,9 +2469,9 @@ COMMANDS:
   db update            Download/update AppThreat database
   help                 Show this help message
 
-SUPPORTED SOFTWARE (133+ products):
+SUPPORTED SOFTWARE (135+ products):
   Browsers           Chrome, Edge, Firefox, Brave, Opera
-  PDF                Adobe Acrobat DC/2024/2020, Reader DC/2020, Foxit
+  PDF                Adobe Acrobat DC/2024/2020, Reader DC/2020/2024, Foxit
   Remote Access      PuTTY suite (8 tools), WinSCP, TeamViewer, AnyDesk
   Monitoring         SolarWinds Orion (NPM, SAM, NCM, NTA, IPAM, VMAN, DPA)
                      Serv-U, Web Help Desk, DameWare, Engineer's Toolset
@@ -1554,6 +2482,40 @@ SUPPORTED SOFTWARE (133+ products):
   Web Servers        Apache, nginx, Tomcat, IIS
   Security           KeePass, Bitwarden, 1Password, Malwarebytes
   Adobe Enterprise   ColdFusion (15 KEV), Commerce/Magento, Experience Manager
+
+ADOBE ACROBAT READER TRACKS:
+  Adobe has multiple release tracks with DIFFERENT MSVs:
+
+  Continuous (DC)    Auto-updates, versions like 24.005.20320
+                     Query: msv query "Reader DC" or "Acrobat Reader DC"
+
+  Classic 2024       Quarterly updates, versions like 24.001.30159
+                     Query: msv query "Reader 2024" or "Acrobat Reader 2024"
+
+  Classic 2020       EOL 2025, versions like 20.005.30636
+                     Query: msv query "Reader 2020" or "Acrobat Reader 2020"
+
+  To identify: Help → About in Reader/Acrobat shows version number.
+  If you query generic "Adobe Acrobat Reader", MSV shows all tracks.
+
+POWERSHELL VERSIONS:
+  Windows has multiple PowerShell products:
+
+  Windows PowerShell 5.1   Built-in, updated via Windows Update
+                           Versions like 5.1.26100.7462 (tied to OS build)
+                           Query: msv query "Windows PowerShell"
+
+  PowerShell 6 (EOL)       END OF LIFE since September 2020
+                           NO SECURITY PATCHES - Upgrade to 7 immediately!
+                           Query: msv query "PowerShell 6"
+
+  PowerShell 7             Standalone cross-platform installation
+                           LTS: 7.4.x (EOL Nov 2026), Current: 7.5.x (EOL May 2026)
+                           Query: msv query "PowerShell 7" or "pwsh"
+                           Update via: winget, MSI, or Microsoft Update
+
+  To identify: Run $PSVersionTable.PSVersion in PowerShell
+  If you query generic "PowerShell", MSV shows all variants.
 
 CHECK COMMAND:
   The 'check' command accepts input in multiple formats:
@@ -1571,6 +2533,9 @@ CHECK COMMAND:
 
 OPTIONS:
   --format <type>      Output format: text (default), json, markdown, csv
+  --filter <type>      Filter batch results: kev, urgent, stale, undetermined, all
+                       kev = Only CISA KEV CVEs, urgent = KEV + high CVE count,
+                       stale = Old data, undetermined = No MSV determined
   --verbose            Show detailed query progress
   --force              Force cache refresh
   --auto-add           Auto-add unknown Windows software to catalog
@@ -1582,6 +2547,9 @@ EXAMPLES:
   msv query "Google Chrome"
   msv query "SolarWinds Serv-U" --format json
   msv query "Adobe Acrobat DC"
+  msv batch inventory.txt --filter kev          # Only KEV-affected products
+  msv batch inventory.txt --filter urgent       # KEV + high CVE count
+  msv batch inventory.txt --filter undetermined # Products needing manual review
   msv check "Chrome 120.0.1, PuTTY 0.80, Wireshark 4.2.0"
   msv check inventory.csv --format markdown
   msv stats
@@ -1638,6 +2606,7 @@ async function main(): Promise<void> {
   let category: string | undefined;
   let autoAdd = false;
   let inputFormat: "csv" | "json" | "list" | undefined;
+  let filter: BatchFilter | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -1647,6 +2616,9 @@ async function main(): Promise<void> {
       options.verbose = true;
     } else if (arg === "--force" || arg === "-f") {
       options.forceRefresh = true;
+    } else if (arg === "--filter" && args[i + 1]) {
+      filter = args[++i] as BatchFilter;
+      options.filter = filter;
     } else if (arg === "--category" && args[i + 1]) {
       category = args[++i];
     } else if (arg === "--auto-add") {
@@ -1664,6 +2636,37 @@ async function main(): Promise<void> {
 
   const command = positionalArgs[0];
   const config = getConfig();
+
+  // Auto-update AppThreat database if older than 48 hours
+  // Skip for commands that don't need the database
+  const skipAutoUpdate = ["help", "--help", "stats", "list", "db"].includes(command);
+  if (!skipAutoUpdate) {
+    const appThreatClient = new AppThreatClient();
+    const ageHours = appThreatClient.getDatabaseAgeHours();
+
+    if (ageHours === null) {
+      // Database not installed - attempt auto-download
+      console.log("\x1b[33mAppThreat database not found. Attempting download...\x1b[0m");
+      const downloaded = await appThreatClient.ensureFreshDatabase(0, true);
+      if (downloaded) {
+        console.log("\x1b[32mDatabase installed successfully!\x1b[0m\n");
+      } else {
+        console.log("\n\x1b[33mMSV will continue without offline vulnerability data.\x1b[0m");
+        console.log("\x1b[2mOnline sources (CISA KEV, NVD) will still be queried.\x1b[0m\n");
+      }
+    } else if (ageHours > 48) {
+      // Database is stale - auto-update
+      console.log(`\x1b[2mAppThreat database is ${Math.round(ageHours)} hours old, updating...\x1b[0m`);
+      // Always show verbose output on failure so users see installation instructions
+      const updated = await appThreatClient.ensureFreshDatabase(48, true);
+      if (updated) {
+        console.log("\x1b[32mDatabase updated successfully.\x1b[0m\n");
+      } else {
+        console.log("\x1b[33mDatabase update failed, continuing with cached data.\x1b[0m");
+        console.log("\x1b[2mSee installation instructions above.\x1b[0m\n");
+      }
+    }
+  }
 
   try {
     switch (command) {

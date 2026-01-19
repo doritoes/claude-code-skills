@@ -47,6 +47,7 @@ export interface ComplianceResult {
   currentVersion: string | null;
   minimumSafeVersion: string | null;
   recommendedVersion: string | null;
+  latestVersion: string | null;  // Latest available version from Chocolatey/vendor
   status: ComplianceStatus;
   action: ActionRequired;
   actionMessage: string;
@@ -327,7 +328,11 @@ export function formatComplianceText(result: ComplianceResult): string {
     lines.push(`   MSV: ${result.minimumSafeVersion}`);
   }
 
-  if (result.recommendedVersion && result.recommendedVersion !== result.minimumSafeVersion) {
+  if (result.latestVersion) {
+    lines.push(`   Latest: \x1b[32m${result.latestVersion}\x1b[0m`);
+  }
+
+  if (result.recommendedVersion && result.recommendedVersion !== result.minimumSafeVersion && result.recommendedVersion !== result.latestVersion) {
     lines.push(`   Recommended: ${result.recommendedVersion}`);
   }
 

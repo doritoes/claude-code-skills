@@ -4,7 +4,7 @@
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
     "lastUpdated": "2026-01-13T00:00:00Z",
     "lastChecked": "2026-01-13T00:00:00Z",
-    "totalEntries": 134,
+    "totalEntries": 153,
     "sources": [
       "CISA KEV Catalog (top vulnerable products)",
       "Enterprise patch management catalogs",
@@ -118,16 +118,17 @@
     },
     {
       "id": "acrobat",
-      "displayName": "Adobe Acrobat Reader",
+      "displayName": "Adobe Acrobat Reader (All Variants)",
       "vendor": "adobe",
       "product": "acrobat_reader",
       "cpe23": "cpe:2.3:a:adobe:acrobat_reader:*:*:*:*:*:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["adobe reader", "acrobat reader", "pdf reader", "acrobat"],
+      "aliases": ["adobe reader", "acrobat reader", "pdf reader"],
       "platforms": ["windows", "server"],
-      "notes": "76 Adobe CVEs in KEV. Primary PDF reader in enterprise.",
-      "lastChecked": "2026-01-13"
+      "notes": "76 Adobe CVEs in KEV. Use specific variant (Reader DC, Reader 2020, Reader 2024) for accurate MSV.",
+      "lastChecked": "2026-01-19",
+      "variants": ["acrobat_reader_dc", "acrobat_reader_2020", "acrobat_reader_2024"]
     },
     {
       "id": "acrobat_pro",
@@ -490,8 +491,10 @@
       "priority": "high",
       "aliases": ["python3", "python 3"],
       "platforms": ["windows", "server"],
-      "notes": "Python interpreter. Multiple version branches.",
-      "lastChecked": "2026-01-13"
+      "notes": "Python interpreter. LTS: 3.12.x, Current: 3.13.x",
+      "lastChecked": "2026-01-19",
+      "versionPattern": "^3\\.",
+      "latestVersion": "3.13.1"
     },
     {
       "id": "git",
@@ -503,8 +506,10 @@
       "priority": "high",
       "aliases": ["git", "git scm"],
       "platforms": ["windows", "server"],
-      "notes": "Version control. Includes Git Bash.",
-      "lastChecked": "2026-01-13"
+      "notes": "Version control. Includes Git Bash. Current: 2.47.x",
+      "lastChecked": "2026-01-19",
+      "versionPattern": "^2\\.",
+      "latestVersion": "2.47.1"
     },
     {
       "id": "filezilla",
@@ -568,8 +573,9 @@
       "priority": "critical",
       "aliases": ["flash", "flash player", "adobe flash"],
       "platforms": ["windows"],
-      "notes": "DEPRECATED/EOL. 33 CVEs in KEV. Remove if found.",
-      "lastChecked": "2026-01-13"
+      "notes": "END OF LIFE (Dec 2020). 33 CVEs in KEV. Remove immediately if found.",
+      "lastChecked": "2026-01-19",
+      "eol": true
     },
     {
       "id": "silverlight",
@@ -578,11 +584,12 @@
       "product": "silverlight",
       "cpe23": "cpe:2.3:a:microsoft:silverlight:*:*:*:*:*:*:*:*",
       "category": "plugin",
-      "priority": "high",
+      "priority": "critical",
       "aliases": ["silverlight"],
       "platforms": ["windows"],
-      "notes": "DEPRECATED/EOL. Remove if found.",
-      "lastChecked": "2026-01-13"
+      "notes": "END OF LIFE (Oct 2021). Remove immediately if found.",
+      "lastChecked": "2026-01-19",
+      "eol": true
     },
     {
       "id": "citrix_workspace",
@@ -880,8 +887,10 @@
       "priority": "critical",
       "aliases": ["open ssl"],
       "platforms": ["windows", "server"],
-      "notes": "Crypto library. Heartbleed, etc.",
-      "lastChecked": "2026-01-13"
+      "notes": "Crypto library. LTS: 3.0.x (EOL Sep 2026), Current: 3.4.x. Filter out pyOpenSSL contamination.",
+      "lastChecked": "2026-01-19",
+      "versionPattern": "^[013]\\.",
+      "latestVersion": "3.4.0"
     },
     {
       "id": "postgresql",
@@ -1010,8 +1019,10 @@
       "priority": "high",
       "aliases": ["docker", "docker desktop"],
       "platforms": ["windows"],
-      "notes": "Container platform.",
-      "lastChecked": "2026-01-13"
+      "notes": "Container platform. Current: 4.36.x. Filter out Windows Remote Desktop contamination.",
+      "lastChecked": "2026-01-19",
+      "versionPattern": "^4\\.",
+      "latestVersion": "4.36.0"
     },
     {
       "id": "virtualbox",
@@ -1067,16 +1078,60 @@
     },
     {
       "id": "powershell",
-      "displayName": "PowerShell",
+      "displayName": "PowerShell (All Variants)",
       "vendor": "microsoft",
       "product": "powershell",
       "cpe23": "cpe:2.3:a:microsoft:powershell:*:*:*:*:*:*:*:*",
       "category": "shell",
       "priority": "high",
-      "aliases": ["powershell core", "pwsh"],
+      "aliases": ["powershell", "ps"],
       "platforms": ["windows", "server"],
-      "notes": "PowerShell 7+. Separate from Windows PowerShell.",
-      "lastChecked": "2026-01-13"
+      "notes": "Use specific variant: 'windows powershell' for 5.1 (OS-built-in), 'powershell 6' (EOL), or 'powershell 7' for current standalone.",
+      "lastChecked": "2026-01-19",
+      "variants": ["windows_powershell", "powershell6", "powershell7"]
+    },
+    {
+      "id": "windows_powershell",
+      "displayName": "Windows PowerShell 5.1",
+      "vendor": "microsoft",
+      "product": "windows_powershell",
+      "cpe23": "cpe:2.3:a:microsoft:windows_powershell:5.1*:*:*:*:*:*:*:*",
+      "category": "shell",
+      "priority": "high",
+      "aliases": ["windows powershell", "powershell 5.1", "powershell 5", "built-in powershell"],
+      "platforms": ["windows", "server"],
+      "notes": "OS COMPONENT: Updated via Windows Update only. Cannot track independent MSV - keep Windows patched. CVE-2025-54100 (Invoke-WebRequest) patched in Dec 2025 cumulative update.",
+      "lastChecked": "2026-01-19",
+      "osComponent": true
+    },
+    {
+      "id": "powershell6",
+      "displayName": "PowerShell 6 (EOL)",
+      "vendor": "microsoft",
+      "product": "powershell",
+      "cpe23": "cpe:2.3:a:microsoft:powershell:6*:*:*:*:*:*:*:*",
+      "category": "shell",
+      "priority": "critical",
+      "aliases": ["powershell 6", "powershell core 6", "ps6"],
+      "platforms": ["windows", "server"],
+      "notes": "END OF LIFE (Sep 2020). First cross-platform PowerShell. Upgrade to PowerShell 7 immediately - no security patches available.",
+      "lastChecked": "2026-01-19",
+      "versionPattern": "^6\\.",
+      "eol": true
+    },
+    {
+      "id": "powershell7",
+      "displayName": "PowerShell 7",
+      "vendor": "microsoft",
+      "product": "powershell",
+      "cpe23": "cpe:2.3:a:microsoft:powershell:7*:*:*:*:*:*:*:*",
+      "category": "shell",
+      "priority": "high",
+      "aliases": ["powershell 7", "powershell core", "pwsh", "ps7"],
+      "platforms": ["windows", "server"],
+      "notes": "Standalone cross-platform PowerShell. LTS: 7.4.x (EOL Nov 2026), Current: 7.5.x (EOL May 2026). Separate from Windows PowerShell 5.1.",
+      "lastChecked": "2026-01-19",
+      "versionPattern": "^7\\."
     },
     {
       "id": "openssh",
@@ -1257,8 +1312,9 @@
       "priority": "high",
       "aliases": ["nvidia driver", "geforce driver"],
       "platforms": ["windows", "server"],
-      "notes": "GPU driver. Kernel-level access.",
-      "lastChecked": "2026-01-13"
+      "latestVersion": "591.74",
+      "notes": "GPU driver. Kernel-level access. Latest: 591.74 WHQL (Jan 2026).",
+      "lastChecked": "2026-01-19"
     },
     {
       "id": "amd_driver",
@@ -1716,6 +1772,19 @@
       "lastChecked": "2026-01-13"
     },
     {
+      "id": "acrobat_reader_2024",
+      "displayName": "Adobe Acrobat Reader 2024",
+      "vendor": "adobe",
+      "product": "acrobat_reader",
+      "cpe23": "cpe:2.3:a:adobe:acrobat_reader:24.*:*:*:*:classic:*:*:*",
+      "category": "pdf",
+      "priority": "critical",
+      "aliases": ["reader 2024", "adobe reader 2024", "acrobat reader 2024"],
+      "platforms": ["windows", "server"],
+      "notes": "Free PDF reader. Classic track 2024 (perpetual license). Quarterly updates.",
+      "lastChecked": "2026-01-19"
+    },
+    {
       "id": "adobe_coldfusion",
       "displayName": "Adobe ColdFusion",
       "vendor": "adobe",
@@ -1752,7 +1821,190 @@
       "aliases": ["magento", "adobe commerce", "magento commerce"],
       "platforms": ["windows", "server"],
       "notes": "CRITICAL: Multiple CVEs in CISA KEV. E-commerce platform. Handles payment data.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-19",
+      "versionPattern": "^2\\."
+    },
+    {
+      "id": "exchange_server",
+      "displayName": "Microsoft Exchange Server",
+      "vendor": "microsoft",
+      "product": "exchange_server",
+      "cpe23": "cpe:2.3:a:microsoft:exchange_server:*:*:*:*:*:*:*:*",
+      "category": "email",
+      "priority": "critical",
+      "aliases": ["exchange", "ms exchange", "exchange server", "microsoft exchange"],
+      "platforms": ["server"],
+      "notes": "CRITICAL: 16 CVEs in CISA KEV. ProxyLogon, ProxyShell, ProxyNotShell. Enterprise email server.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "weblogic",
+      "displayName": "Oracle WebLogic Server",
+      "vendor": "oracle",
+      "product": "weblogic_server",
+      "cpe23": "cpe:2.3:a:oracle:weblogic_server:*:*:*:*:*:*:*:*",
+      "category": "webserver",
+      "priority": "critical",
+      "aliases": ["weblogic", "oracle weblogic", "weblogic server"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 11 CVEs in CISA KEV. Java application server. Deserialization RCE vulnerabilities.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "sap_netweaver",
+      "displayName": "SAP NetWeaver",
+      "vendor": "sap",
+      "product": "netweaver",
+      "cpe23": "cpe:2.3:a:sap:netweaver:*:*:*:*:*:*:*:*",
+      "category": "erp",
+      "priority": "critical",
+      "aliases": ["netweaver", "sap nw", "sap netweaver"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 10 CVEs in CISA KEV. ERP platform. Business-critical systems.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "vcenter_server",
+      "displayName": "VMware vCenter Server",
+      "vendor": "vmware",
+      "product": "vcenter_server",
+      "cpe23": "cpe:2.3:a:vmware:vcenter_server:*:*:*:*:*:*:*:*",
+      "category": "virtualization",
+      "priority": "critical",
+      "aliases": ["vcenter", "vmware vcenter", "vcenter server"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 9 CVEs in CISA KEV. Virtualization management. Full infrastructure access.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "apache_struts",
+      "displayName": "Apache Struts",
+      "vendor": "apache",
+      "product": "struts",
+      "cpe23": "cpe:2.3:a:apache:struts:*:*:*:*:*:*:*:*",
+      "category": "framework",
+      "priority": "critical",
+      "aliases": ["struts", "apache struts", "struts2"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 7 CVEs in CISA KEV. Java web framework. Equifax breach vector (CVE-2017-5638).",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "sharepoint_server",
+      "displayName": "Microsoft SharePoint Server",
+      "vendor": "microsoft",
+      "product": "sharepoint_server",
+      "cpe23": "cpe:2.3:a:microsoft:sharepoint_server:*:*:*:*:*:*:*:*",
+      "category": "collaboration",
+      "priority": "critical",
+      "aliases": ["sharepoint", "ms sharepoint", "sharepoint server"],
+      "platforms": ["server"],
+      "notes": "CRITICAL: 7 CVEs in CISA KEV. Enterprise collaboration. RCE and privilege escalation.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "ivanti_connect_secure",
+      "displayName": "Ivanti Connect Secure",
+      "vendor": "ivanti",
+      "product": "connect_secure",
+      "cpe23": "cpe:2.3:a:ivanti:connect_secure:*:*:*:*:*:*:*:*",
+      "category": "vpn",
+      "priority": "critical",
+      "aliases": ["ivanti vpn", "pulse secure", "pulse connect secure", "ivanti pulse"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 7+ CVEs in CISA KEV. VPN infrastructure. Primary APT target.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "manageengine",
+      "displayName": "Zoho ManageEngine",
+      "vendor": "zoho",
+      "product": "manageengine",
+      "cpe23": "cpe:2.3:a:zoho:manageengine:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": ["manageengine", "zoho manageengine", "manage engine"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 6 CVEs in CISA KEV. IT management suite. Multiple products affected.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "confluence",
+      "displayName": "Atlassian Confluence",
+      "vendor": "atlassian",
+      "product": "confluence",
+      "cpe23": "cpe:2.3:a:atlassian:confluence:*:*:*:*:*:*:*:*",
+      "category": "collaboration",
+      "priority": "critical",
+      "aliases": ["confluence", "atlassian confluence", "confluence server"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 5 CVEs in CISA KEV. Enterprise wiki. Data Center and Server editions.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "veeam_backup",
+      "displayName": "Veeam Backup & Replication",
+      "vendor": "veeam",
+      "product": "backup_and_replication",
+      "cpe23": "cpe:2.3:a:veeam:backup_and_replication:*:*:*:*:*:*:*:*",
+      "category": "backup",
+      "priority": "critical",
+      "aliases": ["veeam", "veeam backup", "vbr", "veeam b&r"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 4 CVEs in CISA KEV. Backup infrastructure. Ransomware deletes backups first.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "trend_micro_apex_one",
+      "displayName": "Trend Micro Apex One",
+      "vendor": "trendmicro",
+      "product": "apex_one",
+      "cpe23": "cpe:2.3:a:trendmicro:apex_one:*:*:*:*:*:*:*:*",
+      "category": "security",
+      "priority": "critical",
+      "aliases": ["apex one", "trend micro apex", "officescan"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 4 CVEs in CISA KEV. Endpoint security. Privilege escalation to disable protection.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "ivanti_epm",
+      "displayName": "Ivanti Endpoint Manager",
+      "vendor": "ivanti",
+      "product": "endpoint_manager",
+      "cpe23": "cpe:2.3:a:ivanti:endpoint_manager:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": ["ivanti epm", "landesk", "ivanti endpoint", "epm"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 4 CVEs in CISA KEV. Device management. Mass deployment attack vector.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "crushftp",
+      "displayName": "CrushFTP",
+      "vendor": "crushftp",
+      "product": "crushftp",
+      "cpe23": "cpe:2.3:a:crushftp:crushftp:*:*:*:*:*:*:*:*",
+      "category": "file_transfer",
+      "priority": "critical",
+      "aliases": ["crush ftp", "crushftp server"],
+      "platforms": ["windows", "server"],
+      "notes": "CRITICAL: 3 CVEs in CISA KEV. MFT server. Actively exploited for data exfiltration.",
+      "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "vmware_esxi",
+      "displayName": "VMware ESXi",
+      "vendor": "vmware",
+      "product": "esxi",
+      "cpe23": "cpe:2.3:o:vmware:esxi:*:*:*:*:*:*:*:*",
+      "category": "virtualization",
+      "priority": "critical",
+      "aliases": ["esxi", "vmware esxi", "vsphere esxi"],
+      "platforms": ["server"],
+      "notes": "CRITICAL: 3 CVEs in CISA KEV. Hypervisor. Direct VM compromise and ransomware encryption.",
+      "lastChecked": "2026-01-19"
     }
   ]
 }

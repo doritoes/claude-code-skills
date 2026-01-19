@@ -563,6 +563,173 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
 }
 
 // =============================================================================
+// Apache Tomcat Advisory Fetcher
+// =============================================================================
+
+export class TomcatAdvisoryFetcher extends VendorAdvisoryFetcher {
+  // Active Tomcat branches - 9.0, 10.1, and 11.0
+  private readonly branches = ["9", "10", "11"];
+  private readonly securityBaseUrl = "https://tomcat.apache.org/security";
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cached = this.getCache("tomcat");
+    if (cached) return cached;
+
+    const allAdvisories: SecurityAdvisory[] = [];
+    const branchMsvs: BranchMsv[] = [];
+
+    // Fetch security pages for each active branch
+    for (const branch of this.branches) {
+      try {
+        const url = `${this.securityBaseUrl}-${branch}.html`;
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const html = await response.text();
+        const { advisories, msv, latest } = this.parseBranchPage(html, branch);
+
+        allAdvisories.push(...advisories);
+
+        if (msv) {
+          branchMsvs.push({
+            branch: `${branch}.x`,
+            msv,
+            latest: latest || msv,
+          });
+        }
+      } catch {
+        // Branch page may not exist or network error
+      }
+    }
+
+    // Sort branches descending
+    branchMsvs.sort((a, b) => this.compareVersions(b.branch, a.branch));
+
+    const result: VendorAdvisoryResult = {
+      vendor: "apache",
+      product: "tomcat",
+      advisories: allAdvisories,
+      branches: branchMsvs,
+      fetchedAt: new Date().toISOString(),
+      source: this.securityBaseUrl,
+    };
+
+    this.setCache("tomcat", result);
+    return result;
+  }
+
+  private parseBranchPage(html: string, branch: string): {
+    advisories: SecurityAdvisory[];
+    msv: string | null;
+    latest: string | null;
+  } {
+    const advisories: SecurityAdvisory[] = [];
+    const fixedVersions = new Set<string>();
+
+    // Extract CVEs from the page
+    // Tomcat security pages have CVE IDs with associated fixed versions
+    const cvePattern = /CVE-\d{4}-\d+/gi;
+    const cveMatches = [...new Set(html.match(cvePattern) || [])];
+
+    for (const cve of cveMatches) {
+      const cveIndex = html.indexOf(cve);
+      if (cveIndex === -1) continue;
+
+      // Extract context around the CVE
+      const contextStart = Math.max(0, cveIndex - 200);
+      const contextEnd = Math.min(html.length, cveIndex + 800);
+      const context = html.slice(contextStart, contextEnd);
+
+      // Look for "Fixed in" pattern - Tomcat uses this consistently
+      const fixedMatch = context.match(/Fixed in Apache Tomcat (\d+\.\d+\.\d+)/i);
+      const fixedVersion = fixedMatch ? fixedMatch[1] : null;
+
+      if (fixedVersion && fixedVersion.startsWith(branch)) {
+        fixedVersions.add(fixedVersion);
+      }
+
+      // Extract severity if present
+      const severity = this.extractSeverity(context);
+
+      advisories.push({
+        id: cve.toUpperCase(),
+        title: `Apache Tomcat Security Advisory ${cve}`,
+        severity,
+        affectedVersions: [],
+        fixedVersions: fixedVersion ? [fixedVersion] : [],
+        cveIds: [cve.toUpperCase()],
+        publishedDate: this.extractDate(context) || new Date().toISOString().split("T")[0],
+        url: `https://nvd.nist.gov/vuln/detail/${cve}`,
+      });
+    }
+
+    // Calculate MSV for this branch - highest fixed version
+    let msv: string | null = null;
+    let latest: string | null = null;
+
+    if (fixedVersions.size > 0) {
+      const versions = Array.from(fixedVersions).sort((a, b) =>
+        this.compareVersions(a, b)
+      );
+      msv = versions[versions.length - 1]; // Highest fixed version
+      latest = msv;
+    }
+
+    // Try to find the latest version mentioned on the page
+    const latestMatch = html.match(
+      new RegExp(`(${branch}\\.\\d+\\.\\d+)`, "g")
+    );
+    if (latestMatch && latestMatch.length > 0) {
+      const allVersions = [...new Set(latestMatch)].sort((a, b) =>
+        this.compareVersions(a, b)
+      );
+      latest = allVersions[allVersions.length - 1];
+    }
+
+    return { advisories, msv, latest };
+  }
+
+  private extractSeverity(text: string): SecurityAdvisory["severity"] {
+    const lower = text.toLowerCase();
+    // Tomcat uses "Important", "Moderate", "Low" severity ratings
+    if (lower.includes("important") || lower.includes("critical")) return "high";
+    if (lower.includes("moderate") || lower.includes("medium")) return "medium";
+    if (lower.includes("low")) return "low";
+    return "unknown";
+  }
+
+  private extractDate(text: string): string | null {
+    // Look for date patterns like "1 January 2024" or "January 1, 2024"
+    const datePatterns = [
+      /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})/i,
+      /((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})/i,
+      /(\d{4}-\d{2}-\d{2})/,
+    ];
+
+    for (const pattern of datePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        try {
+          const date = new Date(match[1]);
+          if (!isNaN(date.getTime())) {
+            return date.toISOString().split("T")[0];
+          }
+        } catch {
+          // Continue to next pattern
+        }
+      }
+    }
+
+    return null;
+  }
+}
+
+// =============================================================================
 // Factory
 // =============================================================================
 
@@ -578,6 +745,8 @@ export function getVendorFetcher(
       return new WiresharkAdvisoryFetcher(cacheDir);
     case "google:chrome":
       return new ChromeAdvisoryFetcher(cacheDir);
+    case "apache:tomcat":
+      return new TomcatAdvisoryFetcher(cacheDir);
     default:
       // Check for SolarWinds products
       if (vendor.toLowerCase() === "solarwinds") {
