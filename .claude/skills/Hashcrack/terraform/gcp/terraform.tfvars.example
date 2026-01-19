@@ -1,0 +1,44 @@
+# =============================================================================
+# Hashcrack GCP Deployment Configuration - EXAMPLE
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+# =============================================================================
+
+# GCP Project and Region
+gcp_project = "your-gcp-project-id"
+gcp_region  = "us-central1"
+gcp_zone    = "us-central1-f"  # Has T4 GPUs available
+
+project_name = "hashcrack"
+environment  = "lab"
+
+# Server configuration
+server_machine_type = "e2-medium"  # 2 vCPU, 4 GB RAM
+server_disk_gb      = 50
+
+# Worker configuration
+cpu_worker_count        = 4
+cpu_worker_machine_type = "n2-standard-4"  # 4 vCPU, 16GB RAM
+
+gpu_worker_count        = 0   # Set > 0 for GPU workers
+gpu_worker_machine_type = "n1-standard-4"
+gpu_type                = "nvidia-tesla-t4"
+gpu_count               = 1
+
+worker_disk_gb   = 30
+use_preemptible  = false  # Set true for cheaper spot instances
+worker_public_ip = false  # Private IPs (use Cloud NAT instead)
+use_cloud_nat    = true   # REQUIRED: Workers need internet access
+
+# SSH access - REPLACE WITH YOUR KEY
+ssh_public_key = "ssh-ed25519 AAAA... your-key-comment"
+ssh_user       = "ubuntu"
+
+# Hashtopolis credentials - CHANGE THESE
+hashtopolis_admin_user     = "admin"
+hashtopolis_admin_password = "CHANGE_ME"
+worker_voucher             = "CHANGE_ME"
+
+# Network (uncomment to customize)
+# network_cidr     = "10.0.1.0/24"
+# allowed_ssh_cidr = ["YOUR_IP/32"]

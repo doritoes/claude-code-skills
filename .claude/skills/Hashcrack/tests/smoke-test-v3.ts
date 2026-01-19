@@ -115,10 +115,15 @@ interface ProviderConfig {
   name: string;
   dir: string;
   sshUser: string;
+  sshKey?: string; // Path to SSH private key (cloud providers)
   serverIpOutput: string;
   waitTime: number;
   workerCount: number;
+  chunkTime: number; // Seconds per chunk - lower for fast local providers
 }
+
+// SSH key paths for cloud providers
+const SSH_DIR = process.env.HOME ? `${process.env.HOME}/.ssh` : `${process.env.USERPROFILE}/.ssh`;
 
 const PROVIDERS: Record<string, ProviderConfig> = {
   "xcp-ng": {
@@ -128,6 +133,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     serverIpOutput: "server_ip",
     waitTime: 300,
     workerCount: 2,
+    chunkTime: 5, // 5s chunks with 84M keyspace = ~8 chunks at 2M H/s
   },
   proxmox: {
     name: "Proxmox",
@@ -136,38 +142,47 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     serverIpOutput: "server_ip",
     waitTime: 300,
     workerCount: 2,
+    chunkTime: 5, // 5s chunks with 84M keyspace = ~8 chunks at 2M H/s
   },
   aws: {
     name: "AWS",
     dir: resolve(TERRAFORM_DIR, "aws"),
     sshUser: "ubuntu",
+    sshKey: resolve(SSH_DIR, "id_ed25519"), // Uses default key per terraform.tfvars
     serverIpOutput: "server_ip",
     waitTime: 180,
     workerCount: 2,
+    chunkTime: 60, // Cloud providers have higher latency, standard chunk time works
   },
   azure: {
     name: "Azure",
     dir: resolve(TERRAFORM_DIR, "azure"),
     sshUser: "ubuntu",
+    sshKey: resolve(SSH_DIR, "azure_hashcrack"),
     serverIpOutput: "server_public_ip",
     waitTime: 300,
     workerCount: 2,
+    chunkTime: 60,
   },
   gcp: {
     name: "GCP",
     dir: resolve(TERRAFORM_DIR, "gcp"),
     sshUser: "ubuntu",
+    sshKey: resolve(SSH_DIR, "gcp_hashcrack"),
     serverIpOutput: "server_public_ip",
     waitTime: 180,
     workerCount: 2,
+    chunkTime: 60,
   },
   oci: {
     name: "OCI",
     dir: resolve(TERRAFORM_DIR, "oci"),
     sshUser: "ubuntu",
+    sshKey: resolve(SSH_DIR, "oci_hashcrack"),
     serverIpOutput: "server_ip",
     waitTime: 300,
     workerCount: 2,
+    chunkTime: 60,
   },
 };
 
@@ -219,22 +234,29 @@ async function sleep(seconds: number, quiet = false) {
   await Bun.sleep(seconds * 1000);
 }
 
-async function sshCmd(serverIp: string, sshUser: string, cmd: string, timeout = 30): Promise<string> {
-  const result = await $`ssh -o StrictHostKeyChecking=no -o ConnectTimeout=${timeout} ${sshUser}@${serverIp} ${cmd} 2>/dev/null`.quiet();
-  return result.stdout.toString().trim();
+async function sshCmd(serverIp: string, sshUser: string, cmd: string, timeout = 30, sshKey?: string): Promise<string> {
+  if (sshKey) {
+    const result = await $`ssh -o StrictHostKeyChecking=no -o ConnectTimeout=${timeout} -i ${sshKey} ${sshUser}@${serverIp} ${cmd} 2>/dev/null`.quiet();
+    return result.stdout.toString().trim();
+  } else {
+    const result = await $`ssh -o StrictHostKeyChecking=no -o ConnectTimeout=${timeout} ${sshUser}@${serverIp} ${cmd} 2>/dev/null`.quiet();
+    return result.stdout.toString().trim();
+  }
 }
 
-async function getDbPassword(serverIp: string, sshUser: string): Promise<string> {
+async function getDbPassword(serverIp: string, sshUser: string, sshKey?: string): Promise<string> {
   const result = await sshCmd(serverIp, sshUser,
-    "sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2"
+    "sudo docker exec hashtopolis-db env | grep MYSQL_PASSWORD | cut -d= -f2",
+    30, sshKey
   );
   return result || "Hashcrack2025Lab";
 }
 
-async function mysqlQuery(serverIp: string, sshUser: string, dbPass: string, query: string): Promise<string> {
+async function mysqlQuery(serverIp: string, sshUser: string, dbPass: string, query: string, sshKey?: string): Promise<string> {
   const escaped = query.replace(/"/g, '\\"');
   return await sshCmd(serverIp, sshUser,
-    `sudo docker exec hashtopolis-db mysql -u hashtopolis -p"${dbPass}" hashtopolis -sNe "${escaped}"`
+    `sudo docker exec hashtopolis-db mysql -u hashtopolis -p"${dbPass}" hashtopolis -sNe "${escaped}"`,
+    30, sshKey
   );
 }
 
@@ -494,7 +516,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
 
     // ========== STEP 8: Get DB Password ==========
     step("Step 8: Getting database password");
-    dbPassword = await getDbPassword(serverIp, config.sshUser);
+    dbPassword = await getDbPassword(serverIp, config.sshUser, config.sshKey);
     success(`Database password retrieved`);
 
     // ========== STEP 9: Create Vouchers ==========
@@ -519,7 +541,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
       INSERT IGNORE INTO RegVoucher (voucher, time) VALUES ('SMOKE_WORKER_2', UNIX_TIMESTAMP());
       ${terraformVoucher ? `INSERT IGNORE INTO RegVoucher (voucher, time) VALUES ('${terraformVoucher}', UNIX_TIMESTAMP());` : ""}
       ${terraformVoucher ? `INSERT IGNORE INTO RegVoucher (voucher, time) VALUES ('${terraformVoucher}', UNIX_TIMESTAMP());` : ""}
-    `);
+    `, config.sshKey);
     success("Vouchers created (including terraform voucher)");
 
     // ========== STEP 10: Wait for Agents ==========
@@ -528,7 +550,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
 
     for (let i = 0; i < 20; i++) {
       try {
-        const countResult = await mysqlQuery(serverIp, config.sshUser, dbPassword, "SELECT COUNT(*) FROM Agent");
+        const countResult = await mysqlQuery(serverIp, config.sshUser, dbPassword, "SELECT COUNT(*) FROM Agent", config.sshKey);
         agentCount = parseInt(countResult) || 0;
         if (agentCount >= 2) {
           success(`${agentCount} agents registered`);
@@ -547,15 +569,19 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     step("Step 11: Trusting agents and setting CPU mode");
     await mysqlQuery(serverIp, config.sshUser, dbPassword, `
       UPDATE Agent SET isTrusted = 1, cpuOnly = 1;
-    `);
+    `, config.sshKey);
     success("Agents trusted and set to CPU mode");
 
     // ========== STEP 12: Upload Files ==========
     step("Step 12: Uploading wordlist and rules");
 
     // Upload wordlist via stdin pipe (avoids command-line length limits with large files)
+    const sshUploadArgs = config.sshKey
+      ? ["ssh", "-o", "StrictHostKeyChecking=no", "-i", config.sshKey, `${config.sshUser}@${serverIp}`]
+      : ["ssh", "-o", "StrictHostKeyChecking=no", `${config.sshUser}@${serverIp}`];
+
     const uploadWordlist = Bun.spawn(
-      ["ssh", "-o", "StrictHostKeyChecking=no", `${config.sshUser}@${serverIp}`, "sudo tee /tmp/smoke-wordlist.txt > /dev/null"],
+      [...sshUploadArgs, "sudo tee /tmp/smoke-wordlist.txt > /dev/null"],
       { stdin: "pipe" }
     );
     uploadWordlist.stdin.write(SMOKE_WORDLIST);
@@ -564,7 +590,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
 
     // Upload rules via stdin pipe
     const uploadRules = Bun.spawn(
-      ["ssh", "-o", "StrictHostKeyChecking=no", `${config.sshUser}@${serverIp}`, "sudo tee /tmp/smoke-rules.rule > /dev/null"],
+      [...sshUploadArgs, "sudo tee /tmp/smoke-rules.rule > /dev/null"],
       { stdin: "pipe" }
     );
     uploadRules.stdin.write(SMOKE_RULES);
@@ -581,14 +607,16 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
       sudo cat /tmp/smoke-rules.rule | sudo docker exec -i -u root hashtopolis-backend bash -c "cat > /usr/local/share/hashtopolis/files/smoke-rules.rule && chown www-data:www-data /usr/local/share/hashtopolis/files/smoke-rules.rule"
       sudo cat /tmp/smoke-wordlist.txt | sudo docker exec -i -u root hashtopolis-backend bash -c "cat > /var/www/hashtopolis/files/smoke-wordlist.txt && chown www-data:www-data /var/www/hashtopolis/files/smoke-wordlist.txt"
       sudo cat /tmp/smoke-rules.rule | sudo docker exec -i -u root hashtopolis-backend bash -c "cat > /var/www/hashtopolis/files/smoke-rules.rule && chown www-data:www-data /var/www/hashtopolis/files/smoke-rules.rule"
-    `);
+    `, 30, config.sshKey);
 
     // Verify files in both locations
     const fileCheck1 = await sshCmd(serverIp, config.sshUser,
-      "sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/"
+      "sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/",
+      30, config.sshKey
     );
     const fileCheck2 = await sshCmd(serverIp, config.sshUser,
-      "sudo docker exec hashtopolis-backend ls -la /var/www/hashtopolis/files/"
+      "sudo docker exec hashtopolis-backend ls -la /var/www/hashtopolis/files/",
+      30, config.sshKey
     );
     info(`Files at /usr/local/share/hashtopolis/files/: ${fileCheck1.includes("smoke-wordlist.txt") ? "OK" : "MISSING"}`);
     info(`Files at /var/www/hashtopolis/files/: ${fileCheck2.includes("smoke-wordlist.txt") ? "OK" : "MISSING"}`);
@@ -615,19 +643,22 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
       INSERT INTO File (filename, size, isSecret, fileType, accessGroupId, lineCount)
       VALUES ('smoke-rules.rule', ${rulesSize}, 1, 1, 1, ${rulesLines})
       ON DUPLICATE KEY UPDATE size=${rulesSize}, lineCount=${rulesLines}, isSecret=1;
-    `);
+    `, config.sshKey);
 
     const fileIdResult = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-      "SELECT fileId, filename FROM File WHERE filename IN ('smoke-wordlist.txt', 'smoke-rules.rule')"
+      "SELECT fileId, filename FROM File WHERE filename IN ('smoke-wordlist.txt', 'smoke-rules.rule')",
+      config.sshKey
     );
     success(`Files registered: ${fileIdResult.replace(/\n/g, ", ")}`);
 
     // Get file IDs
     const wordlistIdResult = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-      "SELECT fileId FROM File WHERE filename='smoke-wordlist.txt' LIMIT 1"
+      "SELECT fileId FROM File WHERE filename='smoke-wordlist.txt' LIMIT 1",
+      config.sshKey
     );
     const rulesIdResult = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-      "SELECT fileId FROM File WHERE filename='smoke-rules.rule' LIMIT 1"
+      "SELECT fileId FROM File WHERE filename='smoke-rules.rule' LIMIT 1",
+      config.sshKey
     );
     const wordlistId = parseInt(wordlistIdResult) || 0;
     const rulesId = parseInt(rulesIdResult) || 0;
@@ -642,13 +673,15 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     // NOTE: getFile.php requires agent authentication - we verify file existence instead.
     step("Step 13.5: Verifying files exist on disk in correct location");
     const filesCheck = await sshCmd(serverIp, config.sshUser,
-      `sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/ 2>/dev/null`
+      `sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/ 2>/dev/null`,
+      30, config.sshKey
     );
     if (!filesCheck.includes("smoke-wordlist.txt") || !filesCheck.includes("smoke-rules.rule")) {
       errorLog(`Files NOT found in expected location!`);
       info(`Files on disk: ${filesCheck}`);
       const dbFiles = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-        "SELECT fileId, filename, size, isSecret FROM File"
+        "SELECT fileId, filename, size, isSecret FROM File",
+        config.sshKey
       );
       info(`File table: ${dbFiles}`);
       throw new Error("Files not in expected location - workers won't be able to download them!");
@@ -666,10 +699,11 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     await mysqlQuery(serverIp, config.sshUser, dbPassword, `
       INSERT INTO Hashlist (hashlistName, format, hashTypeId, hashCount, saltSeparator, cracked, isSecret, hexSalt, isSalted, accessGroupId, notes, brainId, brainFeatures, isArchived)
       VALUES ('smoke-test-v3', 0, 1400, ${SMOKE_HASHES.length}, ':', 0, 1, 0, 0, 1, 'Smoke test v3 SHA256 hashes', 0, 0, 0);
-    `);
+    `, config.sshKey);
 
     const hashlistIdResult = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-      "SELECT hashlistId FROM Hashlist WHERE hashlistName='smoke-test-v3' ORDER BY hashlistId DESC LIMIT 1"
+      "SELECT hashlistId FROM Hashlist WHERE hashlistName='smoke-test-v3' ORDER BY hashlistId DESC LIMIT 1",
+      config.sshKey
     );
     const hashlistId = parseInt(hashlistIdResult) || 0;
     if (hashlistId === 0) throw new Error("Failed to create hashlist");
@@ -677,10 +711,35 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     // Insert hashes
     for (const hash of SMOKE_HASHES) {
       await mysqlQuery(serverIp, config.sshUser, dbPassword,
-        `INSERT INTO Hash (hashlistId, hash, salt, plaintext, timeCracked, chunkId, isCracked, crackPos) VALUES (${hashlistId}, '${hash}', '', '', NULL, NULL, 0, 0)`
+        `INSERT INTO Hash (hashlistId, hash, salt, plaintext, timeCracked, chunkId, isCracked, crackPos) VALUES (${hashlistId}, '${hash}', '', '', NULL, NULL, 0, 0)`,
+        config.sshKey
       );
     }
     success(`Hashlist created with ${SMOKE_HASHES.length} hashes (ID: ${hashlistId})`);
+
+    // ========== STEP 14.5: Wait for both workers to be actively checking in ==========
+    // For local providers with low latency, we need both workers to be ready before
+    // creating the task, otherwise the faster worker grabs all chunks.
+    step("Step 14.5: Waiting for both workers to be actively checking in");
+    const benchmarkMaxRetries = 20;  // 20 * 10s = ~3 minutes max
+    let bothActive = false;
+    for (let i = 0; i < benchmarkMaxRetries && !bothActive; i++) {
+      const activeAgentsResult = await mysqlQuery(serverIp, config.sshUser, dbPassword,
+        `SELECT COUNT(*) FROM Agent WHERE isTrusted = 1 AND lastTime > UNIX_TIMESTAMP() - 30`,
+        config.sshKey
+      );
+      const activeAgents = parseInt(activeAgentsResult) || 0;
+      if (activeAgents >= 2) {
+        bothActive = true;
+        success(`Both workers active (${activeAgents}/2 checking in recently)`);
+      } else {
+        info(`${activeAgents}/2 workers active, waiting 10s (${i + 1}/${benchmarkMaxRetries})...`);
+        await sleep(10000);
+      }
+    }
+    if (!bothActive) {
+      warning("Not all workers active, proceeding anyway");
+    }
 
     // ========== STEP 15: Create Task via API ==========
     step("Step 15: Creating task via API (not manual assignment!)");
@@ -689,10 +748,11 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     await mysqlQuery(serverIp, config.sshUser, dbPassword, `
       INSERT IGNORE INTO ApiKey (startValid, endValid, accessKey, accessCount, userId, apiGroupId)
       VALUES (1, 2000000000, 'SMOKE_API_KEY', 0, 1, 1);
-    `);
+    `, config.sshKey);
 
     // Create task via API (matching SKILL.md format exactly - line 333 style)
     // --force MUST be first for PoCL compatibility on CPU workers
+    // 10 hashes spread from 0.6% to 97.5% of keyspace ensure both workers crack some
     const taskPayload = JSON.stringify({
       section: "task",
       request: "createTask",
@@ -700,7 +760,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
       name: "smoke-test-v3-task",
       hashlistId: hashlistId,
       attackCmd: "--force -m 1400 #HL# smoke-wordlist.txt -r smoke-rules.rule",
-      chunkTime: 60,  // Small chunks = more workers engaged
+      chunkTime: config.chunkTime,  // Provider-specific: 15s for local (fast), 60s for cloud
       statusTimer: 5,
       priority: 100,
       maxAgents: 0,
@@ -712,7 +772,8 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     });
 
     const apiResult = await sshCmd(serverIp, config.sshUser,
-      `curl -s -X POST http://localhost:8080/api/user.php -H 'Content-Type: application/json' -d '${taskPayload}'`
+      `curl -s -X POST http://localhost:8080/api/user.php -H 'Content-Type: application/json' -d '${taskPayload}'`,
+      30, config.sshKey
     );
 
     // Check if API succeeded or fallback to database
@@ -734,15 +795,16 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
         SET @tw = LAST_INSERT_ID();
 
         INSERT INTO Task (taskName, attackCmd, chunkTime, statusTimer, keyspace, keyspaceProgress, priority, maxAgents, color, isSmall, isCpuTask, useNewBench, skipKeyspace, crackerBinaryId, crackerBinaryTypeId, taskWrapperId, isArchived, notes, staticChunks, chunkSize, forcePipe, usePreprocessor, preprocessorCommand)
-        VALUES ('smoke-test-v3-task', '--force -m 1400 #HL# smoke-wordlist.txt -r smoke-rules.rule', 60, 5, 0, 0, 100, 0, '', 0, 1, 1, 0, 1, 1, @tw, 0, '', 0, 0, 0, 0, '');
+        VALUES ('smoke-test-v3-task', '--force -m 1400 #HL# smoke-wordlist.txt -r smoke-rules.rule', ${config.chunkTime}, 5, 0, 0, 100, 0, '', 0, 1, 1, 0, 1, 1, @tw, 0, '', 0, 0, 0, 0, '');
         SET @t = LAST_INSERT_ID();
 
         INSERT INTO FileTask (fileId, taskId) VALUES (${wordlistId}, @t);
         INSERT INTO FileTask (fileId, taskId) VALUES (${rulesId}, @t);
-      `);
+      `, config.sshKey);
 
       const taskIdResult = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-        "SELECT taskId FROM Task WHERE taskName='smoke-test-v3-task' ORDER BY taskId DESC LIMIT 1"
+        "SELECT taskId FROM Task WHERE taskName='smoke-test-v3-task' ORDER BY taskId DESC LIMIT 1",
+        config.sshKey
       );
       taskId = parseInt(taskIdResult) || 0;
       success(`Task created via database fallback (ID: ${taskId})`);
@@ -759,15 +821,16 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     step("Step 15.5: Fixing keyspace for rule attack (agents miscalculate)");
     info(`Setting keyspace to ${EXPECTED_KEYSPACE} (${WORDLIST_LINES} words × ${RULES_LINES} rules)`);
     await mysqlQuery(serverIp, config.sshUser, dbPassword,
-      `UPDATE Task SET keyspace=${EXPECTED_KEYSPACE}, keyspaceProgress=0 WHERE taskId=${taskId}`
+      `UPDATE Task SET keyspace=${EXPECTED_KEYSPACE}, keyspaceProgress=0 WHERE taskId=${taskId}`,
+      config.sshKey
     );
     success(`Keyspace fixed: ${EXPECTED_KEYSPACE}`);
 
     // ========== STEP 16: Monitor Progress ==========
     step("Step 16: Monitoring cracking progress");
     let crackedCount = 0;
-    const maxWait = 300; // 5 minutes max (fail fast)
-    const noProgressTimeout = 120; // 2 minutes without progress = fail
+    const maxWait = 600; // 10 minutes max for 84M keyspace
+    const noProgressTimeout = 180; // 3 minutes without progress = fail
     const startWait = Date.now();
     let lastProgress = 0;
     let lastProgressTime = Date.now();
@@ -784,7 +847,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
             (SELECT COUNT(*) FROM Chunk WHERE taskId=${taskId}) as chunks,
             (SELECT COUNT(DISTINCT agentId) FROM Chunk WHERE taskId=${taskId}) as activeWorkers,
             (SELECT COALESCE(SUM(cracked), 0) FROM Chunk WHERE taskId=${taskId}) as chunkCracked
-        `);
+        `, config.sshKey);
 
         const parts = statusResult.split("\t").map((x) => parseInt(x) || 0);
         const [cracked, keyspace, progress, chunks, activeWorkers, chunkCracked] = parts;
@@ -802,7 +865,8 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
           if (noChunksWarnings >= maxNoChunksIterations) {
             // Check agent status to diagnose
             const agentActs = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-              "SELECT agentName, lastAct FROM Agent"
+              "SELECT agentName, lastAct FROM Agent",
+              config.sshKey
             );
             errorLog(`No chunks created after 3 minutes. Agent status: ${agentActs.replace(/\n/g, ', ')}`);
             if (agentActs.includes("getFile")) {
@@ -853,7 +917,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     const agentStatus = await mysqlQuery(serverIp, config.sshUser, dbPassword, `
       SELECT agentId, agentName, lastAct, lastTime, isActive, isTrusted, cpuOnly
       FROM Agent
-    `);
+    `, config.sshKey);
     info(`Agent status:`);
     for (const line of agentStatus.split("\n").filter((l: string) => l.trim())) {
       info(`  ${line}`);
@@ -865,7 +929,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
       FROM Chunk c
       LEFT JOIN Agent a ON c.agentId = a.agentId
       WHERE c.taskId=${taskId}
-    `);
+    `, config.sshKey);
     info(`Chunk details:`);
     for (const line of chunkDetails.split("\n").filter((l: string) => l.trim())) {
       info(`  ${line}`);
@@ -875,13 +939,13 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     const taskDetails = await mysqlQuery(serverIp, config.sshUser, dbPassword, `
       SELECT taskId, taskName, attackCmd, keyspace, keyspaceProgress, isCpuTask
       FROM Task WHERE taskId=${taskId}
-    `);
+    `, config.sshKey);
     info(`Task details: ${taskDetails}`);
 
     // Check hash sample (first 5)
     const hashSample = await mysqlQuery(serverIp, config.sshUser, dbPassword, `
       SELECT hash, isCracked, plaintext FROM Hash WHERE hashlistId=${hashlistId} LIMIT 5
-    `);
+    `, config.sshKey);
     info(`Hash sample:`);
     for (const line of hashSample.split("\n").filter((l: string) => l.trim())) {
       info(`  ${line}`);
@@ -893,7 +957,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
       FROM FileTask ft
       JOIN File f ON ft.fileId = f.fileId
       WHERE ft.taskId=${taskId}
-    `);
+    `, config.sshKey);
     info(`Files linked to task:`);
     for (const line of fileLinks.split("\n").filter((l: string) => l.trim())) {
       info(`  ${line}`);
@@ -904,7 +968,8 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
 
     // Check final crack count
     const finalCracked = await mysqlQuery(serverIp, config.sshUser, dbPassword,
-      `SELECT COUNT(*) FROM Hash WHERE hashlistId=${hashlistId} AND isCracked=1`
+      `SELECT COUNT(*) FROM Hash WHERE hashlistId=${hashlistId} AND isCracked=1`,
+      config.sshKey
     );
     crackedCount = parseInt(finalCracked) || 0;
 
@@ -912,7 +977,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
     // This is the real measure of distribution - both workers should receive work
     const workersResult = await mysqlQuery(serverIp, config.sshUser, dbPassword, `
       SELECT COUNT(DISTINCT agentId) FROM Chunk WHERE taskId=${taskId}
-    `);
+    `, config.sshKey);
     workersEngaged = parseInt(workersResult) || 0;
 
     // Get details of worker contributions (chunks received + hashes cracked)
@@ -922,7 +987,7 @@ async function runSmokeTest(providerKey: string): Promise<TestResult> {
       JOIN Agent a ON c.agentId = a.agentId
       WHERE c.taskId=${taskId}
       GROUP BY c.agentId
-    `);
+    `, config.sshKey);
 
     info(`Worker contributions (chunks/cracked):`);
     for (const line of workerDetails.split("\n").filter((l) => l.trim())) {

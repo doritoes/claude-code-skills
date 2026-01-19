@@ -1,0 +1,36 @@
+# =============================================================================
+# Hashcrack Azure Deployment Configuration
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+
+azure_location = "eastus2"
+project_name   = "hashcrack"
+environment    = "lab"
+
+# Server configuration
+server_vm_size = "Standard_D2s_v3"  # 2 vCPU, 8 GB RAM
+server_disk_gb = 50
+
+# Worker configuration
+cpu_worker_count   = 2
+cpu_worker_vm_size = "Standard_D4s_v3"  # 4 vCPU, 16 GB RAM
+
+gpu_worker_count   = 0  # GPU quota must be requested
+gpu_worker_vm_size = "Standard_NC4as_T4_v3"  # Tesla T4 GPU
+
+worker_disk_gb     = 50
+use_spot_instances = false  # On-demand for reliability
+
+# SSH access - REPLACE WITH YOUR KEY
+ssh_public_key = "ssh-rsa AAAA... your-key-comment"
+ssh_user       = "ubuntu"
+
+# Hashtopolis credentials - CHANGE THESE
+hashtopolis_admin_user     = "admin"
+hashtopolis_admin_password = "CHANGE_ME_STRONG_PASSWORD"
+worker_voucher             = "CHANGE_ME_VOUCHER"
+
+# Network (defaults are fine for most deployments)
+# vnet_cidr        = "10.0.0.0/16"
+# subnet_cidr      = "10.0.1.0/24"
+# allowed_ssh_cidr = ["YOUR_IP/32"]  # Restrict in production
