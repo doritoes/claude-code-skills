@@ -21,7 +21,7 @@ resource "xenorchestra_vm" "workers" {
     ssh_user       = var.ssh_user
     ssh_public_key = var.ssh_public_key
     server_url     = xenorchestra_vm.hashtopolis_server.ipv4_addresses[0]  # Just IP, cloud-init adds http:// and port
-    voucher_code   = local.voucher_code
+    voucher_code   = local.voucher_codes[count.index]  # Each worker gets unique voucher
   })
 
   cloud_network_config = templatefile("${path.module}/cloud-init/network.yaml", {

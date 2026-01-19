@@ -18,7 +18,9 @@ resource "xenorchestra_vm" "hashtopolis_server" {
     db_password    = local.db_password
     admin_user     = var.hashtopolis_admin_user
     admin_password = local.admin_password
-    voucher_code   = local.voucher_code
+    voucher_code   = local.voucher_code    # First voucher (backward compat)
+    all_vouchers   = local.all_vouchers    # All vouchers comma-separated
+    worker_count   = var.worker_count
   })
 
   cloud_network_config = templatefile("${path.module}/cloud-init/network.yaml", {

@@ -98,3 +98,43 @@ When session ends or context compacts:
 3. Note current infrastructure state (what's deployed)
 4. Document any credentials/IPs discovered
 5. Commit skill updates if significant changes
+
+## Making Skills "Claude-Proof" (2026-01-19 Learning)
+
+**Problem:** Claude tends to "summarize" or "improvise" instead of following step-by-step procedures, causing cascading failures.
+
+**Root Cause Analysis:**
+- Pitfalls tables are **conceptual** (describe the issue) not **procedural** (how to fix)
+- Workflows have gaps that smoke tests fill with explicit code
+- Claude sees "check priority > 0" and thinks "I'll handle that" instead of running verification SQL
+
+**Solution: Pre-Flight Checklists**
+
+Every workflow that touches the database MUST have a Pre-Flight Checklist with:
+
+1. **Explicit copy-paste SQL** - Not descriptions, actual commands
+2. **Expected output** - What success looks like
+3. **Verification after each step** - Confirm before proceeding
+4. **CRITICAL markers** - Highlight fields that MUST be set correctly
+
+**Example Pattern:**
+```markdown
+### Step X: Verify Thing
+
+```bash
+ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'$DB_PASS' hashtopolis -sNe 'SELECT field FROM Table;'"
+```
+**Expected:** `value`
+**If wrong:** Run `UPDATE Table SET field = value WHERE condition;`
+```
+
+**Key Learnings from Failed XCP-ng Test:**
+
+| Issue | Root Cause | Fix Implemented |
+|-------|------------|-----------------|
+| Single voucher for 4 workers | Terraform created 1 voucher | `count = var.worker_count` in main.tf |
+| Agents can't download files | `isSecret=0` on File records | Added to pitfalls: `isSecret=1` required |
+| Task never dispatches | `priority=0`, `crackerBinaryId=NULL` | Added Pre-Flight Checklist to Crack.md |
+| Keyspace wrong for rule attack | Not calculated: wordlist × rules | Added explicit formula to Crack.md |
+
+**The smoke test works because it's CODE, not prose.** Workflows must be equally explicit.

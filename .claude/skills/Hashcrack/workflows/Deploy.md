@@ -86,6 +86,25 @@ Save to `.claude/.env`:
 - `HASHCRACK_ADMIN_PASSWORD`
 - `HASHCRACK_VOUCHER`
 
+### Step 6.5: Verify Vouchers Created (CRITICAL)
+
+**One voucher per worker is REQUIRED to prevent race conditions.**
+
+```bash
+SERVER_IP=$(terraform output -raw server_ip)
+DB_PASS=$(terraform output -raw db_password)
+WORKER_COUNT=$(grep worker_count terraform.tfvars | grep -oE '[0-9]+')
+
+# Verify voucher count matches worker count
+VOUCHER_COUNT=$(ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'$DB_PASS' hashtopolis -sNe 'SELECT COUNT(*) FROM RegVoucher;'")
+echo "Vouchers: $VOUCHER_COUNT / Workers: $WORKER_COUNT"
+
+if [ "$VOUCHER_COUNT" -lt "$WORKER_COUNT" ]; then
+  echo "ERROR: Not enough vouchers! Create more vouchers manually:"
+  echo "  ssh ubuntu@$SERVER_IP \"sudo docker exec hashtopolis-db mysql -u hashtopolis -p'$DB_PASS' hashtopolis -e \\\"INSERT INTO RegVoucher (voucher, time) VALUES ('$(openssl rand -hex 6)', UNIX_TIMESTAMP());\\\"\""
+fi
+```
+
 ### Step 7: Wait for Infrastructure Ready
 
 Wait for cloud-init to complete on all VMs (~5-7 minutes):

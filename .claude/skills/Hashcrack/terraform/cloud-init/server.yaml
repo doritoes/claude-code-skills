@@ -117,11 +117,15 @@ write_files:
         sleep 10
       done
 
-      # Create initial voucher for workers in database
-      echo "Creating voucher in database: ${voucher_code}"
-      docker exec hashtopolis-db mysql -u hashtopolis -p"${db_password}" -e \
-        "INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('${voucher_code}', UNIX_TIMESTAMP());"
-      echo "Voucher created successfully"
+      # Create vouchers for workers in database (ONE PER WORKER to prevent race conditions)
+      echo "Creating ${worker_count} vouchers in database..."
+      IFS=',' read -ra VOUCHERS <<< "${all_vouchers}"
+      for v in "$${VOUCHERS[@]}"; do
+        echo "  Creating voucher: $v"
+        docker exec hashtopolis-db mysql -u hashtopolis -p"${db_password}" -e \
+          "INSERT INTO hashtopolis.RegVoucher (voucher, time) VALUES ('$v', UNIX_TIMESTAMP());"
+      done
+      echo "All ${worker_count} vouchers created successfully"
 
       # Save credentials to file for retrieval
       cat > /opt/hashtopolis/credentials.json << 'CREDS'
