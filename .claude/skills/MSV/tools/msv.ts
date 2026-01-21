@@ -78,6 +78,19 @@ import {
   getMinimumSafeVersion as getAppThreatMsv,
   type VulnResult as AppThreatVulnResult,
 } from "./AppThreatClient";
+import { createLogger, type Logger } from "./Logger";
+
+// =============================================================================
+// Module Logger
+// =============================================================================
+
+/** Module-level logger instance - configure via configureLogger() */
+const logger = createLogger({ level: "info" });
+
+/** Configure logger based on CLI options */
+function configureLogger(verbose: boolean): void {
+  logger.setOptions({ verbose, level: verbose ? "debug" : "info" });
+}
 
 // =============================================================================
 // Types
@@ -181,6 +194,7 @@ interface SoftwareMapping {
   lastChecked?: string;
   variants?: string[];  // List of variant IDs for products with multiple tracks
   versionPattern?: string;  // Regex to filter valid versions (e.g., "^7\\." for PowerShell 7)
+  excludePatterns?: string[];  // Regex patterns to exclude from CVE descriptions (prevents data contamination)
   osComponent?: boolean;  // True if this is a Windows OS component (updates via Windows Update only)
   eol?: boolean;  // True if this software is End of Life (no longer receiving security patches)
   latestVersion?: string;  // Known latest version for display (manually maintained)
@@ -674,7 +688,7 @@ async function queryMSV(
     const isPowerShell = software.product === "powershell" && software.vendor === "microsoft" && software.id === "powershell";
 
     if (isAdobeReader || isAdobeAcrobat || isPowerShell) {
-      if (options.verbose) console.log("Detected product with multiple tracks, gathering variant MSVs...");
+      logger.debug("Detected product with multiple tracks, gathering variant MSVs...");
 
       // Get variant info based on product type
       let variantInfo: VariantInfo;
@@ -734,7 +748,7 @@ async function queryMSV(
     );
 
     if (cached && cacheIsComplete && !msvCache.needsRefresh(productId, 24)) {
-      if (options.verbose) console.log("Returning cached MSV result...");
+      logger.debug("Returning cached MSV result...");
 
       // Build result from cache
       const branches: BranchMsvResult[] = cached.branches.map(b => ({
@@ -830,7 +844,7 @@ async function queryMSV(
           const chocoVersion = await chocoClient.getLatestVersion(software.id);
           if (chocoVersion) {
             latestVersion = chocoVersion;
-            if (options.verbose) console.log(`Latest version from Chocolatey: ${chocoVersion}`);
+            logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
           }
         } catch {
           // Chocolatey lookup failed, continue without latest version
@@ -886,7 +900,7 @@ async function queryMSV(
   let hasKevCves = false;  // Track if any CVEs are in KEV
 
   // 1. Try vendor advisory first (most reliable source)
-  if (options.verbose) console.log("Checking vendor advisory...");
+  logger.debug("Checking vendor advisory...");
   const vendorFetcher = getVendorFetcher(software.vendor, software.product, config.dataDir);
 
   if (vendorFetcher) {
@@ -943,7 +957,7 @@ async function queryMSV(
         }
       }
     } catch (error) {
-      if (options.verbose) console.warn("Vendor advisory fetch failed:", error);
+      logger.warn("Vendor advisory fetch failed:", error);
       sourceResults.push({
         source: "Vendor Advisory",
         queried: true,
@@ -959,7 +973,7 @@ async function queryMSV(
   if (!hasVendorAdvisory && software.cpe23) {
     const appThreatClient = new AppThreatClient();
     if (appThreatClient.isDatabaseAvailable()) {
-      if (options.verbose) console.log("Querying AppThreat database (offline)...");
+      logger.debug("Querying AppThreat database (offline)...");
       try {
         let appThreatResults = await appThreatClient.searchByCpe(software.cpe23, {
           minCvss: 4.0, // Medium severity and above
@@ -977,6 +991,26 @@ async function queryMSV(
           });
           if (options.verbose && originalCount !== appThreatResults.length) {
             console.log(`  Filtered ${originalCount - appThreatResults.length} CVEs with invalid version patterns`);
+          }
+        }
+
+        // Filter results by exclude patterns (prevents cross-product contamination)
+        // e.g., Git excludes "gitlab|gitea|github" to filter out GitLab CVEs
+        if (software.excludePatterns && software.excludePatterns.length > 0 && appThreatResults.length > 0) {
+          const excludeRegexes = software.excludePatterns.map(p => new RegExp(p, "i"));
+          const originalCount = appThreatResults.length;
+          appThreatResults = appThreatResults.filter(r => {
+            // Check description against all exclude patterns
+            const desc = r.description || "";
+            for (const regex of excludeRegexes) {
+              if (regex.test(desc)) {
+                return false;  // Exclude this CVE
+              }
+            }
+            return true;
+          });
+          if (options.verbose && originalCount !== appThreatResults.length) {
+            console.log(`  Filtered ${originalCount - appThreatResults.length} CVEs matching exclude patterns`);
           }
         }
 
@@ -1031,7 +1065,7 @@ async function queryMSV(
         }
         appThreatClient.close();
       } catch (error) {
-        if (options.verbose) console.warn("AppThreat query failed:", error);
+        logger.warn("AppThreat query failed:", error);
         sourceResults.push({
           source: "AppThreat",
           queried: true,
@@ -1045,7 +1079,7 @@ async function queryMSV(
   }
 
   // 2. Query CISA KEV (always check for active exploitation)
-  if (options.verbose) console.log("Querying CISA KEV...");
+  logger.debug("Querying CISA KEV...");
   const kevClient = new CisaKevClient(config.dataDir);
 
   try {
@@ -1119,7 +1153,7 @@ async function queryMSV(
       });
     }
   } catch (error) {
-    if (options.verbose) console.warn("CISA KEV query failed:", error);
+    logger.warn("CISA KEV query failed:", error);
     evidence.push({ source: "CISA_KEV", hasData: false });
     sourceResults.push({
       source: "CISA KEV",
@@ -1131,7 +1165,7 @@ async function queryMSV(
 
   // 3. Query VulnCheck by CPE if API key available and we need more CVE data
   if (config.vulncheckApiKey && software.cpe23) {
-    if (options.verbose) console.log("Querying VulnCheck by CPE...");
+    logger.debug("Querying VulnCheck by CPE...");
     try {
       const vulnCheckClient = new VulnCheckClient(
         { apiKey: config.vulncheckApiKey },
@@ -1183,7 +1217,7 @@ async function queryMSV(
         });
       }
     } catch (error) {
-      if (options.verbose) console.warn("VulnCheck query failed:", error);
+      logger.warn("VulnCheck query failed:", error);
       evidence.push({ source: "VulnCheck", hasData: false });
       sourceResults.push({
         source: "VulnCheck",
@@ -1196,7 +1230,7 @@ async function queryMSV(
 
   // 3.5. If no CVEs found yet, query NVD directly by CPE (free API)
   if (exploitedCves.length === 0 && software.cpe23) {
-    if (options.verbose) console.log("Querying NVD by CPE (no CVEs from other sources)...");
+    logger.debug("Querying NVD by CPE (no CVEs from other sources)...");
     try {
       const nvdClient = new NvdClient(config.dataDir);
       const nvdCpeResults = await nvdClient.searchByCpe(software.cpe23, {
@@ -1218,6 +1252,24 @@ async function queryMSV(
           });
           if (options.verbose && originalCount !== filteredResults.length) {
             console.log(`  Filtered ${originalCount - filteredResults.length} NVD CVEs with invalid version patterns`);
+          }
+        }
+
+        // Filter results by exclude patterns (prevents cross-product contamination)
+        if (software.excludePatterns && software.excludePatterns.length > 0 && filteredResults.length > 0) {
+          const excludeRegexes = software.excludePatterns.map(p => new RegExp(p, "i"));
+          const originalCount = filteredResults.length;
+          filteredResults = filteredResults.filter(r => {
+            const desc = r.description || "";
+            for (const regex of excludeRegexes) {
+              if (regex.test(desc)) {
+                return false;
+              }
+            }
+            return true;
+          });
+          if (options.verbose && originalCount !== filteredResults.length) {
+            console.log(`  Filtered ${originalCount - filteredResults.length} NVD CVEs matching exclude patterns`);
           }
         }
 
@@ -1283,10 +1335,10 @@ async function queryMSV(
           queried: true,
           cveCount: 0,
         });
-        if (options.verbose) console.log("No CVEs found in NVD for this CPE");
+        logger.debug("No CVEs found in NVD for this CPE");
       }
     } catch (error) {
-      if (options.verbose) console.warn("NVD CPE query failed:", error);
+      logger.warn("NVD CPE query failed:", error);
       evidence.push({ source: "NVD", hasData: false });
       sourceResults.push({
         source: "NVD",
@@ -1306,7 +1358,7 @@ async function queryMSV(
       .slice(0, 5); // Limit due to rate limiting
 
     if (cvesToQuery.length > 0) {
-      if (options.verbose) console.log(`Querying NVD for ${cvesToQuery.length} CVEs (rate limited)...`);
+      logger.debug(`Querying NVD for ${cvesToQuery.length} CVEs (rate limited)...`);
       try {
         const { version, details } = await nvdClient.getMinimumSafeVersion(
           cvesToQuery,
@@ -1341,14 +1393,14 @@ async function queryMSV(
           }
         }
       } catch (error) {
-        if (options.verbose) console.warn("NVD query failed:", error);
+        logger.warn("NVD query failed:", error);
       }
     }
   }
 
   // 5. Query EPSS for exploitation probability
   if (exploitedCves.length > 0) {
-    if (options.verbose) console.log("Querying EPSS...");
+    logger.debug("Querying EPSS...");
     const epssClient = new EpssClient(config.dataDir);
 
     try {
@@ -1387,7 +1439,7 @@ async function queryMSV(
         });
       }
     } catch (error) {
-      if (options.verbose) console.warn("EPSS query failed:", error);
+      logger.warn("EPSS query failed:", error);
       sourceResults.push({
         source: "EPSS",
         queried: true,
@@ -1509,7 +1561,7 @@ async function queryMSV(
   };
 
   msvCache.update(cacheEntry);
-  if (options.verbose) console.log("Cache updated.");
+  logger.debug("Cache updated.");
 
   // Fresh data - just queried
   const now = new Date().toISOString();
@@ -1523,7 +1575,7 @@ async function queryMSV(
       const chocoVersion = await chocoClient.getLatestVersion(software.id);
       if (chocoVersion) {
         latestVersion = chocoVersion;
-        if (options.verbose) console.log(`Latest version from Chocolatey: ${chocoVersion}`);
+        logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
       }
     } catch {
       // Chocolatey lookup failed, continue without latest version
@@ -2636,6 +2688,9 @@ async function main(): Promise<void> {
 
   const command = positionalArgs[0];
   const config = getConfig();
+
+  // Configure logger based on verbose mode
+  configureLogger(options.verbose);
 
   // Auto-update AppThreat database if older than 48 hours
   // Skip for commands that don't need the database

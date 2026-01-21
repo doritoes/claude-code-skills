@@ -7,7 +7,7 @@
  * @license MIT
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import {
   parseVersion,
   compareVersions,
@@ -196,17 +196,110 @@ describe("VersionCompare", () => {
 });
 
 // =============================================================================
-// Integration Tests (require network - marked for skip in CI)
+// Integration Tests (require network)
 // =============================================================================
 
+import { CisaKevClient } from "./CisaKevClient";
+import { EpssClient } from "./EpssClient";
+import { existsSync, rmSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+
+const TEST_CACHE_DIR = resolve(import.meta.dir, "..", "data", "test-cache-integration");
+const NETWORK_TIMEOUT_MS = 60000; // 60 seconds for network tests
+
 describe("Integration", () => {
-  test.skip("CISA KEV fetch works", async () => {
-    // This test would require network access
-    // Skip in CI, run manually
+  // Setup: ensure test cache directory exists
+  beforeAll(() => {
+    if (!existsSync(TEST_CACHE_DIR)) {
+      mkdirSync(TEST_CACHE_DIR, { recursive: true });
+    }
   });
 
-  test.skip("EPSS fetch works", async () => {
-    // This test would require network access
-    // Skip in CI, run manually
+  // Cleanup: remove test cache directory
+  afterAll(() => {
+    try {
+      if (existsSync(TEST_CACHE_DIR)) {
+        rmSync(TEST_CACHE_DIR, { recursive: true, force: true });
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
   });
+
+  test("CISA KEV fetch works", async () => {
+    const client = new CisaKevClient(TEST_CACHE_DIR);
+
+    // Fetch the catalog
+    const catalog = await client.fetchCatalog();
+
+    // Verify catalog structure
+    expect(catalog).toHaveProperty("title");
+    expect(catalog).toHaveProperty("catalogVersion");
+    expect(catalog).toHaveProperty("count");
+    expect(catalog).toHaveProperty("vulnerabilities");
+    expect(Array.isArray(catalog.vulnerabilities)).toBe(true);
+
+    // KEV should have hundreds of entries
+    expect(catalog.count).toBeGreaterThan(100);
+
+    // Test findByCve with a well-known CVE (Log4j)
+    const log4j = await client.findByCve("CVE-2021-44228");
+    expect(log4j).not.toBeNull();
+    expect(log4j?.cveID).toBe("CVE-2021-44228");
+    expect(log4j?.vendorProject).toMatch(/apache/i);
+
+    // Test getStats
+    const stats = await client.getStats();
+    expect(stats.totalCount).toBeGreaterThan(100);
+    expect(stats.ransomwareCount).toBeGreaterThan(0);
+
+    // Test Admiralty rating
+    const rating = client.getAdmiraltyRating();
+    expect(rating.reliability).toBe("A");
+    expect(rating.credibility).toBe(1);
+  }, NETWORK_TIMEOUT_MS);
+
+  test("EPSS fetch works", async () => {
+    const client = new EpssClient(TEST_CACHE_DIR);
+
+    // Test with a well-known CVE (Log4j - should have high EPSS)
+    const score = await client.getScore("CVE-2021-44228");
+
+    // Verify score structure
+    expect(score).not.toBeNull();
+    expect(score?.cve).toBe("CVE-2021-44228");
+    expect(typeof score?.epss).toBe("number");
+    expect(typeof score?.percentile).toBe("number");
+    expect(typeof score?.date).toBe("string");
+
+    // EPSS should be between 0 and 1
+    expect(score?.epss).toBeGreaterThanOrEqual(0);
+    expect(score?.epss).toBeLessThanOrEqual(1);
+
+    // Percentile should be between 0 and 1
+    expect(score?.percentile).toBeGreaterThanOrEqual(0);
+    expect(score?.percentile).toBeLessThanOrEqual(1);
+
+    // Log4j should be high risk (EPSS > 0.1)
+    expect(client.isHighRisk(score!)).toBe(true);
+
+    // Test batch query
+    const scores = await client.getScores([
+      "CVE-2021-44228",
+      "CVE-2021-45046",
+    ]);
+    expect(scores.length).toBe(2);
+
+    // Test Admiralty rating
+    const rating = client.getAdmiraltyRating(score!);
+    expect(rating.reliability).toBe("B");
+    expect([3, 4]).toContain(rating.credibility);
+  }, NETWORK_TIMEOUT_MS);
+
+  test("EPSS returns null for non-existent CVE", async () => {
+    const client = new EpssClient(TEST_CACHE_DIR);
+
+    const score = await client.getScore("CVE-9999-99999");
+    expect(score).toBeNull();
+  }, NETWORK_TIMEOUT_MS);
 });

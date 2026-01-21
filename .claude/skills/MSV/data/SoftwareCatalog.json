@@ -494,6 +494,7 @@
       "notes": "Python interpreter. LTS: 3.12.x, Current: 3.13.x",
       "lastChecked": "2026-01-19",
       "versionPattern": "^3\\.",
+      "excludePatterns": ["\\bvscode\\b", "\\bvisual studio code\\b", "\\bpython extension\\b", "\\bpylint\\b", "\\bpython-ldap\\b", "\\bdjango\\b", "\\bflask\\b"],
       "latestVersion": "3.13.1"
     },
     {
@@ -509,6 +510,7 @@
       "notes": "Version control. Includes Git Bash. Current: 2.47.x",
       "lastChecked": "2026-01-19",
       "versionPattern": "^2\\.",
+      "excludePatterns": ["\\bgitlab\\b", "\\bgitea\\b", "\\bgithub\\b", "\\bgit-lfs\\b", "\\bgit server\\b", "\\bliferay\\b"],
       "latestVersion": "2.47.1"
     },
     {
@@ -887,9 +889,10 @@
       "priority": "critical",
       "aliases": ["open ssl"],
       "platforms": ["windows", "server"],
-      "notes": "Crypto library. LTS: 3.0.x (EOL Sep 2026), Current: 3.4.x. Filter out pyOpenSSL contamination.",
+      "notes": "Crypto library. LTS: 3.0.x (EOL Sep 2026), Current: 3.4.x.",
       "lastChecked": "2026-01-19",
       "versionPattern": "^[013]\\.",
+      "excludePatterns": ["\\bpyopenssl\\b", "\\bpython.*openssl\\b", "\\brubyopenssl\\b", "\\bopenssl-src\\b", "\\brust-openssl\\b"],
       "latestVersion": "3.4.0"
     },
     {
@@ -1019,9 +1022,10 @@
       "priority": "high",
       "aliases": ["docker", "docker desktop"],
       "platforms": ["windows"],
-      "notes": "Container platform. Current: 4.36.x. Filter out Windows Remote Desktop contamination.",
+      "notes": "Container platform. Current: 4.36.x.",
       "lastChecked": "2026-01-19",
       "versionPattern": "^4\\.",
+      "excludePatterns": ["\\bremote desktop\\b", "\\bwindows.*desktop\\b", "\\brdp\\b", "\\bkubernetes\\b", "\\bcontainerd\\b"],
       "latestVersion": "4.36.0"
     },
     {

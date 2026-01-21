@@ -5,9 +5,13 @@
  * This is the primary source for accurate MSV data.
  *
  * Supported vendors:
+ * - curl (curl.se/docs/vuln.json) - A2 rating, JSON API
+ * - Microsoft MSRC (api.msrc.microsoft.com) - A2 rating, JSON API
+ *   - Edge, Office, Teams, .NET, Visual Studio, Exchange, SharePoint
  * - Wireshark (wireshark.org/security/)
- * - Chrome (chromereleases.googleblog.com)
- * - Firefox (mozilla.org/security/advisories/)
+ * - Chrome (chromereleases.googleblog.com) - stub, falls back to NVD
+ * - Firefox/Mozilla (mozilla.org/security/advisories/)
+ * - Apache Tomcat (tomcat.apache.org/security-*)
  * - SolarWinds (solarwinds.com/trust-center/security-advisories)
  *   - Orion Platform, NPM, SAM, NCM, NTA, IPAM, VMAN, DPA, Log Analyzer
  *   - Serv-U MFT, Access Rights Manager, Web Help Desk
@@ -730,6 +734,350 @@ export class TomcatAdvisoryFetcher extends VendorAdvisoryFetcher {
 }
 
 // =============================================================================
+// curl Advisory Fetcher (Wrapper)
+// =============================================================================
+
+import { CurlAdvisoryFetcher as CurlFetcherCore, type CurlVulnerability } from "./CurlAdvisoryFetcher";
+import { MozillaAdvisoryFetcher as MozillaFetcherCore, type MozillaAdvisory } from "./MozillaAdvisoryFetcher";
+
+export class CurlVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private coreFetcher: CurlFetcherCore;
+
+  constructor(cacheDir: string) {
+    super(cacheDir);
+    this.coreFetcher = new CurlFetcherCore(cacheDir);
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cached = this.getCache("curl");
+    if (cached) return cached;
+
+    const curlResult = await this.coreFetcher.fetch();
+
+    // Convert CurlVulnerability[] to SecurityAdvisory[]
+    const advisories: SecurityAdvisory[] = curlResult.vulnerabilities.map(vuln => ({
+      id: vuln.id,
+      title: vuln.title,
+      severity: this.mapSeverity(vuln.severity),
+      affectedVersions: vuln.affected_start && vuln.affected_end
+        ? [`${vuln.affected_start} - ${vuln.affected_end}`]
+        : [],
+      fixedVersions: vuln.fixed_in ? [vuln.fixed_in] : [],
+      cveIds: vuln.cve ? [vuln.cve] : [],
+      publishedDate: vuln.published?.split("T")[0] || new Date().toISOString().split("T")[0],
+      url: vuln.url,
+    }));
+
+    // Calculate MSV per branch
+    const branches = this.calculateBranchMsv(advisories);
+
+    const result: VendorAdvisoryResult = {
+      vendor: "curl",
+      product: "curl",
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: "https://curl.se/docs/vuln.json",
+    };
+
+    this.setCache("curl", result);
+    return result;
+  }
+
+  private mapSeverity(severity: CurlVulnerability["severity"]): SecurityAdvisory["severity"] {
+    switch (severity) {
+      case "Critical": return "critical";
+      case "High": return "high";
+      case "Medium": return "medium";
+      case "Low": return "low";
+      default: return "unknown";
+    }
+  }
+
+  private calculateBranchMsv(advisories: SecurityAdvisory[]): BranchMsv[] {
+    // Collect all fixed versions
+    const allVersions = new Set<string>();
+    for (const adv of advisories) {
+      for (const v of adv.fixedVersions) {
+        if (v && v !== "n/a") {
+          allVersions.add(v);
+        }
+      }
+    }
+
+    // Group by major.minor branch and find highest version per branch
+    const branchVersions = new Map<string, string[]>();
+    for (const version of allVersions) {
+      const branch = this.getBranch(version);
+      if (!branchVersions.has(branch)) {
+        branchVersions.set(branch, []);
+      }
+      branchVersions.get(branch)!.push(version);
+    }
+
+    // For each branch, MSV is the highest fixed version
+    const results: BranchMsv[] = [];
+    for (const [branch, versions] of branchVersions) {
+      versions.sort((a, b) => this.compareVersions(a, b));
+      const highest = versions[versions.length - 1];
+      results.push({
+        branch,
+        msv: highest,
+        latest: highest,
+      });
+    }
+
+    // Sort branches descending
+    results.sort((a, b) => this.compareVersions(b.branch, a.branch));
+
+    return results;
+  }
+}
+
+// =============================================================================
+// Mozilla Advisory Fetcher (Wrapper)
+// =============================================================================
+
+export class MozillaVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private coreFetcher: MozillaFetcherCore;
+  private product: string;
+
+  // Supported Mozilla products
+  private static readonly PRODUCT_KEYS: Record<string, string> = {
+    "firefox": "firefox",
+    "firefox_esr": "firefox_esr",
+    "thunderbird": "thunderbird",
+    "thunderbird_esr": "thunderbird_esr",
+  };
+
+  constructor(cacheDir: string, product: string = "firefox") {
+    super(cacheDir);
+    this.product = MozillaVendorAdvisoryFetcher.PRODUCT_KEYS[product.toLowerCase()] || product;
+    this.coreFetcher = new MozillaFetcherCore(cacheDir);
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `mozilla-vendor-${this.product}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    const mozillaResult = await this.coreFetcher.fetchProductAdvisories(this.product);
+
+    // Convert MozillaAdvisory[] to SecurityAdvisory[]
+    const advisories: SecurityAdvisory[] = [];
+    for (const adv of mozillaResult.advisories) {
+      // Create an advisory entry for each CVE in the MFSA
+      for (const vuln of adv.vulnerabilities) {
+        advisories.push({
+          id: vuln.cve || adv.mfsa,
+          title: vuln.title || adv.title,
+          severity: this.mapImpact(vuln.impact),
+          affectedVersions: [],
+          fixedVersions: Array.from(adv.fixedVersions?.values() || []),
+          cveIds: vuln.cve ? [vuln.cve] : [],
+          publishedDate: adv.announced?.split("T")[0] || new Date().toISOString().split("T")[0],
+          url: `https://www.mozilla.org/security/advisories/${adv.mfsa}/`,
+        });
+      }
+
+      // If no vulnerabilities, create an entry for the MFSA itself
+      if (adv.vulnerabilities.length === 0) {
+        advisories.push({
+          id: adv.mfsa,
+          title: adv.title,
+          severity: this.mapImpact(adv.impact),
+          affectedVersions: [],
+          fixedVersions: Array.from(adv.fixedVersions?.values() || []),
+          cveIds: [],
+          publishedDate: adv.announced?.split("T")[0] || new Date().toISOString().split("T")[0],
+          url: `https://www.mozilla.org/security/advisories/${adv.mfsa}/`,
+        });
+      }
+    }
+
+    // Calculate MSV per branch
+    const branches = this.calculateBranchMsv(advisories);
+
+    const result: VendorAdvisoryResult = {
+      vendor: "mozilla",
+      product: this.product,
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: "https://github.com/mozilla/foundation-security-advisories",
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+
+  private mapImpact(impact: string): SecurityAdvisory["severity"] {
+    switch (impact?.toLowerCase()) {
+      case "critical": return "critical";
+      case "high": return "high";
+      case "moderate": return "medium";
+      case "low": return "low";
+      default: return "unknown";
+    }
+  }
+
+  private calculateBranchMsv(advisories: SecurityAdvisory[]): BranchMsv[] {
+    // Collect all fixed versions
+    const allVersions = new Set<string>();
+    for (const adv of advisories) {
+      for (const v of adv.fixedVersions) {
+        if (v) allVersions.add(v);
+      }
+    }
+
+    // For Firefox, versions are typically single numbers (134, 128.6, etc.)
+    // Group by major version
+    const branchVersions = new Map<string, string[]>();
+    for (const version of allVersions) {
+      const parts = version.split(".");
+      const branch = parts[0]; // Major version only
+      if (!branchVersions.has(branch)) {
+        branchVersions.set(branch, []);
+      }
+      branchVersions.get(branch)!.push(version);
+    }
+
+    // For each branch, MSV is the highest fixed version
+    const results: BranchMsv[] = [];
+    for (const [branch, versions] of branchVersions) {
+      versions.sort((a, b) => this.compareVersions(a, b));
+      const highest = versions[versions.length - 1];
+      results.push({
+        branch,
+        msv: highest,
+        latest: highest,
+      });
+    }
+
+    // Sort branches descending
+    results.sort((a, b) => parseInt(b.branch, 10) - parseInt(a.branch, 10));
+
+    return results;
+  }
+}
+
+// =============================================================================
+// Microsoft MSRC Advisory Fetcher
+// =============================================================================
+
+import { MsrcClient, type MsrcVulnResult } from "./MsrcClient";
+
+export class MsrcAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private readonly productKey: string;
+
+  // Microsoft product key mappings
+  private static readonly PRODUCT_KEYS: Record<string, string> = {
+    "edge_chromium": "edge",
+    "edge": "edge",
+    "office": "office",
+    "office_365": "office",
+    "microsoft_365": "office",
+    "teams": "teams",
+    "dotnet": "dotnet",
+    "dotnet_framework": "dotnet",
+    "visual_studio": "visual_studio",
+    "visual_studio_code": "visual_studio_code",
+    "exchange": "exchange",
+    "sharepoint": "sharepoint",
+  };
+
+  constructor(cacheDir: string, product: string) {
+    super(cacheDir);
+    this.productKey = MsrcAdvisoryFetcher.PRODUCT_KEYS[product.toLowerCase()] || product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `msrc-${this.productKey}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    const client = new MsrcClient(this.cacheDir);
+    const vulns = await client.searchByProduct(this.productKey, {
+      maxMonths: 12,
+      minCvss: 4.0,
+    });
+
+    // Convert MSRC results to SecurityAdvisory format
+    const advisories: SecurityAdvisory[] = vulns.map(vuln => ({
+      id: vuln.cveId,
+      title: vuln.title,
+      severity: this.mapSeverity(vuln.severity),
+      affectedVersions: vuln.affectedProducts,
+      fixedVersions: vuln.fixedBuild ? [vuln.fixedBuild] : [],
+      cveIds: [vuln.cveId],
+      publishedDate: vuln.publishedDate.split("T")[0],
+      url: `https://msrc.microsoft.com/update-guide/vulnerability/${vuln.cveId}`,
+    }));
+
+    // Calculate MSV from fixed builds
+    const branches = this.calculateBranchMsv(advisories);
+
+    const result: VendorAdvisoryResult = {
+      vendor: "microsoft",
+      product: this.productKey,
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: "https://api.msrc.microsoft.com/cvrf/v3.0",
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+
+  private mapSeverity(severity: string | null): SecurityAdvisory["severity"] {
+    if (!severity) return "unknown";
+    const lower = severity.toLowerCase();
+    if (lower.includes("critical")) return "critical";
+    if (lower.includes("important") || lower.includes("high")) return "high";
+    if (lower.includes("moderate") || lower.includes("medium")) return "medium";
+    if (lower.includes("low")) return "low";
+    return "unknown";
+  }
+
+  private calculateBranchMsv(advisories: SecurityAdvisory[]): BranchMsv[] {
+    // Microsoft uses build numbers, not semantic versions
+    // Group by major build prefix and find highest fix
+    const buildMap = new Map<string, string[]>();
+
+    for (const adv of advisories) {
+      for (const build of adv.fixedVersions) {
+        // Extract major.minor as "branch" for builds like "10.0.19041.1234"
+        const parts = build.split(".");
+        if (parts.length >= 2) {
+          const branch = `${parts[0]}.${parts[1]}`;
+          if (!buildMap.has(branch)) {
+            buildMap.set(branch, []);
+          }
+          buildMap.get(branch)!.push(build);
+        }
+      }
+    }
+
+    const results: BranchMsv[] = [];
+    for (const [branch, builds] of buildMap) {
+      builds.sort((a, b) => this.compareVersions(a, b));
+      const highest = builds[builds.length - 1];
+      results.push({
+        branch,
+        msv: highest,
+        latest: highest,
+      });
+    }
+
+    // Sort branches descending
+    results.sort((a, b) => this.compareVersions(b.branch, a.branch));
+
+    return results;
+  }
+}
+
+// =============================================================================
 // Factory
 // =============================================================================
 
@@ -747,10 +1095,26 @@ export function getVendorFetcher(
       return new ChromeAdvisoryFetcher(cacheDir);
     case "apache:tomcat":
       return new TomcatAdvisoryFetcher(cacheDir);
+    case "curl:curl":
+    case "haxx:curl":
+      return new CurlVendorAdvisoryFetcher(cacheDir);
+    case "mozilla:firefox":
+    case "mozilla:firefox_esr":
+    case "mozilla:thunderbird":
+    case "mozilla:thunderbird_esr":
+      return new MozillaVendorAdvisoryFetcher(cacheDir, product);
     default:
       // Check for SolarWinds products
       if (vendor.toLowerCase() === "solarwinds") {
         return new SolarWindsAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Microsoft products
+      if (vendor.toLowerCase() === "microsoft") {
+        return new MsrcAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Mozilla products (alternative vendor name)
+      if (vendor.toLowerCase() === "mozilla") {
+        return new MozillaVendorAdvisoryFetcher(cacheDir, product);
       }
       return null;
   }
