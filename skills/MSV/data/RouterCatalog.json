@@ -1,5 +1,5 @@
 {
-  "version": "2.15.0",
+  "version": "2.16.0",
   "lastUpdated": "2026-01-22",
   "vendors": {
     "netgear": {
@@ -23,7 +23,7 @@
           "displayName": "Orbi",
           "category": "mesh",
           "targetMarket": "consumer",
-          "models": ["netgear_rbk50", "netgear_rbk852"],
+          "models": ["netgear_orbi_370", "netgear_orbi_rbk852", "netgear_orbi_rbk50"],
           "description": "Whole-home mesh WiFi systems"
         },
         "legacy": {
@@ -358,10 +358,10 @@
         },
         "mr": {
           "displayName": "Max-Stream MR Series",
-          "category": "mesh",
+          "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["linksys_mr6350", "linksys_mr8300"],
-          "description": "Budget-friendly mesh WiFi routers"
+          "models": ["linksys_mr9600", "linksys_mr6350", "linksys_mr8300"],
+          "description": "WiFi 5/6 dual-band routers with mesh capability"
         },
         "atlas": {
           "displayName": "Atlas Max",
@@ -987,6 +987,56 @@
             }
           },
           "note": "V2 hardware (XT8 V2). No Merlin support. Stock firmware only."
+        }
+      },
+      "defaultHwVersion": "v1"
+    },
+    "asus_gt_ax11000": {
+      "id": "asus_gt_ax11000",
+      "vendor": "asus",
+      "family": "rog",
+      "model": "GT-AX11000",
+      "displayName": "ASUS ROG Rapture GT-AX11000",
+      "aliases": ["gt-ax11000", "rog rapture", "gtax11000", "asus rog", "ax11000", "rog rapture gt-ax11000", "asus gaming router"],
+      "category": "gaming-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2019,
+      "wifiStandard": "ax11000",
+      "cpePrefix": "cpe:2.3:o:asus:gt-ax11000_firmware:",
+      "hardwareVersions": {
+        "v1": {
+          "chipset": "Broadcom BCM49408",
+          "supportStatus": "supported",
+          "supportUrl": "https://www.asus.com/supportonly/gt-ax11000/helpdesk_bios/",
+          "firmwareBranches": {
+            "3.0.0.4.388.x": {
+              "branchName": "3.0.0.4.388.x",
+              "msv": "3.0.0.4.388_24621",
+              "msvDate": "2024-06-14",
+              "msvCves": ["CVE-2024-3080", "CVE-2024-3912", "CVE-2024-3079"],
+              "latest": "3.0.0.4.388_24461",
+              "latestDate": "2025-10-27",
+              "downloadUrl": "https://www.asus.com/supportonly/gt-ax11000/helpdesk_bios/",
+              "eol": false,
+              "eolNote": "CRITICAL: Update to 3.0.0.4.388_24621+ to fix CVE-2024-3080 (auth bypass) and CVE-2024-3912 (RCE)"
+            }
+          },
+          "kevCves": [],
+          "altFirmware": {
+            "ddwrt": {
+              "status": "unsupported"
+            },
+            "openwrt": {
+              "status": "unsupported"
+            },
+            "tomato": {
+              "status": "supported",
+              "variant": "Asuswrt-Merlin",
+              "url": "https://www.asuswrt-merlin.net/",
+              "notes": "Full Asuswrt-Merlin support. Popular choice for advanced users."
+            }
+          },
+          "note": "Flagship tri-band WiFi 6 gaming router. 2.5Gbps WAN port. Asuswrt-Merlin supported for enhanced features."
         }
       },
       "defaultHwVersion": "v1"
@@ -2302,6 +2352,90 @@
       },
       "defaultHwVersion": "default"
     },
+    "netgear_orbi_rbk852": {
+      "id": "netgear_orbi_rbk852",
+      "vendor": "netgear",
+      "family": "orbi",
+      "model": "Orbi RBK852",
+      "displayName": "NETGEAR Orbi WiFi 6 AX6000 (RBK852)",
+      "aliases": ["rbk852", "orbi ax6000", "orbi wifi 6", "rbr850", "rbs850", "orbi 850"],
+      "category": "mesh",
+      "targetMarket": "prosumer",
+      "releaseYear": 2020,
+      "wifiStandard": "ax6000",
+      "cpePrefix": "cpe:2.3:h:netgear:rbk852:",
+      "hardwareVersions": {
+        "default": {
+          "chipset": "Qualcomm IPQ8074",
+          "supportStatus": "supported",
+          "supportUrl": "https://www.netgear.com/support/product/RBK852.aspx",
+          "firmwareBranches": {
+            "7.x": {
+              "branchName": "7.x",
+              "msv": "7.2.6.21",
+              "msvDate": "2024-11-15",
+              "msvCves": ["PSV-2021-0183"],
+              "latest": "7.2.8.5",
+              "latestDate": "2026-01-10",
+              "downloadUrl": "https://www.netgear.com/support/product/RBK852.aspx#download",
+              "eol": false,
+              "eolNote": "Update to 7.2.6.21+ for security misconfiguration fixes"
+            },
+            "4.x": {
+              "branchName": "4.x",
+              "msv": "4.6.7.13",
+              "msvDate": "2024-03-15",
+              "msvCves": ["PSV-2021-0131"],
+              "latest": "4.6.14.3",
+              "latestDate": "2024-06-20",
+              "downloadUrl": "https://www.netgear.com/support/product/RBK852.aspx#download",
+              "eol": true,
+              "eolNote": "Legacy branch. Upgrade to 7.x branch for latest security fixes"
+            }
+          },
+          "kevCves": [],
+          "note": "Flagship WiFi 6 tri-band mesh system. Jan 2026 advisory notes auth bypass and command injection issues fixed in 7.2.8.5."
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_orbi_rbk50": {
+      "id": "netgear_orbi_rbk50",
+      "vendor": "netgear",
+      "family": "orbi",
+      "model": "Orbi RBK50",
+      "displayName": "NETGEAR Orbi AC3000 (RBK50)",
+      "aliases": ["rbk50", "orbi ac3000", "orbi original", "rbr50", "rbs50", "orbi 50"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2016,
+      "wifiStandard": "ac3000",
+      "cpePrefix": "cpe:2.3:h:netgear:rbk50:",
+      "hardwareVersions": {
+        "default": {
+          "chipset": "Qualcomm IPQ4019",
+          "supportStatus": "security-only",
+          "eolDate": "2024-12-31",
+          "supportUrl": "https://www.netgear.com/support/product/RBK50.aspx",
+          "firmwareBranches": {
+            "2.x": {
+              "branchName": "2.x",
+              "msv": "2.7.2.104",
+              "msvDate": "2021-04-15",
+              "msvCves": ["CVE-2021-27252", "CVE-2021-27251", "CVE-2021-27253", "CVE-2021-27254"],
+              "latest": "2.7.5.4",
+              "latestDate": "2023-08-10",
+              "downloadUrl": "https://www.netgear.com/support/product/RBK50.aspx#download",
+              "eol": false,
+              "eolNote": "Legacy model. Limited future updates expected."
+            }
+          },
+          "kevCves": [],
+          "note": "Original Orbi mesh system. Nearing EOL - consider upgrade to RBK852 or newer."
+        }
+      },
+      "defaultHwVersion": "default"
+    },
     "linksys_velop_mx5300": {
       "id": "linksys_velop_mx5300",
       "vendor": "linksys",
@@ -2461,6 +2595,50 @@
             }
           },
           "note": "Premium WiFi 6E tri-band mesh (2.4GHz + 5GHz + 6GHz). AXE8400 speeds up to 8.4 Gbps. 5Gbps WAN port, 4x Gigabit LAN, USB 3.0. 3000 sq ft coverage, 65+ devices. MX8501/8502/8503 are packaging variants (1/2/3-pack)."
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "linksys_mr9600": {
+      "id": "linksys_mr9600",
+      "vendor": "linksys",
+      "family": "mr",
+      "model": "MR9600",
+      "displayName": "Linksys Max-Stream MR9600 WiFi 6",
+      "aliases": ["mr9600", "linksys mr9600", "max-stream mr9600", "linksys ax6000", "ax6000 dual-band"],
+      "category": "wifi-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2020,
+      "wifiStandard": "ax6000",
+      "cpePrefix": "cpe:2.3:o:linksys:mr9600_firmware:",
+      "hardwareVersions": {
+        "default": {
+          "chipset": "Qualcomm IPQ8074",
+          "supportStatus": "supported",
+          "supportUrl": "https://www.linksys.com/support-product?sku=MR9600",
+          "firmwareBranches": {
+            "2.x": {
+              "branchName": "2.x",
+              "msv": "2.0.5",
+              "msvDate": "2022-02-15",
+              "msvCves": ["CVE-2022-24372"],
+              "latest": "2.0.12",
+              "latestDate": "2025-03-10",
+              "downloadUrl": "https://support.linksys.com/kb/article/111-en/",
+              "eol": false,
+              "eolNote": "Update to 2.0.5+ to fix CVE-2022-24372 (arbitrary file read via SMB share)"
+            }
+          },
+          "kevCves": [],
+          "altFirmware": {
+            "ddwrt": {
+              "status": "unknown"
+            },
+            "openwrt": {
+              "status": "unknown"
+            }
+          },
+          "note": "Flagship WiFi 6 dual-band router. 5GHz up to 4800Mbps, 2.4GHz up to 1200Mbps. 4x Gigabit LAN, USB 3.0. Intelligent Mesh capable."
         }
       },
       "defaultHwVersion": "default"
