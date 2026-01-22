@@ -203,57 +203,107 @@ bun run tools/msv.ts db update
 vdb --download-image
 ```
 
-## Optional Enhancements
+## API Keys Configuration
 
-### VulnCheck API Key (Recommended)
+MSV works without any API keys using free public APIs and the offline AppThreat database. However, adding API keys enhances data quality and performance.
 
-VulnCheck provides enhanced exploit/PoC intelligence. Free tier available.
+### API Keys Overview
 
-1. **Get API Key:** Sign up at https://vulncheck.com (free tier available)
+| API | Required | Free Tier | Benefit | Get Key |
+|-----|----------|-----------|---------|---------|
+| **VulnCheck** | No | Yes (1000 req/day) | Exploit/PoC intelligence | [vulncheck.com](https://vulncheck.com) |
+| **NVD** | No | Yes (5 req/30s) | 10x rate limit (50 req/30s) | [nvd.nist.gov](https://nvd.nist.gov/developers/request-an-api-key) |
 
-2. **Add to environment:**
+### Setting Up API Keys
 
-   **Windows (PowerShell):**
-   ```powershell
-   $env:VULNCHECK_API_KEY = "vulncheck_your_key_here"
-   ```
+#### Option 1: Environment File (Recommended)
 
-   **macOS/Linux:**
+Create a `.env` file in your Claude config directory:
+
+**Location:** `~/.claude/.env` (or `%USERPROFILE%\.claude\.env` on Windows)
+
+```bash
+# MSV API Keys
+VULNCHECK_API_KEY=vulncheck_xxxxxxxxxxxxxxxxxxxx
+NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+#### Option 2: Shell Environment Variables
+
+**Windows (PowerShell profile):**
+```powershell
+# Add to $PROFILE (run: notepad $PROFILE)
+$env:VULNCHECK_API_KEY = "vulncheck_xxxxxxxxxxxxxxxxxxxx"
+$env:NVD_API_KEY = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+**macOS/Linux (shell profile):**
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+export VULNCHECK_API_KEY="vulncheck_xxxxxxxxxxxxxxxxxxxx"
+export NVD_API_KEY="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+### VulnCheck API Key
+
+VulnCheck provides enhanced exploit and proof-of-concept intelligence, improving MSV's ability to assess real-world risk.
+
+1. **Sign up:** https://vulncheck.com (free tier: 1000 requests/day)
+2. **Get API key:** Dashboard > API Keys > Create
+3. **Key format:** `vulncheck_` followed by alphanumeric string
+4. **Verify:**
    ```bash
-   export VULNCHECK_API_KEY="vulncheck_your_key_here"
+   msv query chrome --verbose
+   # Should show "VulnCheck: X CVEs found" in output
    ```
 
-   **Or create `.claude/.env` file:**
-   ```
-   VULNCHECK_API_KEY=vulncheck_your_key_here
-   ```
+### NVD API Key
 
-3. **Verify:**
+The NVD API key increases your rate limit from 5 to 50 requests per 30 seconds, essential for batch operations.
+
+1. **Request key:** https://nvd.nist.gov/developers/request-an-api-key
+2. **Delivery:** Sent to your email within minutes
+3. **Key format:** UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+4. **Verify:**
    ```bash
-   bun run tools/msv.ts query "chrome"
-   # Should show "VulnCheck" in Sources if working
+   msv batch inventory.txt --verbose
+   # Should complete faster without rate limit warnings
    ```
 
-## Environment Variables Reference
+### Environment Variables Reference
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VULNCHECK_API_KEY` | No | VulnCheck API key for PoC intelligence |
-| `NVD_API_KEY` | No | NVD API key for 10x higher rate limits (50 req/30s vs 5 req/30s) |
-| `MSV_CACHE_DIR` | No | Custom cache directory (default: skill's data/ folder) |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `VULNCHECK_API_KEY` | No | None | VulnCheck API key for PoC/exploit intelligence |
+| `NVD_API_KEY` | No | None | NVD API key for 10x higher rate limits |
+| `MSV_CACHE_DIR` | No | `~/.claude/skills/MSV/data` | Custom cache directory |
+| `MSV_LOG_LEVEL` | No | `info` | Logging level: debug, info, warn, error |
 
-### NVD API Key (Recommended for Batch Operations)
+### Verifying API Key Setup
 
-The NVD API key increases your rate limit from 5 to 50 requests per 30 seconds.
+Run this command to check your API key configuration:
 
-1. **Get API Key:** Request at https://nvd.nist.gov/developers/request-an-api-key
-2. **Add to environment:**
-   ```bash
-   export NVD_API_KEY="your-nvd-api-key"
-   ```
-   Or add to `.claude/.env` file.
+```bash
+msv query chrome --verbose
+```
 
-Without an API key, batch operations on large inventories may be slow due to rate limiting.
+**With API keys configured, you'll see:**
+```
+[DEBUG] Checking vendor advisory...
+[DEBUG] Querying AppThreat database...
+[DEBUG] Querying CISA KEV...
+[DEBUG] Querying VulnCheck...        # <-- VulnCheck API working
+[DEBUG] Querying NVD...              # <-- NVD API working
+```
+
+**Without API keys (still works):**
+```
+[DEBUG] Checking vendor advisory...
+[DEBUG] Querying AppThreat database...
+[DEBUG] Querying CISA KEV...
+[WARN] VulnCheck: No API key        # <-- Optional, MSV works without it
+[DEBUG] Querying NVD (rate limited)...
+```
 
 ## Troubleshooting
 

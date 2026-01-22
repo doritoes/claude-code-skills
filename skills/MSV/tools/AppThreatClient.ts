@@ -277,7 +277,8 @@ export class AppThreatClient {
     const vdbResult = await new Promise<boolean>((resolve) => {
       const vdbProcess = spawn("vdb", ["--download-image"], {
         stdio: verbose ? "inherit" : "pipe",
-        shell: true,
+        shell: false, // Security: avoid shell injection
+        windowsHide: true,
       });
 
       vdbProcess.on("close", (code) => {
@@ -297,12 +298,17 @@ export class AppThreatClient {
     // Fallback: try running vdb via Python module (works when vdb not in PATH)
     if (verbose) console.log("Trying vdb via Python module...");
 
-    const pythonCmd = `python -c "import sys; sys.argv = ['vdb', '--download-image']; from vdb.cli import main; main()"`;
+    // Security: Use array args instead of shell string to avoid injection
+    const pythonArgs = [
+      "-c",
+      "import sys; sys.argv = ['vdb', '--download-image']; from vdb.cli import main; main()"
+    ];
 
     return new Promise((resolve) => {
-      const pythonProcess = spawn(pythonCmd, [], {
+      const pythonProcess = spawn("python", pythonArgs, {
         stdio: verbose ? "inherit" : "pipe",
-        shell: true,
+        shell: false, // Security: avoid shell injection
+        windowsHide: true,
       });
 
       pythonProcess.on("close", (code) => {
@@ -346,7 +352,8 @@ export class AppThreatClient {
         ["pull", "ghcr.io/appthreat/vdbxz-app:latest", "--output", DEFAULT_VDB_DIR],
         {
           stdio: verbose ? "inherit" : "pipe",
-          shell: true,
+          shell: false, // Security: avoid shell injection
+          windowsHide: true,
         }
       );
 
