@@ -6,5 +6,6 @@ nvd-cpe-*.json
 vendor-*.json
 vulncheck-*.json
 
-# Keep the software catalog
+# Keep the catalogs
 !SoftwareCatalog.json
+!RouterCatalog.json

@@ -3,6 +3,7 @@
 # Cache files (regenerated on use)
 data/*.json
 !data/SoftwareCatalog.json
+!data/RouterCatalog.json
 
 # Temp files from Claude Code
 tmpclaude-*

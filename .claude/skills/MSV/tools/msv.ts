@@ -75,6 +75,15 @@ import {
   type DiscoveryResult,
 } from "./SoftwareDiscovery";
 import {
+  queryRouter,
+  listVendors,
+  listModelsByVendor,
+  getCatalogStats,
+  formatRouterResult,
+  type RouterQuery,
+} from "./RouterClient";
+import { RouterCatalogUpdater } from "./RouterCatalogUpdater";
+import {
   AppThreatClient,
   getMinimumSafeVersion as getAppThreatMsv,
   type VulnResult as AppThreatVulnResult,
@@ -3162,6 +3171,170 @@ async function cmdGhsa(
 }
 
 // =============================================================================
+// Router Firmware Commands
+// =============================================================================
+
+interface RouterOptions {
+  format: "text" | "json";
+  verbose: boolean;
+  hwVersion?: string;
+  firmware?: string;
+}
+
+/**
+ * Query router firmware MSV information
+ */
+async function cmdRouter(
+  subcommand: string,
+  arg: string | undefined,
+  options: RouterOptions
+): Promise<void> {
+  switch (subcommand) {
+    case "query":
+    case "check": {
+      if (!arg) {
+        throw new Error(
+          "Missing router model. Usage: msv router query <model> [--hw-version v1] [--firmware 1.0.5]"
+        );
+      }
+
+      const query: RouterQuery = {
+        input: arg,
+        hwVersion: options.hwVersion,
+        firmware: options.firmware,
+      };
+
+      const result = await queryRouter(query);
+
+      if (options.format === "json") {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(formatRouterResult(result));
+      }
+      break;
+    }
+
+    case "vendors": {
+      const vendors = await listVendors();
+
+      if (options.format === "json") {
+        console.log(JSON.stringify(vendors, null, 2));
+      } else {
+        console.log("\n=== Router Vendors ===\n");
+        for (const vendor of vendors) {
+          const bugBounty = vendor.bugBounty ? "✓" : "✗";
+          const cna = vendor.cnaStatus ? "✓" : "✗";
+          console.log(`${vendor.displayName}`);
+          console.log(`  Trust Rating: ${vendor.trustRating.toUpperCase()}`);
+          console.log(`  Bug Bounty: ${bugBounty}  CNA: ${cna}`);
+          if (vendor.securityNotes) {
+            console.log(`  Notes: ${vendor.securityNotes.substring(0, 80)}...`);
+          }
+          console.log();
+        }
+      }
+      break;
+    }
+
+    case "models": {
+      if (!arg) {
+        throw new Error("Missing vendor. Usage: msv router models <vendor>");
+      }
+
+      const models = await listModelsByVendor(arg);
+
+      if (models.length === 0) {
+        console.log(`No models found for vendor "${arg}"`);
+        return;
+      }
+
+      if (options.format === "json") {
+        console.log(JSON.stringify(models, null, 2));
+      } else {
+        console.log(`\n=== ${arg.toUpperCase()} Models ===\n`);
+        for (const model of models) {
+          const hwVersions = Object.keys(model.hardwareVersions).join(", ");
+          const firstHw = Object.values(model.hardwareVersions)[0];
+          const status = firstHw?.supportStatus || "unknown";
+          const kevCount = firstHw?.kevCves?.length || 0;
+
+          console.log(`${model.displayName}`);
+          console.log(`  Model: ${model.model} | WiFi: ${model.wifiStandard || "unknown"}`);
+          console.log(`  HW Versions: ${hwVersions}`);
+          console.log(`  Status: ${status.toUpperCase()}${kevCount > 0 ? ` | KEV CVEs: ${kevCount}` : ""}`);
+          console.log();
+        }
+      }
+      break;
+    }
+
+    case "stats": {
+      const stats = await getCatalogStats();
+
+      if (options.format === "json") {
+        console.log(JSON.stringify(stats, null, 2));
+      } else {
+        console.log("\n=== Router Catalog Statistics ===\n");
+        console.log(`Catalog Version: ${stats.version}`);
+        console.log(`Last Updated: ${stats.lastUpdated}`);
+        console.log(`Vendors: ${stats.vendorCount}`);
+        console.log(`Models: ${stats.modelCount}`);
+        console.log(`KEV-Affected: ${stats.kevAffectedCount}`);
+        console.log(`EOL Models: ${stats.eolCount}`);
+      }
+      break;
+    }
+
+    case "update": {
+      // Update router catalog from NVD
+      const cacheDir = resolve(
+        dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")),
+        "../.cache"
+      );
+      const updater = new RouterCatalogUpdater(cacheDir, { verbose: options.verbose });
+
+      if (arg) {
+        // Query single model
+        const output = await updater.queryModel(arg);
+        console.log(output);
+      } else {
+        // Full catalog update
+        const dryRun = !options.verbose; // Use verbose as "actually update" flag
+        console.log(`Starting router catalog update (dry-run: ${dryRun})...`);
+        console.log("Use --verbose to actually apply updates.");
+
+        const summary = await updater.updateCatalog({
+          dryRun,
+          skipExisting: false,
+        });
+
+        if (options.format === "json") {
+          console.log(JSON.stringify(summary, null, 2));
+        } else {
+          console.log(updater.formatSummary(summary));
+        }
+      }
+      break;
+    }
+
+    default:
+      throw new Error(
+        `Unknown router subcommand: ${subcommand}\n` +
+          "Available: query, vendors, models, stats, update\n" +
+          "Examples:\n" +
+          "  msv router query 'NETGEAR R7000'\n" +
+          "  msv router query 'TP-Link AX21' --firmware 1.1.2\n" +
+          "  msv router vendors\n" +
+          "  msv router models netgear\n" +
+          "  msv router stats\n" +
+          "  msv router update              # Dry-run update\n" +
+          "  msv router update --verbose    # Apply updates\n" +
+          "  msv router update netgear_r7000  # Query single model"
+      );
+  }
+}
+
+// =============================================================================
 // Main Entry Point
 // =============================================================================
 
@@ -3188,6 +3361,8 @@ async function main(): Promise<void> {
   let confirmIndex: number | undefined;
   let parallel = true;  // Default to parallel
   let concurrency = 5;  // Default concurrency
+  let hwVersion: string | undefined;  // Router hardware version
+  let firmware: string | undefined;   // Router firmware version
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -3218,6 +3393,10 @@ async function main(): Promise<void> {
       inputFormat = "json";
     } else if (arg === "--list") {
       inputFormat = "list";
+    } else if (arg === "--hw-version" && args[i + 1]) {
+      hwVersion = args[++i];
+    } else if (arg === "--firmware" && args[i + 1]) {
+      firmware = args[++i];
     } else if (!arg.startsWith("-")) {
       positionalArgs.push(arg);
     }
@@ -3349,6 +3528,15 @@ async function main(): Promise<void> {
           format: options.format as "text" | "json",
           verbose: options.verbose,
         }, config);
+        break;
+
+      case "router":
+        await cmdRouter(positionalArgs[1] || "stats", positionalArgs[2], {
+          format: options.format as "text" | "json",
+          verbose: options.verbose,
+          hwVersion,
+          firmware,
+        });
         break;
 
       default:
