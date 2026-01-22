@@ -227,3 +227,269 @@ MSV/
 | Tests failing | Run `bun test tools/msv.test.ts --verbose` for details |
 
 See `SETUP.md` for comprehensive troubleshooting guide.
+
+---
+
+## Standalone Usage (Without Claude Code)
+
+The MSV skill can be used entirely without Claude Code as a standalone CLI tool. This is useful for:
+- CI/CD pipelines
+- Scheduled compliance scans
+- Integration with other tools
+- Manual security assessments
+
+### Installation (Standalone)
+
+```bash
+# 1. Clone or copy the MSV skill directory
+git clone <your-repo> ~/msv-tool
+# Or copy from existing Claude Code installation:
+cp -r ~/.claude/skills/MSV ~/msv-tool
+
+# 2. Install Bun (if not installed)
+# Windows PowerShell:
+powershell -c "irm bun.sh/install.ps1 | iex"
+# macOS/Linux:
+curl -fsSL https://bun.sh/install | bash
+
+# 3. Install dependencies
+cd ~/msv-tool
+bun install
+
+# 4. (Optional) Set up API keys for enhanced features
+cp .env.example .env
+# Edit .env and add:
+#   NVD_API_KEY=your-key-here      # 10x faster queries
+#   VULNCHECK_API_KEY=your-key     # Exploit intelligence
+```
+
+### Create Shell Alias
+
+```bash
+# Add to ~/.bashrc, ~/.zshrc, or PowerShell profile
+alias msv="bun run ~/msv-tool/tools/msv.ts"
+
+# Or for Windows PowerShell ($PROFILE):
+function msv { bun run "$HOME\msv-tool\tools\msv.ts" $args }
+```
+
+### Software MSV Commands
+
+```bash
+# Query single software
+msv query "Google Chrome"
+msv query "PuTTY" --format json
+msv query "Adobe Acrobat DC" --verbose
+
+# Batch query from file
+msv batch software-list.txt
+msv batch software-list.txt --format markdown
+msv batch software-list.txt --filter kev  # Only KEV-affected
+
+# Compliance check with versions
+msv check "Chrome 120.0.1, Edge 121.0.2, PuTTY 0.80"
+msv check inventory.csv --format csv
+msv check inventory.json --concurrency 10
+
+# Scan installed software (Windows)
+msv scan                    # Detect via winget/chocolatey
+msv scan --format json
+
+# Pre-warm cache for faster queries
+msv warm                    # Critical priority
+msv warm high               # High+ priority
+msv warm all                # All software
+
+# Database management
+msv db status               # AppThreat DB status
+msv db update               # Download/update offline DB
+
+# Catalog management
+msv list                    # List all supported software
+msv list browsers           # List by category
+msv stats                   # Catalog statistics
+msv discover "WinRAR"       # Search NVD for new software
+```
+
+### Router Firmware Commands
+
+```bash
+# Query router MSV
+msv router query "NETGEAR R7000"
+msv router query "ASUS ZenWiFi XT8"
+msv router query "TP-Link Archer AX21" --firmware 1.1.2
+
+# List vendors and models
+msv router vendors
+msv router models netgear
+msv router models asus
+
+# Catalog statistics
+msv router stats
+
+# Update catalog (dry-run)
+msv router update
+msv router update --verbose
+```
+
+### Output Formats
+
+All commands support multiple output formats:
+
+```bash
+# Text (default) - human readable
+msv query "Chrome"
+
+# JSON - for programmatic parsing
+msv query "Chrome" --format json
+
+# Markdown - for reports
+msv batch inventory.txt --format markdown
+
+# CSV - for spreadsheets
+msv check inventory.csv --format csv
+```
+
+### Example: CI/CD Integration
+
+```yaml
+# GitHub Actions example
+name: Security Compliance Check
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 6am
+
+jobs:
+  msv-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install MSV
+        run: |
+          git clone https://github.com/your-org/msv-tool
+          cd msv-tool && bun install
+
+      - name: Run compliance check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          cd msv-tool
+          bun run tools/msv.ts check ../inventory.csv --format json > results.json
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: msv-results
+          path: msv-tool/results.json
+```
+
+### Example: Scheduled Scan Script
+
+```bash
+#!/bin/bash
+# msv-daily-scan.sh - Run daily MSV compliance check
+
+MSV_DIR="$HOME/msv-tool"
+OUTPUT_DIR="$HOME/msv-reports"
+DATE=$(date +%Y-%m-%d)
+
+cd "$MSV_DIR"
+
+# Software compliance
+bun run tools/msv.ts check inventory.csv --format json > "$OUTPUT_DIR/software-$DATE.json"
+
+# Router firmware check
+bun run tools/msv.ts router query "NETGEAR R7000" --format json > "$OUTPUT_DIR/router-$DATE.json"
+
+# Generate markdown report
+bun run tools/msv.ts batch inventory.txt --format markdown > "$OUTPUT_DIR/report-$DATE.md"
+
+echo "MSV scan complete: $OUTPUT_DIR"
+```
+
+### Example: PowerShell Compliance Report
+
+```powershell
+# MSV-ComplianceReport.ps1
+$MsvPath = "$env:USERPROFILE\msv-tool"
+$ReportPath = "$env:USERPROFILE\Documents\MSV-Reports"
+$Date = Get-Date -Format "yyyy-MM-dd"
+
+# Ensure report directory exists
+New-Item -ItemType Directory -Force -Path $ReportPath | Out-Null
+
+# Run MSV scan
+Set-Location $MsvPath
+$results = bun run tools/msv.ts scan --format json | ConvertFrom-Json
+
+# Filter non-compliant
+$nonCompliant = $results | Where-Object { $_.status -eq "NON_COMPLIANT" }
+
+if ($nonCompliant.Count -gt 0) {
+    Write-Host "WARNING: $($nonCompliant.Count) non-compliant software found!" -ForegroundColor Red
+    $nonCompliant | Format-Table -Property software, currentVersion, msv, status
+
+    # Save report
+    $results | ConvertTo-Json | Out-File "$ReportPath\scan-$Date.json"
+} else {
+    Write-Host "All software compliant!" -ForegroundColor Green
+}
+```
+
+### Input File Formats
+
+**CSV format (inventory.csv):**
+```csv
+software,version
+Google Chrome,120.0.6099.109
+PuTTY,0.80
+Wireshark,4.2.0
+```
+
+**JSON format (inventory.json):**
+```json
+[
+  {"software": "Google Chrome", "version": "120.0.6099.109"},
+  {"software": "PuTTY", "version": "0.80"},
+  {"software": "Wireshark", "version": "4.2.0"}
+]
+```
+
+**Text format (software-list.txt):**
+```
+Google Chrome
+PuTTY
+Wireshark
+Adobe Acrobat DC
+```
+
+### Environment Variables
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `NVD_API_KEY` | NVD API key (10x faster queries) | Recommended |
+| `VULNCHECK_API_KEY` | VulnCheck exploit intelligence | Optional |
+| `MSV_CACHE_DIR` | Custom cache directory | Optional |
+| `MSV_LOG_LEVEL` | Logging: debug, info, warn, error | Optional |
+
+### Running Tests
+
+```bash
+cd ~/msv-tool
+
+# Run all tests
+bun test
+
+# Run specific test file
+bun test tools/tests/RouterClient.test.ts
+
+# Run with coverage
+bun test --coverage
+
+# Run in watch mode
+bun test --watch
+```

@@ -5,6 +5,11 @@ nvd-cve-*.json
 nvd-cpe-*.json
 vendor-*.json
 vulncheck-*.json
+chocolatey_cache.json
+curl-vulns.json
+mozilla-*.json
+msrc-*.json
 
-# Keep the software catalog
+# Keep the catalogs
 !SoftwareCatalog.json
+!RouterCatalog.json

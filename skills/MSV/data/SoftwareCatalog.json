@@ -2,7 +2,7 @@
   "_metadata": {
     "version": "1.1.0",
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
-    "lastUpdated": "2026-01-21T14:07:22.732Z",
+    "lastUpdated": "2026-01-22T03:30:38.371Z",
     "lastChecked": "2026-01-21T00:00:00Z",
     "totalEntries": 189,
     "sources": [
@@ -3866,6 +3866,25 @@
       ],
       "notes": "CRITICAL: Load balancer/ADC. Multiple actively exploited CVEs.",
       "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "vandyke_securecrt",
+      "displayName": "Vandyke Securecrt 4.1",
+      "vendor": "vandyke",
+      "product": "securecrt",
+      "cpe23": "cpe:2.3:a:vandyke:securecrt:4.1:*:*:*:*:*:*:*",
+      "category": "other",
+      "priority": "medium",
+      "aliases": [
+        "securecrt",
+        "vandyke securecrt"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "Auto-discovered from NVD CPE",
+      "autoDiscovered": true,
+      "discoveredAt": "2026-01-22T03:30:38.370Z"
     }
   ]
 }
