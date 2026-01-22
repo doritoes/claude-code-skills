@@ -1,0 +1,18 @@
+{
+  "name": "msv-skill",
+  "version": "1.3.1",
+  "description": "Minimum Safe Version (MSV) calculator for Windows software",
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "msv": "bun run tools/msv.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "author": "PAI (Personal AI Infrastructure)",
+  "license": "MIT"
+}

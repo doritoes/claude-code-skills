@@ -966,6 +966,11 @@ export class MozillaVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
 // =============================================================================
 
 import { MsrcClient, type MsrcVulnResult } from "./MsrcClient";
+import { VMwareAdvisoryFetcher as VMwareFetcherCore } from "./VMwareAdvisoryFetcher";
+import { AtlassianAdvisoryFetcher as AtlassianFetcherCore } from "./AtlassianAdvisoryFetcher";
+import { CitrixAdvisoryFetcher as CitrixFetcherCore } from "./CitrixAdvisoryFetcher";
+import { AdobeAdvisoryFetcher as AdobeFetcherCore } from "./AdobeAdvisoryFetcher";
+import { OracleAdvisoryFetcher as OracleFetcherCore } from "./OracleAdvisoryFetcher";
 
 export class MsrcAdvisoryFetcher extends VendorAdvisoryFetcher {
   private readonly productKey: string;
@@ -1078,6 +1083,296 @@ export class MsrcAdvisoryFetcher extends VendorAdvisoryFetcher {
 }
 
 // =============================================================================
+// VMware Advisory Fetcher (Wrapper)
+// =============================================================================
+
+export class VMwareVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private coreFetcher: VMwareFetcherCore;
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "esxi") {
+    super(cacheDir);
+    this.product = product;
+    this.coreFetcher = new VMwareFetcherCore(cacheDir, product);
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `vmware-vendor-${this.product}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    const vmwareResult = await this.coreFetcher.fetch();
+
+    // Convert to SecurityAdvisory format
+    const advisories: SecurityAdvisory[] = vmwareResult.vulnerabilities.map(vuln => ({
+      id: vuln.advisoryId,
+      title: vuln.title,
+      severity: this.mapSeverity(vuln.severity),
+      affectedVersions: vuln.affectedProducts,
+      fixedVersions: vuln.fixedVersions,
+      cveIds: vuln.cveIds,
+      publishedDate: vuln.publishedDate.split("T")[0],
+      url: vuln.url,
+    }));
+
+    // Convert MSV map to branches
+    const branches: BranchMsv[] = Object.entries(vmwareResult.msv).map(([product, version]) => ({
+      branch: product,
+      msv: version,
+      latest: version,
+    }));
+
+    const result: VendorAdvisoryResult = {
+      vendor: "vmware",
+      product: this.product,
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: vmwareResult.source,
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+
+  private mapSeverity(severity: string): SecurityAdvisory["severity"] {
+    switch (severity) {
+      case "critical": return "critical";
+      case "important": return "high";
+      case "moderate": return "medium";
+      case "low": return "low";
+      default: return "medium";
+    }
+  }
+}
+
+// =============================================================================
+// Atlassian Advisory Fetcher (Wrapper)
+// =============================================================================
+
+export class AtlassianVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private coreFetcher: AtlassianFetcherCore;
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+    this.coreFetcher = new AtlassianFetcherCore(cacheDir, product);
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `atlassian-vendor-${this.product}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    const atlassianResult = await this.coreFetcher.fetch();
+
+    // Convert to SecurityAdvisory format
+    const advisories: SecurityAdvisory[] = atlassianResult.vulnerabilities.map(vuln => ({
+      id: vuln.cveId,
+      title: vuln.summary,
+      severity: vuln.severity,
+      affectedVersions: vuln.affectedProducts.flatMap(p => p.affectedVersions),
+      fixedVersions: vuln.affectedProducts.flatMap(p => p.fixedVersions),
+      cveIds: [vuln.cveId],
+      publishedDate: vuln.publishDate.split("T")[0],
+      url: vuln.advisoryUrl,
+    }));
+
+    // Convert MSV map to branches
+    const branches: BranchMsv[] = Object.entries(atlassianResult.msvByProduct).map(([product, version]) => ({
+      branch: product,
+      msv: version,
+      latest: version,
+    }));
+
+    const result: VendorAdvisoryResult = {
+      vendor: "atlassian",
+      product: this.product,
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: atlassianResult.source,
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+}
+
+// =============================================================================
+// Citrix Advisory Fetcher (Wrapper)
+// =============================================================================
+
+export class CitrixVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private coreFetcher: CitrixFetcherCore;
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+    this.coreFetcher = new CitrixFetcherCore(cacheDir, product);
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `citrix-vendor-${this.product}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    const citrixResult = await this.coreFetcher.fetch();
+
+    // Convert to SecurityAdvisory format
+    const advisories: SecurityAdvisory[] = citrixResult.vulnerabilities.map(vuln => ({
+      id: vuln.bulletinId,
+      title: vuln.title,
+      severity: vuln.severity,
+      affectedVersions: vuln.affectedProducts,
+      fixedVersions: vuln.fixedVersions,
+      cveIds: vuln.cveIds,
+      publishedDate: vuln.publishedDate.split("T")[0],
+      url: vuln.url,
+    }));
+
+    // Convert MSV map to branches
+    const branches: BranchMsv[] = Object.entries(citrixResult.msvByProduct).map(([product, version]) => ({
+      branch: product,
+      msv: version,
+      latest: version,
+    }));
+
+    const result: VendorAdvisoryResult = {
+      vendor: "citrix",
+      product: this.product,
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: citrixResult.source,
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+}
+
+// =============================================================================
+// Adobe Advisory Fetcher (Wrapper)
+// =============================================================================
+
+export class AdobeVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private coreFetcher: AdobeFetcherCore;
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+    this.coreFetcher = new AdobeFetcherCore(cacheDir, product);
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `adobe-vendor-${this.product}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    const adobeResult = await this.coreFetcher.fetch();
+
+    // Convert to SecurityAdvisory format
+    const advisories: SecurityAdvisory[] = adobeResult.vulnerabilities.map(vuln => ({
+      id: vuln.bulletinId,
+      title: vuln.title,
+      severity: this.mapSeverity(vuln.severity),
+      affectedVersions: vuln.affectedVersions,
+      fixedVersions: vuln.fixedVersions,
+      cveIds: vuln.cveIds,
+      publishedDate: vuln.publishedDate.split("T")[0],
+      url: vuln.url,
+    }));
+
+    // Convert MSV map to branches
+    const branches: BranchMsv[] = Object.entries(adobeResult.msvByProduct).map(([product, version]) => ({
+      branch: product,
+      msv: version,
+      latest: version,
+    }));
+
+    const result: VendorAdvisoryResult = {
+      vendor: "adobe",
+      product: this.product,
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: adobeResult.source,
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+
+  private mapSeverity(severity: string): SecurityAdvisory["severity"] {
+    switch (severity) {
+      case "critical": return "critical";
+      case "important": return "high";
+      case "moderate": return "medium";
+      case "low": return "low";
+      default: return "medium";
+    }
+  }
+}
+
+// =============================================================================
+// Oracle Advisory Fetcher (Wrapper)
+// =============================================================================
+
+export class OracleVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private coreFetcher: OracleFetcherCore;
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+    this.coreFetcher = new OracleFetcherCore(cacheDir, product);
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    const cacheKey = `oracle-vendor-${this.product}`;
+    const cached = this.getCache(cacheKey);
+    if (cached) return cached;
+
+    const oracleResult = await this.coreFetcher.fetch();
+
+    // Convert to SecurityAdvisory format
+    const advisories: SecurityAdvisory[] = oracleResult.vulnerabilities.map(vuln => ({
+      id: vuln.cveId,
+      title: `${vuln.product} - ${vuln.component || vuln.cveId}`,
+      severity: vuln.severity,
+      affectedVersions: vuln.affectedVersions,
+      fixedVersions: vuln.fixedVersions,
+      cveIds: [vuln.cveId],
+      publishedDate: vuln.cpuDate,
+      url: vuln.url,
+    }));
+
+    // Convert MSV map to branches
+    const branches: BranchMsv[] = Object.entries(oracleResult.msvByProduct).map(([product, version]) => ({
+      branch: product,
+      msv: version,
+      latest: version,
+    }));
+
+    const result: VendorAdvisoryResult = {
+      vendor: "oracle",
+      product: this.product,
+      advisories,
+      branches,
+      fetchedAt: new Date().toISOString(),
+      source: oracleResult.source,
+    };
+
+    this.setCache(cacheKey, result);
+    return result;
+  }
+}
+
+// =============================================================================
 // Factory
 // =============================================================================
 
@@ -1116,6 +1411,115 @@ export function getVendorFetcher(
       if (vendor.toLowerCase() === "mozilla") {
         return new MozillaVendorAdvisoryFetcher(cacheDir, product);
       }
+      // Check for VMware/Broadcom products
+      if (vendor.toLowerCase() === "vmware" || vendor.toLowerCase() === "broadcom") {
+        return new VMwareVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Atlassian products
+      if (vendor.toLowerCase() === "atlassian") {
+        return new AtlassianVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Citrix/Cloud Software Group products
+      if (vendor.toLowerCase() === "citrix" || vendor.toLowerCase() === "cloud_software_group") {
+        return new CitrixVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Adobe products
+      if (vendor.toLowerCase() === "adobe") {
+        return new AdobeVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Oracle products
+      if (vendor.toLowerCase() === "oracle") {
+        return new OracleVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Fortinet products
+      if (vendor.toLowerCase() === "fortinet") {
+        return new FortinetVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Palo Alto Networks products
+      if (vendor.toLowerCase() === "palo_alto" || vendor.toLowerCase() === "paloaltonetworks" || vendor.toLowerCase() === "palo alto networks") {
+        return new PaloAltoVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Cisco products
+      if (vendor.toLowerCase() === "cisco") {
+        return new CiscoVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for SonicWall products
+      if (vendor.toLowerCase() === "sonicwall") {
+        return new SonicWallVendorAdvisoryFetcher(cacheDir, product);
+      }
       return null;
+  }
+}
+
+// =============================================================================
+// Wrapper Fetchers for New Vendors
+// =============================================================================
+
+import { FortinetAdvisoryFetcher, fetchFortinetAdvisories } from "./FortinetAdvisoryFetcher";
+import { PaloAltoAdvisoryFetcher, fetchPaloAltoAdvisories } from "./PaloAltoAdvisoryFetcher";
+import { CiscoAdvisoryFetcher, fetchCiscoAdvisories } from "./CiscoAdvisoryFetcher";
+import { SonicWallAdvisoryFetcher, fetchSonicWallAdvisories } from "./SonicWallAdvisoryFetcher";
+
+/**
+ * Fortinet Vendor Advisory Fetcher (Wrapper)
+ */
+class FortinetVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchFortinetAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * Palo Alto Networks Vendor Advisory Fetcher (Wrapper)
+ */
+class PaloAltoVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchPaloAltoAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * Cisco Vendor Advisory Fetcher (Wrapper)
+ */
+class CiscoVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchCiscoAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * SonicWall Vendor Advisory Fetcher (Wrapper)
+ */
+class SonicWallVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchSonicWallAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
   }
 }

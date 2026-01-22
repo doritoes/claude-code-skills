@@ -31,6 +31,7 @@ import {
   RESET_COLOR,
   type AdmiraltyRating,
   type EvidenceSource,
+  type MsvDataSource,
   type MsvRatingInput,
 } from "./AdmiraltyScoring";
 import {
@@ -79,6 +80,28 @@ import {
   type VulnResult as AppThreatVulnResult,
 } from "./AppThreatClient";
 import { createLogger, type Logger } from "./Logger";
+import {
+  formatText,
+  formatJson,
+  formatMarkdown,
+  formatBatchCSV,
+  formatDataAge,
+  getFreshnessIndicator,
+} from "./format";
+import type {
+  Config,
+  BatchFilter,
+  QueryOptions,
+  OutputFormat,
+  MSVResult,
+  DataFreshness,
+  BranchMsvResult,
+  ExploitedCVE,
+  SoftwareMapping,
+  SoftwareCatalog,
+  VariantInfo,
+  VariantMsv,
+} from "./types";
 
 // =============================================================================
 // Module Logger
@@ -90,126 +113,6 @@ const logger = createLogger({ level: "info" });
 /** Configure logger based on CLI options */
 function configureLogger(verbose: boolean): void {
   logger.setOptions({ verbose, level: verbose ? "debug" : "info" });
-}
-
-// =============================================================================
-// Types
-// =============================================================================
-
-interface Config {
-  paiDir: string;
-  skillDir: string;
-  dataDir: string;
-  envPath: string;
-  vulncheckApiKey?: string;
-}
-
-type BatchFilter = "kev" | "urgent" | "stale" | "undetermined" | "all";
-
-interface QueryOptions {
-  format: "text" | "json" | "markdown" | "csv";
-  verbose: boolean;
-  forceRefresh: boolean;
-  filter?: BatchFilter;
-}
-
-interface MSVResult {
-  software: string;
-  displayName: string;
-  platform: string;
-  minimumSafeVersion: string | null;   // Lowest safe version (oldest you can safely run)
-  recommendedVersion: string | null;    // Highest safe version (latest, best protection)
-  latestVersion: string | null;         // Latest available version (from catalog or vendor)
-  branches: BranchMsvResult[];
-  admiraltyRating: AdmiraltyRating;
-  justification: string;
-  sources: string[];
-  cveCount: number;
-  exploitedCves: ExploitedCVE[];
-  queriedAt: string;
-  fromCache: boolean;
-  dataAge?: DataFreshness;
-  // v2 fields
-  hasKevCves: boolean;                  // True if any CVEs are in CISA KEV
-  sourceResults: SourceResult[];        // Per-source query results
-  action?: ActionGuidance;              // Generated action guidance
-  riskScore?: RiskScore;                // Aggregate risk score (0-100)
-  // v3 fields - variant support
-  hasVariants?: boolean;                // True if this product has variant tracks
-  variantInfo?: VariantInfo;            // Information about variants
-}
-
-interface VariantInfo {
-  parentProduct: string;                // e.g., "Adobe Acrobat Reader"
-  variants: VariantMsv[];               // MSV info for each variant
-  trackHelp: string;                    // Help text explaining how to identify track
-}
-
-interface VariantMsv {
-  id: string;                           // e.g., "acrobat_reader_dc"
-  displayName: string;                  // e.g., "Adobe Acrobat Reader DC"
-  track: string;                        // e.g., "Continuous (DC)"
-  msv: string | null;                   // Minimum safe version
-  versionPattern: string;               // e.g., "24.x.x.x (builds >10000)"
-}
-
-interface DataFreshness {
-  lastUpdated: string;      // When MSV data was last updated
-  lastChecked: string;      // When data sources were last queried
-  ageHours: number;         // Hours since last check
-  isStale: boolean;         // True if > 24 hours old
-  isCritical: boolean;      // True if > 7 days old
-}
-
-interface BranchMsvResult {
-  branch: string;
-  msv: string;
-  latest: string;
-  noSafeVersion?: boolean;  // True if MSV > latest (no safe version available yet)
-}
-
-interface ExploitedCVE {
-  cve: string;
-  description?: string;
-  fixedVersion?: string;
-  affectedRange?: string;
-  inCisaKev: boolean;
-  hasPoC: boolean;
-  epssScore?: number;
-  cvssScore?: number;
-  dateAdded?: string;
-}
-
-interface SoftwareMapping {
-  id: string;
-  displayName: string;
-  vendor: string;
-  product: string;
-  cpe23?: string;
-  category?: string;
-  priority?: "critical" | "high" | "medium" | "low";
-  aliases: string[];
-  platforms: string[];
-  notes?: string;
-  lastChecked?: string;
-  variants?: string[];  // List of variant IDs for products with multiple tracks
-  versionPattern?: string;  // Regex to filter valid versions (e.g., "^7\\." for PowerShell 7)
-  excludePatterns?: string[];  // Regex patterns to exclude from CVE descriptions (prevents data contamination)
-  osComponent?: boolean;  // True if this is a Windows OS component (updates via Windows Update only)
-  eol?: boolean;  // True if this software is End of Life (no longer receiving security patches)
-  latestVersion?: string;  // Known latest version for display (manually maintained)
-}
-
-interface SoftwareCatalog {
-  _metadata: {
-    version: string;
-    description: string;
-    lastUpdated: string;
-    lastChecked: string;
-    totalEntries: number;
-    sources: string[];
-  };
-  software: SoftwareMapping[];
 }
 
 // =============================================================================
@@ -519,26 +422,6 @@ function calculateDataFreshness(lastUpdated: string, lastChecked?: string): Data
   };
 }
 
-function formatDataAge(freshness: DataFreshness): string {
-  if (freshness.ageHours < 1) {
-    return "just now";
-  } else if (freshness.ageHours < 24) {
-    return `${freshness.ageHours}h ago`;
-  } else {
-    const days = Math.round(freshness.ageHours / 24);
-    return `${days}d ago`;
-  }
-}
-
-function getFreshnessIndicator(freshness: DataFreshness): string {
-  if (freshness.isCritical) {
-    return "\x1b[31m⚠ STALE DATA\x1b[0m"; // Red warning
-  } else if (freshness.isStale) {
-    return "\x1b[33m○ Data may be outdated\x1b[0m"; // Yellow
-  }
-  return "\x1b[32m●\x1b[0m"; // Green dot - fresh
-}
-
 // =============================================================================
 // Justification Generation
 // =============================================================================
@@ -778,13 +661,13 @@ async function queryMSV(
         : cached.branches.reduce((sum, b) => sum + b.advisoriesChecked.length, 0);
 
       const ratingInput: MsvRatingInput = {
-        dataSources: cached.dataSources.map(s => {
+        dataSources: cached.dataSources.map((s): MsvDataSource => {
           if (s === "Vendor Advisory") return "vendor_advisory";
           if (s === "NVD") return "nvd";
           if (s === "CISA KEV") return "cisa_kev";
           if (s === "VulnCheck") return "vulncheck";
           if (s === "AppThreat") return "appthreat";
-          return s as any;
+          return "none"; // Unknown source mapped to none
         }),
         hasVendorAdvisory,
         hasCveData: cveCount > 0 || cached.branches.length > 0,
@@ -952,9 +835,7 @@ async function queryMSV(
           cveCount: vendorData.advisories.reduce((sum, adv) => sum + adv.cveIds.length, 0),
         });
 
-        if (options.verbose) {
-          console.log(`  Found ${vendorData.advisories.length} advisories, ${branches.length} branches`);
-        }
+        logger.debug(`Found ${vendorData.advisories.length} advisories, ${branches.length} branches`);
       }
     } catch (error) {
       logger.warn("Vendor advisory fetch failed:", error);
@@ -989,8 +870,8 @@ async function queryMSV(
             if (!r.fixedVersion) return true;  // Keep CVEs without fixed version
             return versionRegex.test(r.fixedVersion);
           });
-          if (options.verbose && originalCount !== appThreatResults.length) {
-            console.log(`  Filtered ${originalCount - appThreatResults.length} CVEs with invalid version patterns`);
+          if (originalCount !== appThreatResults.length) {
+            logger.debug(`Filtered ${originalCount - appThreatResults.length} CVEs with invalid version patterns`);
           }
         }
 
@@ -1009,8 +890,8 @@ async function queryMSV(
             }
             return true;
           });
-          if (options.verbose && originalCount !== appThreatResults.length) {
-            console.log(`  Filtered ${originalCount - appThreatResults.length} CVEs matching exclude patterns`);
+          if (originalCount !== appThreatResults.length) {
+            logger.debug(`Filtered ${originalCount - appThreatResults.length} CVEs matching exclude patterns`);
           }
         }
 
@@ -1053,9 +934,7 @@ async function queryMSV(
             cveCount: appThreatResults.length,
           });
 
-          if (options.verbose) {
-            console.log(`  Found ${appThreatResults.length} CVEs from AppThreat, MSV: ${appThreatMsv}`);
-          }
+          logger.debug(`Found ${appThreatResults.length} CVEs from AppThreat, MSV: ${appThreatMsv}`);
         } else {
           sourceResults.push({
             source: "AppThreat",
@@ -1073,8 +952,8 @@ async function queryMSV(
           note: "query failed",
         });
       }
-    } else if (options.verbose) {
-      console.log("AppThreat database not available (run: vdb --download-image)");
+    } else {
+      logger.debug("AppThreat database not available (run: vdb --download-image)");
     }
   }
 
@@ -1250,8 +1129,8 @@ async function queryMSV(
             if (!r.fixedVersion) return true;  // Keep CVEs without fixed version
             return versionRegex.test(r.fixedVersion);
           });
-          if (options.verbose && originalCount !== filteredResults.length) {
-            console.log(`  Filtered ${originalCount - filteredResults.length} NVD CVEs with invalid version patterns`);
+          if (originalCount !== filteredResults.length) {
+            logger.debug(`Filtered ${originalCount - filteredResults.length} NVD CVEs with invalid version patterns`);
           }
         }
 
@@ -1268,8 +1147,8 @@ async function queryMSV(
             }
             return true;
           });
-          if (options.verbose && originalCount !== filteredResults.length) {
-            console.log(`  Filtered ${originalCount - filteredResults.length} NVD CVEs matching exclude patterns`);
+          if (originalCount !== filteredResults.length) {
+            logger.debug(`Filtered ${originalCount - filteredResults.length} NVD CVEs matching exclude patterns`);
           }
         }
 
@@ -1325,9 +1204,7 @@ async function queryMSV(
           cveCount: filteredResults.length,
         });
 
-        if (options.verbose) {
-          console.log(`Found ${filteredResults.length} CVEs from NVD (CVSS >= 4.0)`);
-        }
+        logger.debug(`Found ${filteredResults.length} CVEs from NVD (CVSS >= 4.0)`);
       } else {
         evidence.push({ source: "NVD", hasData: false });
         sourceResults.push({
@@ -1474,14 +1351,14 @@ async function queryMSV(
 
   // Calculate Admiralty rating using MSV-specific logic
   const ratingInput: MsvRatingInput = {
-    dataSources: sources.map(s => {
+    dataSources: sources.map((s): MsvDataSource => {
       if (s === "Vendor Advisory") return "vendor_advisory";
       if (s === "NVD") return "nvd";
       if (s === "CISA KEV") return "cisa_kev";
       if (s === "VulnCheck") return "vulncheck";
       if (s === "AppThreat") return "appthreat";
       return "none";
-    }) as any[],
+    }),
     hasVendorAdvisory,
     hasCveData: exploitedCves.length > 0,
     cveCount: exploitedCves.length,
@@ -1606,300 +1483,6 @@ async function queryMSV(
 }
 
 // =============================================================================
-// Output Formatters
-// =============================================================================
-
-function formatText(result: MSVResult): string {
-  const lines: string[] = [];
-  const DIM = "\x1b[2m";
-  const BOLD = "\x1b[1m";
-  const CYAN = "\x1b[36m";
-  const YELLOW = "\x1b[33m";
-  const GREEN = "\x1b[32m";
-  const MAGENTA = "\x1b[35m";
-
-  // Header
-  lines.push(`${BOLD}Software: ${result.displayName}${RESET_COLOR} (${result.platform})`);
-  lines.push("");
-
-  // VARIANT PRODUCTS - Special handling for products with multiple tracks
-  if (result.hasVariants && result.variantInfo) {
-    lines.push(`${MAGENTA}━━━ MULTIPLE PRODUCT TRACKS ━━━${RESET_COLOR}`);
-    lines.push(`${DIM}This product has multiple release tracks with different MSVs.${RESET_COLOR}`);
-    lines.push("");
-
-    lines.push(`${BOLD}MSV by Track:${RESET_COLOR}`);
-    for (const variant of result.variantInfo.variants) {
-      const msvDisplay = variant.msv
-        ? `${CYAN}${variant.msv}${RESET_COLOR}`
-        : `${YELLOW}Unknown${RESET_COLOR}`;
-      lines.push(`  ${variant.track.padEnd(18)} MSV: ${msvDisplay}`);
-      lines.push(`  ${DIM}${variant.versionPattern}${RESET_COLOR}`);
-      lines.push("");
-    }
-
-    // How to identify your track
-    lines.push(`${BOLD}How to Identify Your Track:${RESET_COLOR}`);
-    for (const line of result.variantInfo.trackHelp.split("\n")) {
-      lines.push(`  ${line}`);
-    }
-    lines.push("");
-
-    // Suggest specific query
-    lines.push(`${BOLD}For Accurate MSV:${RESET_COLOR}`);
-    lines.push(`  Query the specific variant you have installed:`);
-    for (const variant of result.variantInfo.variants) {
-      lines.push(`    ${DIM}msv query "${variant.displayName}"${RESET_COLOR}`);
-    }
-    lines.push("");
-
-    // Data freshness footer
-    if (result.dataAge) {
-      const age = formatDataAge(result.dataAge);
-      const indicator = getFreshnessIndicator(result.dataAge);
-      lines.push(`${indicator} Data checked ${age}${result.fromCache ? " (cached)" : ""}`);
-    }
-
-    return lines.join("\n");
-  }
-
-  // MSV Section - ALWAYS show, even if undetermined
-  if (result.minimumSafeVersion) {
-    if (result.minimumSafeVersion === result.recommendedVersion || !result.recommendedVersion) {
-      lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${CYAN}${result.minimumSafeVersion}${RESET_COLOR}`);
-    } else {
-      lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${CYAN}${result.minimumSafeVersion}${RESET_COLOR} ${DIM}(oldest safe)${RESET_COLOR}`);
-      lines.push(`${BOLD}Recommended Version:${RESET_COLOR}  ${CYAN}${result.recommendedVersion}${RESET_COLOR} ${DIM}(latest safe)${RESET_COLOR}`);
-    }
-  } else {
-    // CRITICAL FIX: Always show MSV field, explain why undetermined
-    lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${YELLOW}UNDETERMINED${RESET_COLOR}`);
-    if (result.cveCount === 0) {
-      lines.push(`${DIM}  Reason: No CVEs with CVSS ≥ 4.0 found in vulnerability databases${RESET_COLOR}`);
-    } else {
-      lines.push(`${DIM}  Reason: Found ${result.cveCount} CVEs but could not determine safe version${RESET_COLOR}`);
-    }
-  }
-  // Show latest available version (from catalog)
-  if (result.latestVersion) {
-    lines.push(`${BOLD}Latest Version:${RESET_COLOR}       ${GREEN}${result.latestVersion}${RESET_COLOR} ${DIM}(current release)${RESET_COLOR}`);
-  }
-  lines.push("");
-
-  // Confidence Rating - with inline description
-  const ratingDisplay = formatRatingWithDescription(result.admiraltyRating);
-  lines.push(`${BOLD}Confidence:${RESET_COLOR} ${ratingDisplay}`);
-  lines.push(`${DIM}Reason: ${result.justification}${RESET_COLOR}`);
-  lines.push("");
-
-  // Source Results - show what each source found
-  lines.push(`${BOLD}Sources Queried:${RESET_COLOR}`);
-  if (result.sourceResults && result.sourceResults.length > 0) {
-    for (const sr of result.sourceResults) {
-      const status = sr.queried
-        ? (sr.cveCount > 0 ? `${sr.cveCount} CVEs found` : "0 CVEs found")
-        : (sr.note || "not queried");
-      lines.push(`  ${sr.source.padEnd(12)} ${status}`);
-    }
-  } else {
-    // Fallback to simple source list
-    lines.push(`  ${result.sources.join(", ") || "None"}`);
-  }
-  lines.push("");
-
-  // Branch information if available
-  if (result.branches.length > 0) {
-    lines.push(`${BOLD}Version Branches:${RESET_COLOR}`);
-    for (const branch of result.branches) {
-      if (branch.noSafeVersion) {
-        // Critical warning: MSV > latest means no safe version exists in this branch
-        lines.push(`  ${RED}${branch.branch}.x: NO SAFE VERSION - MSV ${branch.msv} > latest ${branch.latest}${RESET_COLOR}`);
-        lines.push(`    ${DIM}${RED}⚠ Do not use this branch until ${branch.msv} is released${RESET_COLOR}`);
-      } else {
-        lines.push(`  ${branch.branch}.x: MSV ${branch.msv} (latest: ${branch.latest})`);
-      }
-    }
-    lines.push("");
-  }
-
-  // CVE Details (if any)
-  if (result.exploitedCves.length > 0) {
-    const kevCount = result.exploitedCves.filter(c => c.inCisaKev).length;
-    const header = kevCount > 0
-      ? `${BOLD}CVEs Analyzed (${result.cveCount}, ${kevCount} actively exploited):${RESET_COLOR}`
-      : `${BOLD}CVEs Analyzed (${result.cveCount}):${RESET_COLOR}`;
-    lines.push(header);
-
-    for (const cve of result.exploitedCves.slice(0, 10)) {
-      const markers = [];
-      if (cve.inCisaKev) markers.push("\x1b[31mKEV\x1b[0m");
-      if (cve.hasPoC) markers.push("PoC");
-      if (cve.epssScore) markers.push(`EPSS:${(cve.epssScore * 100).toFixed(1)}%`);
-      if (cve.fixedVersion) markers.push(`Fixed:${cve.fixedVersion}`);
-      const markerStr = markers.length > 0 ? ` [${markers.join(", ")}]` : "";
-      lines.push(`  ${cve.cve}${markerStr}`);
-    }
-    if (result.exploitedCves.length > 10) {
-      lines.push(`  ${DIM}... and ${result.exploitedCves.length - 10} more${RESET_COLOR}`);
-    }
-    lines.push("");
-  }
-
-  // Risk Score
-  if (result.riskScore) {
-    lines.push(formatRiskScore(result.riskScore));
-    lines.push("");
-  }
-
-  // ACTION BOX - the most important part
-  if (result.action) {
-    lines.push(formatActionBox(result.action));
-  }
-
-  // Data freshness footer
-  if (result.dataAge) {
-    const age = formatDataAge(result.dataAge);
-    const indicator = getFreshnessIndicator(result.dataAge);
-
-    if (result.dataAge.isCritical) {
-      lines.push(`${indicator} - Data last checked ${age}`);
-      lines.push(`${DIM}  Run with --force to refresh vulnerability data${RESET_COLOR}`);
-    } else if (result.dataAge.isStale) {
-      lines.push(`${indicator} - Last checked ${age}`);
-    } else {
-      lines.push(`${indicator} Data checked ${age}${result.fromCache ? " (cached)" : ""}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
-function formatJson(result: MSVResult): string {
-  return JSON.stringify(result, null, 2);
-}
-
-function formatMarkdown(result: MSVResult): string {
-  // Format data age for markdown
-  let dataStatus = "Fresh";
-  if (result.dataAge) {
-    const age = formatDataAge(result.dataAge);
-    if (result.dataAge.isCritical) {
-      dataStatus = `⚠️ STALE (${age})`;
-    } else if (result.dataAge.isStale) {
-      dataStatus = `⚡ ${age}`;
-    } else {
-      dataStatus = `✓ ${age}`;
-    }
-  }
-
-  const lines = [
-    `## ${result.displayName}`,
-    "",
-    `| Property | Value |`,
-    `|----------|-------|`,
-    `| Platform | ${result.platform} |`,
-    `| **Minimum Safe Version** | **${result.minimumSafeVersion || "Unknown"}** |`,
-    `| **Recommended Version** | **${result.recommendedVersion || result.minimumSafeVersion || "Unknown"}** |`,
-    `| **Latest Version** | ${result.latestVersion || "N/A"} |`,
-    `| Admiralty Rating | **${result.admiraltyRating.rating}** |`,
-    `| Risk Score | **${result.riskScore?.score || 0}/100 ${result.riskScore?.level || "INFO"}** |`,
-    `| CVE Count | ${result.cveCount} |`,
-    `| Sources | ${result.sources.join(", ")} |`,
-    `| Data Freshness | ${dataStatus} |`,
-    "",
-    `**Justification:** ${result.justification}`,
-    "",
-    result.riskScore ? `**Risk Recommendation:** ${result.riskScore.recommendation}` : "",
-  ].filter(Boolean);
-
-  // Show branch information
-  if (result.branches.length > 0) {
-    lines.push("");
-    lines.push("### Version Branches");
-    lines.push("");
-    lines.push("| Branch | MSV | Latest |");
-    lines.push("|--------|-----|--------|");
-    for (const branch of result.branches) {
-      lines.push(`| ${branch.branch}.x | ${branch.msv} | ${branch.latest} |`);
-    }
-  }
-
-  if (result.exploitedCves.length > 0) {
-    lines.push("");
-    lines.push("### CVEs Analyzed");
-    lines.push("");
-    lines.push("| CVE | KEV | PoC | EPSS | Fixed |");
-    lines.push("|-----|-----|-----|------|-------|");
-    for (const cve of result.exploitedCves.slice(0, 20)) {
-      const epss = cve.epssScore
-        ? `${(cve.epssScore * 100).toFixed(1)}%`
-        : "-";
-      const fixed = cve.fixedVersion || "-";
-      lines.push(
-        `| ${cve.cve} | ${cve.inCisaKev ? "Yes" : "No"} | ${cve.hasPoC ? "Yes" : "No"} | ${epss} | ${fixed} |`
-      );
-    }
-  }
-
-  return lines.join("\n");
-}
-
-/**
- * Format batch results as CSV for Excel/spreadsheet import
- * Columns: Software, Display Name, Platform, MSV, Recommended, Latest,
- *          CVE Count, Has KEV, Risk Score, Risk Level, Confidence, Action, Data Age
- */
-function formatBatchCSV(results: MSVResult[]): string {
-  const headers = [
-    "Software",
-    "Display Name",
-    "Platform",
-    "Minimum Safe Version",
-    "Recommended Version",
-    "Latest Version",
-    "CVE Count",
-    "Has KEV",
-    "Risk Score",
-    "Risk Level",
-    "Confidence Rating",
-    "Action",
-    "Action Message",
-    "Data Age (hours)",
-  ];
-
-  const rows = results.map(result => {
-    // Escape CSV values (wrap in quotes if contains comma, quote, or newline)
-    const escape = (val: string | null | undefined): string => {
-      if (val === null || val === undefined) return "";
-      const str = String(val);
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
-    return [
-      escape(result.software),
-      escape(result.displayName),
-      escape(result.platform),
-      escape(result.minimumSafeVersion),
-      escape(result.recommendedVersion),
-      escape(result.latestVersion),
-      result.cveCount.toString(),
-      result.hasKevCves ? "Yes" : "No",
-      result.riskScore?.score?.toString() || "0",
-      escape(result.riskScore?.level || "INFO"),
-      escape(result.admiraltyRating?.rating),
-      escape(result.action?.action),
-      escape(result.action?.message),
-      result.dataAge?.ageHours?.toString() || "0",
-    ].join(",");
-  });
-
-  return [headers.join(","), ...rows].join("\n");
-}
-
-// =============================================================================
 // CLI Commands
 // =============================================================================
 
@@ -1938,14 +1521,44 @@ async function cmdBatch(
 
   const config = getConfig();
   const results: MSVResult[] = [];
+  const errors: string[] = [];
+
+  // Create progress indicator
+  const { createProgress } = await import("./Progress");
+  const progress = createProgress(softwareList.length, "Querying MSV");
 
   for (const software of softwareList) {
     try {
+      // Update progress with current item
+      if ("update" in progress) {
+        progress.update(results.length + errors.length, software);
+      } else {
+        progress.tick(software);
+      }
+
       const result = await queryMSV(software, options, config);
       results.push(result);
     } catch (error) {
-      console.error(`Error querying ${software}:`, (error as Error).message);
+      errors.push(`${software}: ${(error as Error).message}`);
+      if ("error" in progress) {
+        progress.error();
+      }
     }
+  }
+
+  // Complete progress
+  progress.complete();
+
+  // Show error summary if any
+  if (errors.length > 0 && options.format === "text") {
+    console.log(`\n\x1b[33mWarnings (${errors.length}):\x1b[0m`);
+    for (const err of errors.slice(0, 5)) {
+      console.log(`  \x1b[2m- ${err}\x1b[0m`);
+    }
+    if (errors.length > 5) {
+      console.log(`  \x1b[2m... and ${errors.length - 5} more\x1b[0m`);
+    }
+    console.log("");
   }
 
   // Apply filter if specified
@@ -2018,12 +1631,57 @@ async function cmdRefresh(): Promise<void> {
 }
 
 // =============================================================================
+// Parallel Processing Utilities
+// =============================================================================
+
+/**
+ * Process items in parallel with concurrency limit
+ */
+async function parallelProcess<T, R>(
+  items: T[],
+  processor: (item: T, index: number) => Promise<R>,
+  concurrency: number = 5,
+  onProgress?: (completed: number, total: number) => void
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  let completed = 0;
+
+  async function processNext(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      const item = items[index];
+      try {
+        results[index] = await processor(item, index);
+      } catch (error) {
+        // Re-throw to be caught by Promise.all
+        throw { index, error };
+      }
+      completed++;
+      if (onProgress) {
+        onProgress(completed, items.length);
+      }
+    }
+  }
+
+  // Start concurrent workers
+  const workers = Array(Math.min(concurrency, items.length))
+    .fill(null)
+    .map(() => processNext());
+
+  await Promise.all(workers);
+  return results;
+}
+
+// =============================================================================
 // Check Command - Compliance Checking
 // =============================================================================
 
 interface CheckOptions extends QueryOptions {
   autoAdd: boolean;
   inputFormat?: "csv" | "json" | "list";
+  parallel?: boolean;  // Enable parallel processing
+  concurrency?: number; // Number of concurrent queries
 }
 
 async function cmdCheck(
@@ -2059,79 +1717,106 @@ async function cmdCheck(
 
   const results: ComplianceResult[] = [];
   const unknownSoftware: Array<{ input: SoftwareInput; discovery: DiscoveryResult }> = [];
+  const concurrency = options.concurrency || 5;
+  const useParallel = options.parallel !== false && parseResult.items.length > 1;
 
-  // Process each software item
-  for (const item of parseResult.items) {
+  // Phase 1: Resolve all software names and categorize
+  interface ResolvedItem {
+    item: SoftwareInput;
+    software: SoftwareMapping | null;
+    index: number;
+  }
+  const resolvedItems: ResolvedItem[] = [];
+  const needsDiscovery: ResolvedItem[] = [];
+
+  for (let i = 0; i < parseResult.items.length; i++) {
+    const item = parseResult.items[i];
+    const software = resolveSoftware(item.software, config);
+    const resolved = { item, software, index: i };
+
+    if (software) {
+      resolvedItems.push(resolved);
+    } else {
+      needsDiscovery.push(resolved);
+    }
+  }
+
+  if (options.verbose) {
+    console.log(`\nResolved ${resolvedItems.length} items, ${needsDiscovery.length} need discovery`);
+    if (useParallel) {
+      console.log(`Using parallel processing (concurrency: ${concurrency})`);
+    }
+  }
+
+  // Phase 2: Handle unknown software (sequential due to NVD rate limits)
+  for (const { item, index } of needsDiscovery) {
     if (options.verbose) {
-      console.log(`\nChecking: ${item.software}${item.currentVersion ? ` (${item.currentVersion})` : ""}...`);
+      console.log(`\nDiscovering: ${item.software}...`);
     }
 
-    // Try to resolve software
-    let software = resolveSoftware(item.software, config);
+    const discovery = await discoverSoftware(item.software, catalogPath, options.autoAdd);
 
-    // If not found, try auto-discovery
-    if (!software) {
-      if (options.verbose) {
-        console.log(`  Software not in catalog, searching NVD...`);
-      }
-
-      const discovery = await discoverSoftware(item.software, catalogPath, options.autoAdd);
-
-      if (discovery.autoAdded) {
-        // Reload and resolve
-        catalogCache = null; // Clear cache
-        software = resolveSoftware(item.software, config);
+    if (discovery.autoAdded) {
+      // Reload and resolve
+      catalogCache = null;
+      const software = resolveSoftware(item.software, config);
+      if (software) {
+        resolvedItems.push({ item, software, index });
         if (options.verbose) {
           console.log(`  ${discovery.message}`);
         }
-      } else if (discovery.needsConfirmation) {
-        unknownSoftware.push({ input: item, discovery });
-        results.push({
-          software: item.software,
-          displayName: item.software,
-          currentVersion: item.currentVersion || null,
-          minimumSafeVersion: null,
-          recommendedVersion: null,
-          latestVersion: null,
-          status: "NOT_FOUND",
-          action: "investigate",
-          actionMessage: discovery.message,
-          admiraltyRating: null,
-          sources: [],
-          error: `Not in catalog. ${discovery.matches.length} potential matches found.`,
-        });
-        continue;
-      } else {
-        results.push({
-          software: item.software,
-          displayName: item.software,
-          currentVersion: item.currentVersion || null,
-          minimumSafeVersion: null,
-          recommendedVersion: null,
-          latestVersion: null,
-          status: "NOT_FOUND",
-          action: "investigate",
-          actionMessage: discovery.message,
-          admiraltyRating: null,
-          sources: [],
-          error: "Software not found in catalog or NVD",
-        });
         continue;
       }
     }
 
-    // Query MSV
+    if (discovery.needsConfirmation) {
+      unknownSoftware.push({ input: item, discovery });
+      results.push({
+        software: item.software,
+        displayName: item.software,
+        currentVersion: item.currentVersion || null,
+        minimumSafeVersion: null,
+        recommendedVersion: null,
+        latestVersion: null,
+        status: "NOT_FOUND",
+        action: "investigate",
+        actionMessage: discovery.message,
+        admiraltyRating: null,
+        sources: [],
+        error: `Not in catalog. ${discovery.matches.length} potential matches found.`,
+      });
+    } else {
+      results.push({
+        software: item.software,
+        displayName: item.software,
+        currentVersion: item.currentVersion || null,
+        minimumSafeVersion: null,
+        recommendedVersion: null,
+        latestVersion: null,
+        status: "NOT_FOUND",
+        action: "investigate",
+        actionMessage: discovery.message,
+        admiraltyRating: null,
+        sources: [],
+        error: "Software not found in catalog or NVD",
+      });
+    }
+  }
+
+  // Phase 3: Query MSV for resolved items (parallel or sequential)
+  const processItem = async (resolved: ResolvedItem): Promise<ComplianceResult> => {
+    const { item, software } = resolved;
+
     try {
       const msvResult = await queryMSV(item.software, { ...options, verbose: false }, config);
 
-      // Check compliance
       const compliance = checkCompliance(
         item.currentVersion,
         msvResult.minimumSafeVersion,
         msvResult.recommendedVersion
       );
 
-      results.push({
+      return {
         software: item.software,
         displayName: msvResult.displayName,
         currentVersion: item.currentVersion || null,
@@ -2152,9 +1837,9 @@ async function cmdCheck(
             : false,
         })),
         dataAge: msvResult.dataAge,
-      });
+      };
     } catch (error) {
-      results.push({
+      return {
         software: item.software,
         displayName: software?.displayName || item.software,
         currentVersion: item.currentVersion || null,
@@ -2167,9 +1852,47 @@ async function cmdCheck(
         admiraltyRating: null,
         sources: [],
         error: (error as Error).message,
-      });
+      };
+    }
+  };
+
+  if (resolvedItems.length > 0) {
+    if (useParallel) {
+      // Parallel processing with progress
+      let lastProgress = 0;
+      const parallelResults = await parallelProcess(
+        resolvedItems,
+        processItem,
+        concurrency,
+        (completed, total) => {
+          if (options.verbose) {
+            const progress = Math.floor((completed / total) * 100);
+            if (progress >= lastProgress + 10) {
+              console.log(`  Progress: ${completed}/${total} (${progress}%)`);
+              lastProgress = progress;
+            }
+          }
+        }
+      );
+      results.push(...parallelResults);
+    } else {
+      // Sequential processing
+      for (const resolved of resolvedItems) {
+        if (options.verbose) {
+          console.log(`\nChecking: ${resolved.item.software}...`);
+        }
+        const result = await processItem(resolved);
+        results.push(result);
+      }
     }
   }
+
+  // Sort results by original input order
+  results.sort((a, b) => {
+    const indexA = parseResult.items.findIndex(i => i.software === a.software);
+    const indexB = parseResult.items.findIndex(i => i.software === b.software);
+    return indexA - indexB;
+  });
 
   // Generate summary
   const summary = generateSummary(results);
@@ -2278,6 +2001,256 @@ function formatCheckMarkdown(results: ComplianceResult[], summary: ReturnType<ty
   }
 
   return lines.join("\n");
+}
+
+// =============================================================================
+// Discover Command - CPE Auto-Discovery with Smart Inference
+// =============================================================================
+
+interface DiscoverOptions {
+  confirm?: number;  // Index of match to confirm and add
+  verbose?: boolean;
+}
+
+/**
+ * Infer category based on product name patterns
+ */
+function inferCategory(vendor: string, product: string, title: string): string {
+  const combined = `${vendor} ${product} ${title}`.toLowerCase();
+
+  // Category patterns - most specific first
+  const patterns: [RegExp, string][] = [
+    // Browsers
+    [/\b(chrome|firefox|edge|safari|brave|opera|vivaldi|browser)\b/, "browser"],
+    // PDF
+    [/\b(acrobat|pdf|reader|foxit|nitro|pdf-xchange)\b/, "pdf"],
+    // Remote Access / VPN
+    [/\b(vpn|anyconnect|globalprotect|pulse|fortinet|ivanti.*connect|openvpn)\b/, "vpn"],
+    [/\b(rdp|remote.*desktop|teamviewer|anydesk|vnc|citrix.*virtual)\b/, "remote_access"],
+    [/\b(putty|winscp|ssh|terminal|console)\b/, "remote_access"],
+    // Security
+    [/\b(antivirus|endpoint|edr|xdr|crowdstrike|defender|symantec|trellix|mcafee|kaspersky|sophos|eset|bitdefender|carbon.*black)\b/, "security"],
+    [/\b(firewall|utm|ngfw|palo.*alto|fortinet|check.*point|barracuda|sophos.*fw)\b/, "network_security"],
+    // Monitoring
+    [/\b(solarwinds|orion|npm|sam|splunk|nagios|zabbix|prometheus|grafana|datadog)\b/, "monitoring"],
+    // Development
+    [/\b(visual.*studio|vscode|vs.*code|intellij|eclipse|netbeans|pycharm|webstorm)\b/, "development"],
+    [/\b(git|github|gitlab|bitbucket|svn|mercurial)\b/, "development"],
+    [/\b(docker|kubernetes|k8s|container|podman)\b/, "containerization"],
+    [/\b(node\.?js|python|java|ruby|perl|php|golang|rust|dotnet|\.net)\b/, "runtime"],
+    // Databases
+    [/\b(sql.*server|mysql|mariadb|postgres|oracle|mongodb|redis|elasticsearch)\b/, "database"],
+    // Virtualization
+    [/\b(vmware|esxi|vcenter|hyper-?v|virtualbox|kvm|proxmox|xen)\b/, "virtualization"],
+    // Collaboration
+    [/\b(teams|slack|zoom|webex|cisco.*meeting|gotomeeting)\b/, "communication"],
+    [/\b(confluence|jira|sharepoint|notion|trello)\b/, "collaboration"],
+    // Office
+    [/\b(office|word|excel|powerpoint|outlook|microsoft.*365|libreoffice)\b/, "office"],
+    // Backup
+    [/\b(backup|veeam|acronis|veritas|commvault|arcserve)\b/, "backup"],
+    // File Transfer
+    [/\b(ftp|sftp|filezilla|moveit|ws_ftp|serv-?u)\b/, "file_transfer"],
+    // Compression
+    [/\b(7-?zip|winzip|winrar|peazip|bandizip)\b/, "utility"],
+    // Media
+    [/\b(vlc|media.*player|ffmpeg|handbrake|obs)\b/, "media"],
+  ];
+
+  for (const [pattern, category] of patterns) {
+    if (pattern.test(combined)) {
+      return category;
+    }
+  }
+
+  return "other";
+}
+
+/**
+ * Infer priority based on product type and KEV history
+ */
+function inferPriority(vendor: string, product: string, title: string, category: string): "critical" | "high" | "medium" | "low" {
+  const combined = `${vendor} ${product} ${title}`.toLowerCase();
+
+  // Critical: Products commonly in CISA KEV or network-facing
+  const criticalPatterns = [
+    /\b(vpn|gateway|firewall|exchange|sharepoint|citrix|vmware|fortinet|palo.*alto|pulse|ivanti|moveit|barracuda|f5|big-?ip|confluence|weblogic)\b/,
+    /\b(apache|nginx|iis|tomcat|jboss|weblogic)\b.*\b(server)\b/,
+    /\b(remote.*code|rce)\b/,
+  ];
+
+  for (const pattern of criticalPatterns) {
+    if (pattern.test(combined)) {
+      return "critical";
+    }
+  }
+
+  // High: Common enterprise software, security tools
+  const highPatterns = [
+    /\b(browser|chrome|edge|firefox|acrobat|reader|teams|slack|zoom|office)\b/,
+    /\b(edr|xdr|antivirus|endpoint.*protection)\b/,
+    /\b(sql.*server|oracle|mysql|postgres)\b/,
+    /\b(docker|kubernetes|vmware|virtualbox)\b/,
+  ];
+
+  for (const pattern of highPatterns) {
+    if (pattern.test(combined)) {
+      return "high";
+    }
+  }
+
+  // Categories that are inherently high priority
+  if (["browser", "vpn", "remote_access", "security", "network_security", "virtualization"].includes(category)) {
+    return "high";
+  }
+
+  // Medium: Developer tools, utilities
+  if (["development", "runtime", "database", "containerization"].includes(category)) {
+    return "medium";
+  }
+
+  return "medium";
+}
+
+/**
+ * Get associated vendor fetcher if available
+ */
+function getVendorFetcher(vendor: string, product: string): string | null {
+  const vendorMap: Record<string, string[]> = {
+    "curl": ["curl"],
+    "mozilla": ["mozilla", "firefox", "thunderbird"],
+    "vmware": ["vmware", "esxi", "vcenter", "workstation", "fusion"],
+    "atlassian": ["atlassian", "jira", "confluence", "bamboo", "bitbucket"],
+    "citrix": ["citrix", "netscaler", "xenserver", "xenapp", "xendesktop"],
+    "adobe": ["adobe", "acrobat", "reader", "creative_cloud", "photoshop", "illustrator"],
+    "oracle": ["oracle", "java", "weblogic", "mysql", "virtualbox"],
+    "microsoft": ["microsoft", "edge", "office", "teams", "windows", "exchange", "sharepoint"],
+    "solarwinds": ["solarwinds", "orion", "serv-u"],
+    "apache": ["apache", "tomcat", "httpd", "struts"],
+  };
+
+  const combined = `${vendor}:${product}`.toLowerCase();
+
+  for (const [fetcherVendor, patterns] of Object.entries(vendorMap)) {
+    for (const pattern of patterns) {
+      if (combined.includes(pattern)) {
+        return fetcherVendor;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Discover command - search NVD CPE and add software to catalog
+ */
+async function cmdDiscover(query: string, options: DiscoverOptions, config: Config): Promise<void> {
+  const catalogPath = resolve(config.dataDir, "SoftwareCatalog.json");
+
+  // Import discovery functions
+  const { searchCPE, confirmAndAdd } = await import("./SoftwareDiscovery");
+
+  console.log(`\nSearching NVD CPE dictionary for: "${query}"...\n`);
+
+  const matches = await searchCPE(query);
+
+  if (matches.length === 0) {
+    console.log("No matches found in NVD CPE dictionary.");
+    console.log("This software may not have published CVEs, or try a different search term.");
+    return;
+  }
+
+  // Filter to Windows-compatible
+  const windowsMatches = matches.filter(m => m.isWindows);
+
+  // If --confirm is provided, add that match
+  if (options.confirm !== undefined) {
+    const idx = options.confirm - 1; // Convert to 0-indexed
+    if (idx < 0 || idx >= windowsMatches.length) {
+      console.error(`Invalid match index. Choose 1-${windowsMatches.length}`);
+      return;
+    }
+
+    const match = windowsMatches[idx];
+    const category = inferCategory(match.vendor, match.product, match.title);
+    const priority = inferPriority(match.vendor, match.product, match.title, category);
+    const vendorFetcher = getVendorFetcher(match.vendor, match.product);
+
+    // Create enhanced entry
+    const entry = {
+      id: `${match.vendor}_${match.product}`.toLowerCase().replace(/[^a-z0-9_]/g, "_"),
+      displayName: match.title || `${capitalize(match.vendor)} ${capitalize(match.product.replace(/_/g, " "))}`,
+      vendor: match.vendor,
+      product: match.product,
+      cpe23: match.cpe23,
+      category,
+      priority,
+      aliases: [
+        query.toLowerCase(),
+        match.product.replace(/_/g, " "),
+        `${match.vendor} ${match.product}`.replace(/_/g, " "),
+      ].filter((a, i, arr) => arr.indexOf(a) === i),
+      platforms: ["windows"] as string[],
+      notes: `Auto-discovered from NVD CPE${vendorFetcher ? `. Vendor: ${vendorFetcher}` : ""}`,
+      autoDiscovered: true,
+      discoveredAt: new Date().toISOString(),
+      ...(vendorFetcher && { vendorFetcherId: vendorFetcher }),
+    };
+
+    // Add to catalog
+    const { addToCatalog } = await import("./SoftwareDiscovery");
+    addToCatalog(catalogPath, entry);
+
+    console.log("Added to catalog:");
+    console.log(`  Name:     ${entry.displayName}`);
+    console.log(`  Vendor:   ${entry.vendor}`);
+    console.log(`  Product:  ${entry.product}`);
+    console.log(`  Category: ${category}`);
+    console.log(`  Priority: ${priority}`);
+    console.log(`  CPE:      ${entry.cpe23}`);
+    if (vendorFetcher) {
+      console.log(`  Vendor Fetcher: ${vendorFetcher}`);
+    }
+    console.log(`\nYou can now query: msv query "${entry.displayName}"`);
+    return;
+  }
+
+  // Display matches with inferred info
+  console.log(`Found ${windowsMatches.length} Windows-compatible match${windowsMatches.length === 1 ? "" : "es"}:\n`);
+
+  for (let i = 0; i < windowsMatches.length; i++) {
+    const match = windowsMatches[i];
+    const category = inferCategory(match.vendor, match.product, match.title);
+    const priority = inferPriority(match.vendor, match.product, match.title, category);
+    const vendorFetcher = getVendorFetcher(match.vendor, match.product);
+
+    const confColor = match.confidence === "high" ? "\x1b[32m" :
+                     match.confidence === "medium" ? "\x1b[33m" : "\x1b[90m";
+    const priColor = priority === "critical" ? "\x1b[31m" :
+                    priority === "high" ? "\x1b[33m" : "\x1b[90m";
+    const RESET = "\x1b[0m";
+
+    console.log(`${i + 1}. ${match.title || `${match.vendor}:${match.product}`}`);
+    console.log(`   Vendor:   ${match.vendor}`);
+    console.log(`   Product:  ${match.product}`);
+    console.log(`   CPE:      ${match.cpe23}`);
+    console.log(`   Confidence: ${confColor}${match.confidence}${RESET}`);
+    console.log(`   Category: ${category} (inferred)`);
+    console.log(`   Priority: ${priColor}${priority}${RESET} (inferred)`);
+    if (vendorFetcher) {
+      console.log(`   Vendor Fetcher: ${vendorFetcher} (available)`);
+    }
+    console.log("");
+  }
+
+  console.log("─".repeat(50));
+  console.log(`To add to catalog: msv discover "${query}" --confirm <number>`);
+  console.log(`Example: msv discover "${query}" --confirm 1`);
+}
+
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 function cmdList(config: Config, category?: string): void {
@@ -2472,7 +2445,8 @@ async function cmdDbUpdate(): Promise<void> {
 
   const vdbProcess = spawn("vdb", ["--download-image"], {
     stdio: "inherit",
-    shell: true,
+    shell: false, // Security: avoid shell injection
+    windowsHide: true,
   });
 
   return new Promise((resolve, reject) => {
@@ -2496,7 +2470,7 @@ async function cmdDbUpdate(): Promise<void> {
   });
 }
 
-const MSV_VERSION = "1.2.0";
+const MSV_VERSION = "1.3.1";
 
 function showHelp(): void {
   console.log(`
@@ -2511,8 +2485,13 @@ USAGE:
 
 COMMANDS:
   query <software>     Query MSV for a specific software
-  check <input>        Check compliance for software inventory
+  check <input>        Check compliance for software inventory (parallel by default)
   batch <file>         Query MSV for multiple software from file
+  discover <software>  Search NVD CPE and add software to catalog
+  warm [priority]      Pre-fetch MSV data to warm cache (critical|high|medium|all)
+  scan                 Detect installed software versions via winget/chocolatey
+  sbom <file>          Parse SBOM (CycloneDX/SPDX) and check component MSVs
+  ghsa <ecosystem> [package]  Query GitHub Advisory Database (npm, pip, maven, etc.)
   stats                Show catalog statistics
   refresh              Force refresh all caches
   list                 List supported software
@@ -2521,7 +2500,7 @@ COMMANDS:
   db update            Download/update AppThreat database
   help                 Show this help message
 
-SUPPORTED SOFTWARE (135+ products):
+SUPPORTED SOFTWARE (180+ products):
   Browsers           Chrome, Edge, Firefox, Brave, Opera
   PDF                Adobe Acrobat DC/2024/2020, Reader DC/2020/2024, Foxit
   Remote Access      PuTTY suite (8 tools), WinSCP, TeamViewer, AnyDesk
@@ -2591,6 +2570,9 @@ OPTIONS:
   --verbose            Show detailed query progress
   --force              Force cache refresh
   --auto-add           Auto-add unknown Windows software to catalog
+  --confirm <num>      Select match from discover results to add to catalog
+  --concurrency <n>    Number of parallel queries (default: 5)
+  --no-parallel        Disable parallel processing (use sequential)
   --csv                Force CSV input parsing
   --json               Force JSON input parsing
   --list               Force direct list parsing
@@ -2604,6 +2586,13 @@ EXAMPLES:
   msv batch inventory.txt --filter undetermined # Products needing manual review
   msv check "Chrome 120.0.1, PuTTY 0.80, Wireshark 4.2.0"
   msv check inventory.csv --format markdown
+  msv check inventory.csv --concurrency 10      # Faster with more parallelism
+  msv discover "WinRAR"                         # Search NVD CPE for WinRAR
+  msv discover "WinRAR" --confirm 1             # Add first match to catalog
+  msv warm                                       # Pre-fetch critical priority MSVs
+  msv warm high                                  # Pre-fetch high+ priority MSVs
+  msv scan                                       # Detect installed versions
+  msv scan --format json                         # Output as JSON
   msv stats
   msv list monitoring
   msv list remote_access
@@ -2636,6 +2625,543 @@ ENVIRONMENT:
 }
 
 // =============================================================================
+// Cache Warming Command
+// =============================================================================
+
+interface WarmOptions {
+  priority?: "critical" | "high" | "medium" | "all";
+  concurrency?: number;
+  verbose?: boolean;
+  maxAge?: number;  // Hours before considering stale
+}
+
+/**
+ * Pre-fetch MSV data for catalog entries to warm the cache
+ */
+async function cmdWarm(options: WarmOptions): Promise<void> {
+  const config = getConfig();
+  const catalog = loadSoftwareCatalog(config);
+  const msvCache = new MsvCache(config.dataDir);
+  const priority = options.priority || "critical";
+  const concurrency = options.concurrency || 3;
+  const maxAge = options.maxAge || 24;
+
+  // Filter software by priority
+  let software = catalog.software;
+  if (priority !== "all") {
+    const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    const maxPriority = priorityOrder[priority];
+    software = software.filter(sw => {
+      const swPriority = priorityOrder[sw.priority || "low"];
+      return swPriority <= maxPriority;
+    });
+  }
+
+  // Filter to items that need refresh
+  const needsRefresh = software.filter(sw => {
+    const productId = `${sw.vendor}:${sw.product}`.toLowerCase();
+    return msvCache.needsRefresh(productId, maxAge);
+  });
+
+  console.log(`\nCache Warming - MSV Pre-fetch`);
+  console.log("═".repeat(50));
+  console.log(`Priority: ${priority}`);
+  console.log(`Total catalog entries: ${software.length}`);
+  console.log(`Entries needing refresh: ${needsRefresh.length}`);
+  console.log(`Concurrency: ${concurrency}`);
+  console.log(`Max age: ${maxAge} hours`);
+  console.log("");
+
+  if (needsRefresh.length === 0) {
+    console.log("All entries are up to date. No warming needed.");
+    return;
+  }
+
+  const startTime = Date.now();
+  let completed = 0;
+  let errors = 0;
+
+  // Process in parallel
+  await parallelProcess(
+    needsRefresh,
+    async (sw) => {
+      try {
+        await queryMSV(sw.id, { format: "text", verbose: false, forceRefresh: true }, config);
+        completed++;
+      } catch {
+        errors++;
+      }
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const progress = Math.floor(((completed + errors) / needsRefresh.length) * 100);
+      process.stdout.write(`\r  Progress: ${completed + errors}/${needsRefresh.length} (${progress}%) - ${elapsed}s elapsed`);
+    },
+    concurrency
+  );
+
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`\n\nCache warming complete!`);
+  console.log(`  Refreshed: ${completed}`);
+  console.log(`  Errors: ${errors}`);
+  console.log(`  Time: ${totalTime}s`);
+}
+
+// =============================================================================
+// Version Scan Command - Detect installed software versions
+// =============================================================================
+
+interface ScanOptions {
+  chocolatey?: boolean;
+  winget?: boolean;
+  verbose?: boolean;
+  format?: "text" | "json" | "csv";
+}
+
+interface DetectedSoftware {
+  name: string;
+  version: string;
+  source: "chocolatey" | "winget";
+  catalogId?: string;
+  msv?: string;
+  status?: "COMPLIANT" | "NON_COMPLIANT" | "UNKNOWN";
+}
+
+/**
+ * Scan for installed software versions using winget/chocolatey
+ */
+async function cmdScan(options: ScanOptions): Promise<void> {
+  const config = getConfig();
+  const detected: DetectedSoftware[] = [];
+
+  const useChocolatey = options.chocolatey !== false;
+  const useWinget = options.winget !== false;
+
+  console.log(`\nScanning for installed software...`);
+  console.log("═".repeat(50));
+
+  // Try winget first (default on modern Windows)
+  if (useWinget) {
+    if (options.verbose) {
+      console.log("\nScanning with winget...");
+    }
+    try {
+      const { spawn } = await import("node:child_process");
+      const wingetList = await new Promise<string>((resolve, reject) => {
+        const proc = spawn("winget", ["list", "--disable-interactivity"], {
+          shell: false, // Security: avoid shell injection
+          timeout: 60000,
+          windowsHide: true,
+        });
+        let output = "";
+        proc.stdout.on("data", (data) => output += data.toString());
+        proc.stderr.on("data", (data) => {
+          if (options.verbose) console.error(data.toString());
+        });
+        proc.on("close", (code) => {
+          if (code === 0) resolve(output);
+          else reject(new Error(`winget exited with code ${code}`));
+        });
+        proc.on("error", reject);
+      });
+
+      // Parse winget output (skip header lines)
+      const lines = wingetList.split("\n").slice(2);
+      for (const line of lines) {
+        // winget output format varies, try to extract name and version
+        const match = line.match(/^(.+?)\s{2,}(\S+)\s{2,}([\d.]+)/);
+        if (match) {
+          const [, name, _id, version] = match;
+          const trimmedName = name.trim();
+
+          // Try to match to catalog
+          const software = resolveSoftware(trimmedName, config);
+
+          detected.push({
+            name: trimmedName,
+            version: version.trim(),
+            source: "winget",
+            catalogId: software?.id,
+          });
+        }
+      }
+      if (options.verbose) {
+        console.log(`  Found ${detected.filter(d => d.source === "winget").length} packages via winget`);
+      }
+    } catch (error) {
+      if (options.verbose) {
+        console.log(`  winget not available or failed: ${(error as Error).message}`);
+      }
+    }
+  }
+
+  // Try chocolatey
+  if (useChocolatey) {
+    if (options.verbose) {
+      console.log("\nScanning with chocolatey...");
+    }
+    try {
+      const { spawn } = await import("node:child_process");
+      const chocoList = await new Promise<string>((resolve, reject) => {
+        const proc = spawn("choco", ["list", "--local-only", "--limit-output"], {
+          shell: false, // Security: avoid shell injection
+          timeout: 60000,
+          windowsHide: true,
+        });
+        let output = "";
+        proc.stdout.on("data", (data) => output += data.toString());
+        proc.stderr.on("data", (data) => {
+          if (options.verbose) console.error(data.toString());
+        });
+        proc.on("close", (code) => {
+          if (code === 0) resolve(output);
+          else reject(new Error(`choco exited with code ${code}`));
+        });
+        proc.on("error", reject);
+      });
+
+      // Parse chocolatey output (package|version format)
+      const lines = chocoList.split("\n");
+      for (const line of lines) {
+        const parts = line.trim().split("|");
+        if (parts.length >= 2) {
+          const [packageName, version] = parts;
+
+          // Try to match to catalog
+          const software = resolveSoftware(packageName, config);
+
+          // Don't add duplicates from winget
+          if (!detected.find(d => d.catalogId === software?.id)) {
+            detected.push({
+              name: packageName,
+              version,
+              source: "chocolatey",
+              catalogId: software?.id,
+            });
+          }
+        }
+      }
+      if (options.verbose) {
+        console.log(`  Found ${detected.filter(d => d.source === "chocolatey").length} packages via chocolatey`);
+      }
+    } catch (error) {
+      if (options.verbose) {
+        console.log(`  chocolatey not available or failed: ${(error as Error).message}`);
+      }
+    }
+  }
+
+  // Filter to only software in our catalog
+  const catalogMatched = detected.filter(d => d.catalogId);
+
+  console.log(`\nDetected ${detected.length} installed packages`);
+  console.log(`Matched to catalog: ${catalogMatched.length}`);
+
+  if (catalogMatched.length === 0) {
+    console.log("\nNo installed software matched the MSV catalog.");
+    console.log("Try: msv check \"Chrome 120.0.1, Firefox 121.0\"");
+    return;
+  }
+
+  // Query MSV for matched software
+  console.log("\nChecking MSV compliance...\n");
+
+  for (const sw of catalogMatched) {
+    try {
+      const result = await queryMSV(sw.catalogId!, { format: "text", verbose: false, forceRefresh: false }, config);
+      sw.msv = result.minimumSafeVersion || "UNKNOWN";
+
+      if (sw.msv && sw.msv !== "UNKNOWN") {
+        const cmp = compareVersions(sw.version, sw.msv);
+        sw.status = cmp >= 0 ? "COMPLIANT" : "NON_COMPLIANT";
+      } else {
+        sw.status = "UNKNOWN";
+      }
+    } catch {
+      sw.status = "UNKNOWN";
+    }
+  }
+
+  // Output results
+  if (options.format === "json") {
+    console.log(JSON.stringify(catalogMatched, null, 2));
+  } else if (options.format === "csv") {
+    console.log("Name,Version,MSV,Status,Source");
+    for (const sw of catalogMatched) {
+      console.log(`"${sw.name}","${sw.version}","${sw.msv || ""}","${sw.status || ""}","${sw.source}"`);
+    }
+  } else {
+    console.log("| Software | Version | MSV | Status |");
+    console.log("|----------|---------|-----|--------|");
+    for (const sw of catalogMatched) {
+      const statusIcon = sw.status === "COMPLIANT" ? "✓" :
+                        sw.status === "NON_COMPLIANT" ? "✗" : "?";
+      console.log(`| ${sw.name.substring(0, 25).padEnd(25)} | ${sw.version.padEnd(12)} | ${(sw.msv || "?").padEnd(12)} | ${statusIcon} ${sw.status || "UNKNOWN"} |`);
+    }
+  }
+
+  // Summary
+  const compliant = catalogMatched.filter(s => s.status === "COMPLIANT").length;
+  const nonCompliant = catalogMatched.filter(s => s.status === "NON_COMPLIANT").length;
+  const unknown = catalogMatched.filter(s => s.status === "UNKNOWN").length;
+
+  console.log(`\nSummary: ${compliant} compliant, ${nonCompliant} non-compliant, ${unknown} unknown`);
+
+  if (nonCompliant > 0) {
+    console.log("\nNon-compliant software needs immediate attention!");
+    console.log("Run: msv check \"<software> <version>\" for detailed remediation guidance.");
+  }
+}
+
+// =============================================================================
+// SBOM Command - Parse CycloneDX/SPDX and check MSVs
+// =============================================================================
+
+import { SbomParser, parseSbomFile, mapToGhsaEcosystem, filterWindowsComponents, filterOpenSourceComponents } from "./SbomParser";
+import { GitHubAdvisoryClient, GhsaEcosystem, GhsaVulnerability } from "./GitHubAdvisoryClient";
+
+interface SbomOptions {
+  format?: "text" | "json" | "csv";
+  verbose?: boolean;
+  checkGhsa?: boolean;
+}
+
+/**
+ * Parse SBOM file and check component MSVs
+ */
+async function cmdSbom(filePath: string, options: SbomOptions, config: Config): Promise<void> {
+  console.log(`\nParsing SBOM: ${filePath}`);
+  console.log("═".repeat(50));
+
+  const result = parseSbomFile(filePath);
+
+  if (result.errors.length > 0) {
+    console.error("\nParsing errors:");
+    for (const error of result.errors) {
+      console.error(`  - ${error}`);
+    }
+    if (result.components.length === 0) {
+      throw new Error("Failed to parse SBOM file");
+    }
+  }
+
+  console.log(`\nFormat: ${result.format.toUpperCase()} (spec ${result.specVersion})`);
+  console.log(`Components: ${result.components.length}`);
+  if (result.metadata.tool) {
+    console.log(`Generated by: ${result.metadata.tool}`);
+  }
+
+  // Separate Windows components from open source
+  const windowsComponents = filterWindowsComponents(result.components);
+  const osComponents = filterOpenSourceComponents(result.components);
+
+  console.log(`\n  Windows/Desktop software: ${windowsComponents.length}`);
+  console.log(`  Open source packages: ${osComponents.length}`);
+
+  // Check Windows components against MSV catalog
+  if (windowsComponents.length > 0) {
+    console.log("\n--- Windows Software MSV Check ---");
+    const msvResults: Array<{ name: string; version: string; msv: string | null; status: string }> = [];
+
+    for (const comp of windowsComponents.slice(0, 50)) {
+      const software = resolveSoftware(comp.name, config);
+      if (software) {
+        try {
+          const msvResult = await queryMSV(software.id, { format: "text", verbose: false, forceRefresh: false }, config);
+          const status = msvResult.minimumSafeVersion
+            ? compareVersions(comp.version, msvResult.minimumSafeVersion) >= 0
+              ? "COMPLIANT"
+              : "NON_COMPLIANT"
+            : "UNKNOWN";
+
+          msvResults.push({
+            name: comp.name,
+            version: comp.version,
+            msv: msvResult.minimumSafeVersion,
+            status,
+          });
+        } catch {
+          msvResults.push({
+            name: comp.name,
+            version: comp.version,
+            msv: null,
+            status: "ERROR",
+          });
+        }
+      }
+    }
+
+    if (msvResults.length > 0) {
+      console.log("\n| Component | Version | MSV | Status |");
+      console.log("|-----------|---------|-----|--------|");
+      for (const r of msvResults) {
+        const statusIcon = r.status === "COMPLIANT" ? "✓" : r.status === "NON_COMPLIANT" ? "✗" : "?";
+        console.log(`| ${r.name.substring(0, 25).padEnd(25)} | ${r.version.padEnd(12)} | ${(r.msv || "UNKNOWN").padEnd(12)} | ${statusIcon} ${r.status} |`);
+      }
+    }
+  }
+
+  // Check open source components against GHSA (if enabled and token available)
+  if (options.checkGhsa && osComponents.length > 0) {
+    const ghsaClient = new GitHubAdvisoryClient(config.dataDir);
+
+    if (!ghsaClient.hasToken()) {
+      console.log("\n--- GitHub Advisory Database ---");
+      console.log("GITHUB_TOKEN not set. Set it to check open source component vulnerabilities.");
+    } else {
+      console.log("\n--- Open Source Vulnerability Check (GHSA) ---");
+
+      const vulnResults: Array<{ name: string; version: string; vulns: number; msv: string | null }> = [];
+
+      for (const comp of osComponents.slice(0, 30)) {
+        const ecosystem = mapToGhsaEcosystem(comp.ecosystem);
+        if (!ecosystem) continue;
+
+        try {
+          const msvResult = await ghsaClient.getMsv(ecosystem as GhsaEcosystem, comp.name);
+          vulnResults.push({
+            name: comp.name,
+            version: comp.version,
+            vulns: msvResult.vulnerabilities,
+            msv: msvResult.msv,
+          });
+        } catch {
+          // Skip failed queries
+        }
+      }
+
+      if (vulnResults.length > 0) {
+        console.log("\n| Package | Version | Vulns | MSV |");
+        console.log("|---------|---------|-------|-----|");
+        for (const r of vulnResults.filter(v => v.vulns > 0)) {
+          console.log(`| ${r.name.substring(0, 30).padEnd(30)} | ${r.version.padEnd(12)} | ${String(r.vulns).padEnd(5)} | ${r.msv || "N/A"} |`);
+        }
+
+        const totalVulns = vulnResults.reduce((sum, r) => sum + r.vulns, 0);
+        console.log(`\nTotal vulnerabilities found: ${totalVulns}`);
+      }
+    }
+  }
+
+  // JSON output
+  if (options.format === "json") {
+    console.log("\n" + JSON.stringify(result, null, 2));
+  }
+}
+
+// =============================================================================
+// GHSA Command - Query GitHub Advisory Database
+// =============================================================================
+
+interface GhsaOptions {
+  format?: "text" | "json";
+  verbose?: boolean;
+}
+
+/**
+ * Query GitHub Advisory Database for vulnerabilities
+ */
+async function cmdGhsa(
+  ecosystemArg: string,
+  packageName: string | undefined,
+  options: GhsaOptions,
+  config: Config
+): Promise<void> {
+  const ecosystemMap: Record<string, GhsaEcosystem> = {
+    npm: "NPM",
+    pip: "PIP",
+    pypi: "PIP",
+    python: "PIP",
+    maven: "MAVEN",
+    java: "MAVEN",
+    nuget: "NUGET",
+    dotnet: "NUGET",
+    rubygems: "RUBYGEMS",
+    ruby: "RUBYGEMS",
+    composer: "COMPOSER",
+    php: "COMPOSER",
+    go: "GO",
+    golang: "GO",
+    rust: "RUST",
+    cargo: "RUST",
+    hex: "HEX",
+    erlang: "ERLANG",
+    pub: "PUB",
+    dart: "PUB",
+    swift: "SWIFT",
+  };
+
+  const ecosystem = ecosystemMap[ecosystemArg.toLowerCase()];
+  if (!ecosystem) {
+    throw new Error(`Unknown ecosystem: ${ecosystemArg}\nSupported: ${Object.keys(ecosystemMap).join(", ")}`);
+  }
+
+  const client = new GitHubAdvisoryClient(config.dataDir);
+
+  if (!client.hasToken()) {
+    throw new Error("GITHUB_TOKEN not set. Required for GitHub Advisory Database queries.");
+  }
+
+  console.log(`\nQuerying GitHub Advisory Database`);
+  console.log("═".repeat(50));
+  console.log(`Ecosystem: ${ecosystem}`);
+  if (packageName) {
+    console.log(`Package: ${packageName}`);
+  }
+
+  const result = await client.queryByEcosystem(ecosystem, packageName);
+
+  console.log(`\nFound ${result.vulnerabilities.length} vulnerabilities`);
+  console.log(`Rate limit remaining: ${result.rateLimitRemaining}`);
+
+  if (options.format === "json") {
+    console.log("\n" + JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.vulnerabilities.length === 0) {
+    console.log("\nNo vulnerabilities found.");
+    return;
+  }
+
+  // Group by severity
+  const bySeverity: Record<string, GhsaVulnerability[]> = {
+    CRITICAL: [],
+    HIGH: [],
+    MODERATE: [],
+    LOW: [],
+  };
+
+  for (const vuln of result.vulnerabilities) {
+    const sev = vuln.advisory.severity;
+    if (bySeverity[sev]) {
+      bySeverity[sev].push(vuln);
+    }
+  }
+
+  console.log("\n--- Vulnerabilities by Severity ---");
+  console.log(`  Critical: ${bySeverity.CRITICAL.length}`);
+  console.log(`  High: ${bySeverity.HIGH.length}`);
+  console.log(`  Moderate: ${bySeverity.MODERATE.length}`);
+  console.log(`  Low: ${bySeverity.LOW.length}`);
+
+  // Show top vulnerabilities
+  console.log("\n--- Recent Vulnerabilities ---");
+  console.log("| GHSA ID | CVE | Package | Patched |");
+  console.log("|---------|-----|---------|---------|");
+
+  for (const vuln of result.vulnerabilities.slice(0, 15)) {
+    const ghsaId = vuln.advisory.ghsaId.substring(0, 20);
+    const cve = vuln.advisory.cveId || "N/A";
+    const pkg = vuln.package.name.substring(0, 20);
+    const patched = vuln.firstPatchedVersion || "N/A";
+    console.log(`| ${ghsaId.padEnd(20)} | ${cve.padEnd(15)} | ${pkg.padEnd(20)} | ${patched} |`);
+  }
+
+  if (result.vulnerabilities.length > 15) {
+    console.log(`\n... and ${result.vulnerabilities.length - 15} more. Use --format json for full output.`);
+  }
+}
+
+// =============================================================================
 // Main Entry Point
 // =============================================================================
 
@@ -2659,6 +3185,9 @@ async function main(): Promise<void> {
   let autoAdd = false;
   let inputFormat: "csv" | "json" | "list" | undefined;
   let filter: BatchFilter | undefined;
+  let confirmIndex: number | undefined;
+  let parallel = true;  // Default to parallel
+  let concurrency = 5;  // Default concurrency
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -2675,6 +3204,14 @@ async function main(): Promise<void> {
       category = args[++i];
     } else if (arg === "--auto-add") {
       autoAdd = true;
+    } else if (arg === "--confirm" && args[i + 1]) {
+      confirmIndex = parseInt(args[++i], 10);
+    } else if (arg === "--parallel") {
+      parallel = true;
+    } else if (arg === "--no-parallel" || arg === "--sequential") {
+      parallel = false;
+    } else if (arg === "--concurrency" && args[i + 1]) {
+      concurrency = parseInt(args[++i], 10) || 5;
     } else if (arg === "--csv") {
       inputFormat = "csv";
     } else if (arg === "--json") {
@@ -2740,6 +3277,8 @@ async function main(): Promise<void> {
           ...options,
           autoAdd,
           inputFormat,
+          parallel,
+          concurrency,
         });
         break;
 
@@ -2764,6 +3303,52 @@ async function main(): Promise<void> {
 
       case "db":
         await cmdDb(positionalArgs[1], options);
+        break;
+
+      case "discover":
+        if (!positionalArgs[1]) {
+          throw new Error("Missing software name. Usage: msv discover <software> [--confirm <num>]");
+        }
+        await cmdDiscover(positionalArgs[1], { confirm: confirmIndex, verbose: options.verbose }, config);
+        break;
+
+      case "warm":
+        await cmdWarm({
+          priority: (positionalArgs[1] as "critical" | "high" | "medium" | "all") || "critical",
+          concurrency,
+          verbose: options.verbose,
+          maxAge: 24,
+        });
+        break;
+
+      case "scan":
+        await cmdScan({
+          winget: true,
+          chocolatey: true,
+          verbose: options.verbose,
+          format: options.format as "text" | "json" | "csv",
+        });
+        break;
+
+      case "sbom":
+        if (!positionalArgs[1]) {
+          throw new Error("Missing SBOM file path. Usage: msv sbom <file.json>");
+        }
+        await cmdSbom(positionalArgs[1], {
+          format: options.format as "text" | "json" | "csv",
+          verbose: options.verbose,
+          checkGhsa: true,
+        }, config);
+        break;
+
+      case "ghsa":
+        if (!positionalArgs[1]) {
+          throw new Error("Missing ecosystem. Usage: msv ghsa <ecosystem> [package]\nEcosystems: npm, pip, maven, nuget, rubygems, go, rust");
+        }
+        await cmdGhsa(positionalArgs[1], positionalArgs[2], {
+          format: options.format as "text" | "json",
+          verbose: options.verbose,
+        }, config);
         break;
 
       default:

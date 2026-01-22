@@ -1,14 +1,15 @@
 {
   "_metadata": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
-    "lastUpdated": "2026-01-13T00:00:00Z",
-    "lastChecked": "2026-01-13T00:00:00Z",
-    "totalEntries": 153,
+    "lastUpdated": "2026-01-21T14:07:22.732Z",
+    "lastChecked": "2026-01-21T00:00:00Z",
+    "totalEntries": 189,
     "sources": [
       "CISA KEV Catalog (top vulnerable products)",
       "Enterprise patch management catalogs",
-      "Common Windows software lists"
+      "Common Windows software lists",
+      "Enterprise security and VPN products"
     ]
   },
   "software": [
@@ -20,10 +21,26 @@
       "cpe23": "cpe:2.3:a:google:chrome:*:*:*:*:*:*:*:*",
       "category": "browser",
       "priority": "critical",
-      "aliases": ["google chrome", "chrome browser"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "google chrome",
+        "chrome browser"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "67 CVEs in CISA KEV. Most used browser worldwide.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
+      "excludePatterns": [
+        "\\bchromium\\b",
+        "\\bchrome\\s*os\\b",
+        "\\bchrome\\s*remote\\s*desktop\\b",
+        "\\bchrome\\s*extension\\b",
+        "\\bchrome\\s*driver\\b",
+        "\\bheadless\\b"
+      ],
+      "eolProductId": "chrome"
     },
     {
       "id": "edge",
@@ -33,10 +50,26 @@
       "cpe23": "cpe:2.3:a:microsoft:edge_chromium:*:*:*:*:*:*:*:*",
       "category": "browser",
       "priority": "critical",
-      "aliases": ["microsoft edge", "edge chromium"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "microsoft edge",
+        "edge chromium"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Chromium-based browser, shares vulnerabilities with Chrome.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
+      "excludePatterns": [
+        "\\bedge\\s*legacy\\b",
+        "\\bwebview2\\b",
+        "\\bedge\\s*webview\\b",
+        "\\bcanary\\b",
+        "\\bdev\\s*channel\\b",
+        "\\bbeta\\s*channel\\b"
+      ],
+      "eolProductId": "microsoft-edge"
     },
     {
       "id": "firefox",
@@ -46,10 +79,25 @@
       "cpe23": "cpe:2.3:a:mozilla:firefox:*:*:*:*:*:*:*:*",
       "category": "browser",
       "priority": "high",
-      "aliases": ["mozilla firefox", "firefox browser"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "mozilla firefox",
+        "firefox browser"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Independent browser engine, separate vulnerability profile.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\besr\\b",
+        "\\bfirefox\\s*esr\\b",
+        "\\bfirefox\\s*focus\\b",
+        "\\bfirefox\\s*relay\\b",
+        "\\bfirefox\\s*extension\\b",
+        "\\bfirefox\\s*android\\b"
+      ],
+      "eolProductId": "firefox"
     },
     {
       "id": "brave",
@@ -59,8 +107,13 @@
       "cpe23": "cpe:2.3:a:brave:brave:*:*:*:*:*:*:*:*",
       "category": "browser",
       "priority": "high",
-      "aliases": ["brave", "brave browser"],
-      "platforms": ["windows"],
+      "aliases": [
+        "brave",
+        "brave browser"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Chromium-based, privacy-focused browser.",
       "lastChecked": "2026-01-13"
     },
@@ -72,8 +125,13 @@
       "cpe23": "cpe:2.3:a:opera:opera_browser:*:*:*:*:*:*:*:*",
       "category": "browser",
       "priority": "medium",
-      "aliases": ["opera", "opera browser"],
-      "platforms": ["windows"],
+      "aliases": [
+        "opera",
+        "opera browser"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Chromium-based browser.",
       "lastChecked": "2026-01-13"
     },
@@ -85,8 +143,15 @@
       "cpe23": "cpe:2.3:a:7-zip:7-zip:*:*:*:*:*:*:*:*",
       "category": "compression",
       "priority": "high",
-      "aliases": ["7-zip", "sevenzip", "7z"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "7-zip",
+        "sevenzip",
+        "7z"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "1 CVE in KEV (CVE-2025-0411). MotW bypass vulnerability.",
       "lastChecked": "2026-01-13"
     },
@@ -98,10 +163,26 @@
       "cpe23": "cpe:2.3:a:rarlab:winrar:*:*:*:*:*:*:*:*",
       "category": "compression",
       "priority": "critical",
-      "aliases": ["rar", "rarlab winrar"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "rar",
+        "rarlab winrar",
+        "winrar"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "4 CVEs in KEV. Known ransomware exploitation.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-13",
+      "versionPattern": "^[567]\\.",
+      "excludePatterns": [
+        "\\bunrar\\b",
+        "\\blibunrar\\b",
+        "\\brar\\.exe\\b",
+        "\\b7-?zip\\b",
+        "\\bpeazip\\b",
+        "\\brar\\s*library\\b"
+      ]
     },
     {
       "id": "peazip",
@@ -111,8 +192,12 @@
       "cpe23": "cpe:2.3:a:peazip:peazip:*:*:*:*:*:*:*:*",
       "category": "compression",
       "priority": "low",
-      "aliases": ["pea zip"],
-      "platforms": ["windows"],
+      "aliases": [
+        "pea zip"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Open-source archive manager.",
       "lastChecked": "2026-01-13"
     },
@@ -124,11 +209,31 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat_reader:*:*:*:*:*:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["adobe reader", "acrobat reader", "pdf reader"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "adobe reader",
+        "acrobat reader",
+        "pdf reader"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "76 Adobe CVEs in KEV. Use specific variant (Reader DC, Reader 2020, Reader 2024) for accurate MSV.",
       "lastChecked": "2026-01-19",
-      "variants": ["acrobat_reader_dc", "acrobat_reader_2020", "acrobat_reader_2024"]
+      "variants": [
+        "acrobat_reader_dc",
+        "acrobat_reader_2020",
+        "acrobat_reader_2024"
+      ],
+      "excludePatterns": [
+        "\\bacrobat\\s*pro\\b",
+        "\\bacrobat\\s*standard\\b",
+        "\\bchrome\\s*pdf\\b",
+        "\\bfoxit\\b",
+        "\\bnitro\\s*pdf\\b",
+        "\\bsumatra\\b",
+        "\\bpdf-?xchange\\b"
+      ]
     },
     {
       "id": "acrobat_pro",
@@ -138,8 +243,14 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat:*:*:*:*:*:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["acrobat pro", "adobe acrobat"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "acrobat pro",
+        "adobe acrobat"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Full Acrobat suite. Used in enterprise PDF automation.",
       "lastChecked": "2026-01-13"
     },
@@ -151,8 +262,13 @@
       "cpe23": "cpe:2.3:a:foxit:pdf_reader:*:*:*:*:*:*:*:*",
       "category": "pdf",
       "priority": "medium",
-      "aliases": ["foxit reader", "foxit pdf"],
-      "platforms": ["windows"],
+      "aliases": [
+        "foxit reader",
+        "foxit pdf"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Alternative PDF reader.",
       "lastChecked": "2026-01-13"
     },
@@ -164,8 +280,15 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["putty ssh", "putty client", "putty.exe"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "putty ssh",
+        "putty client",
+        "putty.exe"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "SSH/Telnet client. CVE-2024-31497 ECDSA key compromise. Part of PuTTY suite.",
       "lastChecked": "2026-01-13"
     },
@@ -177,8 +300,15 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["putty msi", "putty installer", "putty setup"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "putty msi",
+        "putty installer",
+        "putty setup"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Full PuTTY suite installer. Includes PuTTY, PSCP, PSFTP, Plink, Pageant, PuTTYgen.",
       "lastChecked": "2026-01-13"
     },
@@ -190,8 +320,15 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["pscp", "pscp.exe", "putty scp"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "pscp",
+        "pscp.exe",
+        "putty scp"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Command-line SCP client. Portable executable. Part of PuTTY suite.",
       "lastChecked": "2026-01-13"
     },
@@ -203,8 +340,15 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["psftp", "psftp.exe", "putty sftp"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "psftp",
+        "psftp.exe",
+        "putty sftp"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Command-line SFTP client. Portable executable. Part of PuTTY suite.",
       "lastChecked": "2026-01-13"
     },
@@ -216,8 +360,15 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["plink", "plink.exe", "putty link"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "plink",
+        "plink.exe",
+        "putty link"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Command-line SSH connection tool. Used for automation/scripting. Part of PuTTY suite.",
       "lastChecked": "2026-01-13"
     },
@@ -229,8 +380,16 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["pageant", "pageant.exe", "putty agent", "ssh agent"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "pageant",
+        "pageant.exe",
+        "putty agent",
+        "ssh agent"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "SSH authentication agent. Holds private keys in memory. Part of PuTTY suite.",
       "lastChecked": "2026-01-13"
     },
@@ -242,8 +401,16 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["puttygen", "puttygen.exe", "putty keygen", "key generator"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "puttygen",
+        "puttygen.exe",
+        "putty keygen",
+        "key generator"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "SSH key generation utility. Converts between key formats. Part of PuTTY suite.",
       "lastChecked": "2026-01-13"
     },
@@ -255,8 +422,15 @@
       "cpe23": "cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "medium",
-      "aliases": ["puttytel", "puttytel.exe", "putty telnet"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "puttytel",
+        "puttytel.exe",
+        "putty telnet"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Telnet-only client (no SSH). Smaller binary. Part of PuTTY suite.",
       "lastChecked": "2026-01-13"
     },
@@ -268,8 +442,14 @@
       "cpe23": "cpe:2.3:a:winscp:winscp:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["win scp", "winscp client"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "win scp",
+        "winscp client"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "SFTP/SCP client. Common in enterprise file transfer.",
       "lastChecked": "2026-01-13"
     },
@@ -281,10 +461,25 @@
       "cpe23": "cpe:2.3:a:teamviewer:teamviewer:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "critical",
-      "aliases": ["team viewer"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "team viewer"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Remote desktop tool. High-value target for attackers.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-13",
+      "versionPattern": "^\\d+\\.",
+      "excludePatterns": [
+        "\\bquick\\s*support\\b",
+        "\\bteamviewer\\s*host\\b",
+        "\\bteamviewer\\s*meeting\\b",
+        "\\bteamviewer\\s*pilot\\b",
+        "\\bteamviewer\\s*remote\\b",
+        "\\banydesk\\b",
+        "\\blogmein\\b"
+      ]
     },
     {
       "id": "anydesk",
@@ -294,8 +489,13 @@
       "cpe23": "cpe:2.3:a:anydesk:anydesk:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["any desk"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "any desk"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Remote desktop alternative to TeamViewer.",
       "lastChecked": "2026-01-13"
     },
@@ -307,8 +507,15 @@
       "cpe23": "cpe:2.3:a:notepad-plus-plus:notepad\\+\\+:*:*:*:*:*:*:*:*",
       "category": "editor",
       "priority": "medium",
-      "aliases": ["notepad++", "npp", "notepad plus plus"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "notepad++",
+        "npp",
+        "notepad plus plus"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Popular text editor for developers and admins.",
       "lastChecked": "2026-01-13"
     },
@@ -320,8 +527,14 @@
       "cpe23": "cpe:2.3:a:microsoft:visual_studio_code:*:*:*:*:*:*:*:*",
       "category": "editor",
       "priority": "medium",
-      "aliases": ["vs code", "vscode"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "vs code",
+        "vscode"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Popular IDE/editor. Extension ecosystem is attack surface.",
       "lastChecked": "2026-01-13"
     },
@@ -333,8 +546,13 @@
       "cpe23": "cpe:2.3:a:sublimetext:sublime_text:*:*:*:*:*:*:*:*",
       "category": "editor",
       "priority": "low",
-      "aliases": ["sublime", "sublime text"],
-      "platforms": ["windows"],
+      "aliases": [
+        "sublime",
+        "sublime text"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Commercial text editor.",
       "lastChecked": "2026-01-13"
     },
@@ -346,8 +564,14 @@
       "cpe23": "cpe:2.3:a:wireshark:wireshark:*:*:*:*:*:*:*:*",
       "category": "network",
       "priority": "high",
-      "aliases": ["ethereal", "wire shark"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "ethereal",
+        "wire shark"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Network protocol analyzer. Used by security teams.",
       "lastChecked": "2026-01-13"
     },
@@ -359,8 +583,13 @@
       "cpe23": "cpe:2.3:a:nmap:nmap:*:*:*:*:*:*:*:*",
       "category": "network",
       "priority": "medium",
-      "aliases": ["network mapper"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "network mapper"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Network scanner. Common security tool.",
       "lastChecked": "2026-01-13"
     },
@@ -372,10 +601,22 @@
       "cpe23": "cpe:2.3:a:zoom:zoom:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "high",
-      "aliases": ["zoom client", "zoom meetings"],
-      "platforms": ["windows"],
+      "aliases": [
+        "zoom client",
+        "zoom meetings"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Video conferencing. Frequently patched.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bzoom\\s*rooms\\b",
+        "\\bzoom\\s*phone\\b",
+        "\\bzoom\\s*sdk\\b",
+        "\\bzoom\\s*plugin\\b",
+        "\\bzoom\\s*outlook\\b"
+      ]
     },
     {
       "id": "slack",
@@ -385,8 +626,12 @@
       "cpe23": "cpe:2.3:a:slack:slack:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "medium",
-      "aliases": ["slack desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "slack desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Team messaging platform.",
       "lastChecked": "2026-01-13"
     },
@@ -398,8 +643,13 @@
       "cpe23": "cpe:2.3:a:microsoft:teams:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "high",
-      "aliases": ["ms teams", "microsoft teams"],
-      "platforms": ["windows"],
+      "aliases": [
+        "ms teams",
+        "microsoft teams"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Enterprise collaboration. Part of M365.",
       "lastChecked": "2026-01-13"
     },
@@ -411,8 +661,12 @@
       "cpe23": "cpe:2.3:a:discord:discord:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "medium",
-      "aliases": ["discord client"],
-      "platforms": ["windows"],
+      "aliases": [
+        "discord client"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Voice/text chat. Growing enterprise adoption.",
       "lastChecked": "2026-01-13"
     },
@@ -424,8 +678,15 @@
       "cpe23": "cpe:2.3:a:videolan:vlc_media_player:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "medium",
-      "aliases": ["vlc", "videolan", "vlc player"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "vlc",
+        "videolan",
+        "vlc player"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Open-source media player. Codec vulnerabilities.",
       "lastChecked": "2026-01-13"
     },
@@ -437,8 +698,13 @@
       "cpe23": "cpe:2.3:a:apple:itunes:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "medium",
-      "aliases": ["itunes", "apple itunes"],
-      "platforms": ["windows"],
+      "aliases": [
+        "itunes",
+        "apple itunes"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Apple media manager for Windows.",
       "lastChecked": "2026-01-13"
     },
@@ -450,10 +716,28 @@
       "cpe23": "cpe:2.3:a:oracle:jre:*:*:*:*:*:*:*:*",
       "category": "runtime",
       "priority": "critical",
-      "aliases": ["java", "jre", "java runtime", "oracle java"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "java",
+        "jre",
+        "java runtime",
+        "oracle java"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Java Runtime Environment. Historical attack target.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bopenjdk\\b",
+        "\\bazul\\b",
+        "\\bzulu\\b",
+        "\\bgraalvm\\b",
+        "\\beclipse\\s*temurin\\b",
+        "\\bcorretto\\b",
+        "\\bliberica\\b",
+        "\\bsapMachine\\b"
+      ]
     },
     {
       "id": "jdk",
@@ -463,8 +747,15 @@
       "cpe23": "cpe:2.3:a:oracle:jdk:*:*:*:*:*:*:*:*",
       "category": "runtime",
       "priority": "high",
-      "aliases": ["java jdk", "oracle jdk", "java development kit"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "java jdk",
+        "oracle jdk",
+        "java development kit"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Java Development Kit.",
       "lastChecked": "2026-01-13"
     },
@@ -476,8 +767,14 @@
       "cpe23": "cpe:2.3:a:nodejs:node.js:*:*:*:*:*:*:*:*",
       "category": "runtime",
       "priority": "high",
-      "aliases": ["node", "nodejs"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "node",
+        "nodejs"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "JavaScript runtime. Multiple LTS branches.",
       "lastChecked": "2026-01-13"
     },
@@ -489,13 +786,28 @@
       "cpe23": "cpe:2.3:a:python:python:*:*:*:*:*:*:*:*",
       "category": "runtime",
       "priority": "high",
-      "aliases": ["python3", "python 3"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "python3",
+        "python 3"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Python interpreter. LTS: 3.12.x, Current: 3.13.x",
       "lastChecked": "2026-01-19",
       "versionPattern": "^3\\.",
-      "excludePatterns": ["\\bvscode\\b", "\\bvisual studio code\\b", "\\bpython extension\\b", "\\bpylint\\b", "\\bpython-ldap\\b", "\\bdjango\\b", "\\bflask\\b"],
-      "latestVersion": "3.13.1"
+      "excludePatterns": [
+        "\\bvscode\\b",
+        "\\bvisual studio code\\b",
+        "\\bpython extension\\b",
+        "\\bpylint\\b",
+        "\\bpython-ldap\\b",
+        "\\bdjango\\b",
+        "\\bflask\\b"
+      ],
+      "latestVersion": "3.13.1",
+      "eolProductId": "python"
     },
     {
       "id": "git",
@@ -505,12 +817,25 @@
       "cpe23": "cpe:2.3:a:git-scm:git:*:*:*:*:*:*:*:*",
       "category": "development",
       "priority": "high",
-      "aliases": ["git", "git scm"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "git",
+        "git scm"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Version control. Includes Git Bash. Current: 2.47.x",
       "lastChecked": "2026-01-19",
       "versionPattern": "^2\\.",
-      "excludePatterns": ["\\bgitlab\\b", "\\bgitea\\b", "\\bgithub\\b", "\\bgit-lfs\\b", "\\bgit server\\b", "\\bliferay\\b"],
+      "excludePatterns": [
+        "\\bgitlab\\b",
+        "\\bgitea\\b",
+        "\\bgithub\\b",
+        "\\bgit-lfs\\b",
+        "\\bgit server\\b",
+        "\\bliferay\\b"
+      ],
       "latestVersion": "2.47.1"
     },
     {
@@ -521,8 +846,14 @@
       "cpe23": "cpe:2.3:a:filezilla-project:filezilla_client:*:*:*:*:*:*:*:*",
       "category": "file_transfer",
       "priority": "medium",
-      "aliases": ["filezilla client", "file zilla"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "filezilla client",
+        "file zilla"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "FTP/SFTP client.",
       "lastChecked": "2026-01-13"
     },
@@ -534,8 +865,12 @@
       "cpe23": "cpe:2.3:a:dropbox:dropbox:*:*:*:*:*:*:*:*",
       "category": "cloud_storage",
       "priority": "medium",
-      "aliases": ["dropbox client"],
-      "platforms": ["windows"],
+      "aliases": [
+        "dropbox client"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Cloud sync client.",
       "lastChecked": "2026-01-13"
     },
@@ -547,8 +882,13 @@
       "cpe23": "cpe:2.3:a:microsoft:onedrive:*:*:*:*:*:*:*:*",
       "category": "cloud_storage",
       "priority": "medium",
-      "aliases": ["onedrive", "one drive"],
-      "platforms": ["windows"],
+      "aliases": [
+        "onedrive",
+        "one drive"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Microsoft cloud sync. Built into Windows but updatable.",
       "lastChecked": "2026-01-13"
     },
@@ -560,8 +900,13 @@
       "cpe23": "cpe:2.3:a:google:drive:*:*:*:*:*:*:*:*",
       "category": "cloud_storage",
       "priority": "medium",
-      "aliases": ["google drive", "gdrive"],
-      "platforms": ["windows"],
+      "aliases": [
+        "google drive",
+        "gdrive"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Google cloud sync client.",
       "lastChecked": "2026-01-13"
     },
@@ -573,8 +918,14 @@
       "cpe23": "cpe:2.3:a:adobe:flash_player:*:*:*:*:*:*:*:*",
       "category": "plugin",
       "priority": "critical",
-      "aliases": ["flash", "flash player", "adobe flash"],
-      "platforms": ["windows"],
+      "aliases": [
+        "flash",
+        "flash player",
+        "adobe flash"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "END OF LIFE (Dec 2020). 33 CVEs in KEV. Remove immediately if found.",
       "lastChecked": "2026-01-19",
       "eol": true
@@ -587,8 +938,12 @@
       "cpe23": "cpe:2.3:a:microsoft:silverlight:*:*:*:*:*:*:*:*",
       "category": "plugin",
       "priority": "critical",
-      "aliases": ["silverlight"],
-      "platforms": ["windows"],
+      "aliases": [
+        "silverlight"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "END OF LIFE (Oct 2021). Remove immediately if found.",
       "lastChecked": "2026-01-19",
       "eol": true
@@ -601,10 +956,25 @@
       "cpe23": "cpe:2.3:a:citrix:workspace_app:*:*:*:*:*:*:*:*",
       "category": "enterprise",
       "priority": "critical",
-      "aliases": ["citrix workspace", "citrix receiver"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "citrix workspace",
+        "citrix receiver"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Citrix client. High-value enterprise target.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-13",
+      "excludePatterns": [
+        "\\bnetscaler\\b",
+        "\\badc\\b",
+        "\\bgateway\\b",
+        "\\bxenapp\\b",
+        "\\bxendesktop\\b",
+        "\\bsharefile\\b",
+        "\\bvirtual\\s*apps\\b"
+      ]
     },
     {
       "id": "vmware_tools",
@@ -614,8 +984,14 @@
       "cpe23": "cpe:2.3:a:vmware:tools:*:*:*:*:*:*:*:*",
       "category": "enterprise",
       "priority": "high",
-      "aliases": ["vmware tools", "vmtools"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "vmware tools",
+        "vmtools"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "VM guest tools. Critical for virtualized environments.",
       "lastChecked": "2026-01-13"
     },
@@ -627,8 +1003,13 @@
       "cpe23": "cpe:2.3:a:vmware:horizon_client:*:*:*:*:*:*:*:*",
       "category": "enterprise",
       "priority": "high",
-      "aliases": ["horizon client", "vmware horizon"],
-      "platforms": ["windows"],
+      "aliases": [
+        "horizon client",
+        "vmware horizon"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "VDI client.",
       "lastChecked": "2026-01-13"
     },
@@ -640,8 +1021,14 @@
       "cpe23": "cpe:2.3:a:splunk:universal_forwarder:*:*:*:*:*:*:*:*",
       "category": "enterprise",
       "priority": "high",
-      "aliases": ["splunk forwarder", "splunk uf"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "splunk forwarder",
+        "splunk uf"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Log forwarding agent.",
       "lastChecked": "2026-01-13"
     },
@@ -653,8 +1040,16 @@
       "cpe23": "cpe:2.3:a:ibm:mq:*:*:*:*:*:*:*:*",
       "category": "enterprise",
       "priority": "high",
-      "aliases": ["ibm mq", "websphere mq", "mq series", "ibm message queue"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "ibm mq",
+        "websphere mq",
+        "mq series",
+        "ibm message queue"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Enterprise messaging middleware. 192+ CVEs tracked. Legacy name: WebSphere MQ.",
       "lastChecked": "2026-01-14"
     },
@@ -666,8 +1061,15 @@
       "cpe23": "cpe:2.3:a:crowdstrike:falcon:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "critical",
-      "aliases": ["crowdstrike", "falcon sensor", "cs falcon"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "crowdstrike",
+        "falcon sensor",
+        "cs falcon"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "EDR agent. Critical security component.",
       "lastChecked": "2026-01-13"
     },
@@ -679,8 +1081,14 @@
       "cpe23": "cpe:2.3:a:sentinelone:sentinelone:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "high",
-      "aliases": ["sentinel one", "s1"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "sentinel one",
+        "s1"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "EDR agent.",
       "lastChecked": "2026-01-13"
     },
@@ -692,8 +1100,13 @@
       "cpe23": "cpe:2.3:a:malwarebytes:malwarebytes:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "medium",
-      "aliases": ["mbam", "malwarebytes anti-malware"],
-      "platforms": ["windows"],
+      "aliases": [
+        "mbam",
+        "malwarebytes anti-malware"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Anti-malware tool.",
       "lastChecked": "2026-01-13"
     },
@@ -705,8 +1118,14 @@
       "cpe23": "cpe:2.3:a:microsoft:365_apps:*:*:*:*:*:*:*:*",
       "category": "productivity",
       "priority": "critical",
-      "aliases": ["microsoft 365", "office 365", "m365"],
-      "platforms": ["windows"],
+      "aliases": [
+        "microsoft 365",
+        "office 365",
+        "m365"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Office suite. Multiple CVEs in KEV.",
       "lastChecked": "2026-01-13"
     },
@@ -718,8 +1137,14 @@
       "cpe23": "cpe:2.3:a:libreoffice:libreoffice:*:*:*:*:*:*:*:*",
       "category": "productivity",
       "priority": "medium",
-      "aliases": ["libre office", "openoffice"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "libre office",
+        "openoffice"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Open-source office suite.",
       "lastChecked": "2026-01-13"
     },
@@ -731,8 +1156,13 @@
       "cpe23": "cpe:2.3:a:piriform:ccleaner:*:*:*:*:*:*:*:*",
       "category": "utility",
       "priority": "medium",
-      "aliases": ["ccleaner", "c cleaner"],
-      "platforms": ["windows"],
+      "aliases": [
+        "ccleaner",
+        "c cleaner"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "System cleaner. Was compromised in supply chain attack.",
       "lastChecked": "2026-01-13"
     },
@@ -744,8 +1174,13 @@
       "cpe23": "cpe:2.3:a:voidtools:everything:*:*:*:*:*:*:*:*",
       "category": "utility",
       "priority": "low",
-      "aliases": ["everything", "voidtools everything"],
-      "platforms": ["windows"],
+      "aliases": [
+        "everything",
+        "voidtools everything"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Fast file search utility.",
       "lastChecked": "2026-01-13"
     },
@@ -757,8 +1192,12 @@
       "cpe23": "cpe:2.3:a:rufus:rufus:*:*:*:*:*:*:*:*",
       "category": "utility",
       "priority": "low",
-      "aliases": ["rufus usb"],
-      "platforms": ["windows"],
+      "aliases": [
+        "rufus usb"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Bootable USB creation tool.",
       "lastChecked": "2026-01-13"
     },
@@ -770,8 +1209,12 @@
       "cpe23": "cpe:2.3:a:greenshot:greenshot:*:*:*:*:*:*:*:*",
       "category": "utility",
       "priority": "low",
-      "aliases": ["green shot"],
-      "platforms": ["windows"],
+      "aliases": [
+        "green shot"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Screenshot tool.",
       "lastChecked": "2026-01-13"
     },
@@ -783,8 +1226,12 @@
       "cpe23": "cpe:2.3:a:irfanview:irfanview:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "low",
-      "aliases": ["irfan view"],
-      "platforms": ["windows"],
+      "aliases": [
+        "irfan view"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Image viewer.",
       "lastChecked": "2026-01-13"
     },
@@ -796,8 +1243,12 @@
       "cpe23": "cpe:2.3:a:keepass:keepass:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "high",
-      "aliases": ["keepass password safe"],
-      "platforms": ["windows"],
+      "aliases": [
+        "keepass password safe"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Password manager. Critical security tool.",
       "lastChecked": "2026-01-13"
     },
@@ -809,8 +1260,12 @@
       "cpe23": "cpe:2.3:a:bitwarden:bitwarden:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "high",
-      "aliases": ["bitwarden desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "bitwarden desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Password manager.",
       "lastChecked": "2026-01-13"
     },
@@ -822,8 +1277,12 @@
       "cpe23": "cpe:2.3:a:1password:1password:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "high",
-      "aliases": ["one password"],
-      "platforms": ["windows"],
+      "aliases": [
+        "one password"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Password manager.",
       "lastChecked": "2026-01-13"
     },
@@ -835,8 +1294,12 @@
       "cpe23": "cpe:2.3:a:lastpass:lastpass:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "high",
-      "aliases": ["last pass"],
-      "platforms": ["windows"],
+      "aliases": [
+        "last pass"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Password manager. Had breaches.",
       "lastChecked": "2026-01-13"
     },
@@ -848,8 +1311,13 @@
       "cpe23": "cpe:2.3:a:veracrypt:veracrypt:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "medium",
-      "aliases": ["vera crypt", "truecrypt"],
-      "platforms": ["windows"],
+      "aliases": [
+        "vera crypt",
+        "truecrypt"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Disk encryption. TrueCrypt successor.",
       "lastChecked": "2026-01-13"
     },
@@ -861,8 +1329,13 @@
       "cpe23": "cpe:2.3:a:mcmilk:7-zip-zstd:*:*:*:*:*:*:*:*",
       "category": "compression",
       "priority": "medium",
-      "aliases": ["7-zip zstd", "7-zip zs"],
-      "platforms": ["windows"],
+      "aliases": [
+        "7-zip zstd",
+        "7-zip zs"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "7-Zip fork with additional compression.",
       "lastChecked": "2026-01-13"
     },
@@ -874,10 +1347,22 @@
       "cpe23": "cpe:2.3:a:curl:curl:*:*:*:*:*:*:*:*",
       "category": "utility",
       "priority": "high",
-      "aliases": ["curl", "libcurl"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "curl",
+        "libcurl"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Command-line HTTP client. Built into Windows 10+.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bpycurl\\b",
+        "\\bcurl-cffi\\b",
+        "\\bcurlpp\\b",
+        "\\bphp.*curl\\b"
+      ]
     },
     {
       "id": "openssl",
@@ -887,13 +1372,25 @@
       "cpe23": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
       "category": "library",
       "priority": "critical",
-      "aliases": ["open ssl"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "open ssl"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Crypto library. LTS: 3.0.x (EOL Sep 2026), Current: 3.4.x.",
       "lastChecked": "2026-01-19",
       "versionPattern": "^[013]\\.",
-      "excludePatterns": ["\\bpyopenssl\\b", "\\bpython.*openssl\\b", "\\brubyopenssl\\b", "\\bopenssl-src\\b", "\\brust-openssl\\b"],
-      "latestVersion": "3.4.0"
+      "excludePatterns": [
+        "\\bpyopenssl\\b",
+        "\\bpython.*openssl\\b",
+        "\\brubyopenssl\\b",
+        "\\bopenssl-src\\b",
+        "\\brust-openssl\\b"
+      ],
+      "latestVersion": "3.4.0",
+      "eolProductId": "openssl"
     },
     {
       "id": "postgresql",
@@ -903,8 +1400,14 @@
       "cpe23": "cpe:2.3:a:postgresql:postgresql:*:*:*:*:*:*:*:*",
       "category": "database",
       "priority": "high",
-      "aliases": ["postgres", "pg"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "postgres",
+        "pg"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Open-source database.",
       "lastChecked": "2026-01-13"
     },
@@ -916,8 +1419,13 @@
       "cpe23": "cpe:2.3:a:oracle:mysql:*:*:*:*:*:*:*:*",
       "category": "database",
       "priority": "high",
-      "aliases": ["mysql server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "mysql server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Oracle MySQL database.",
       "lastChecked": "2026-01-13"
     },
@@ -929,8 +1437,13 @@
       "cpe23": "cpe:2.3:a:mariadb:mariadb:*:*:*:*:*:*:*:*",
       "category": "database",
       "priority": "high",
-      "aliases": ["maria db"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "maria db"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "MySQL fork.",
       "lastChecked": "2026-01-13"
     },
@@ -942,8 +1455,13 @@
       "cpe23": "cpe:2.3:a:mongodb:mongodb:*:*:*:*:*:*:*:*",
       "category": "database",
       "priority": "high",
-      "aliases": ["mongo"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "mongo"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "NoSQL database.",
       "lastChecked": "2026-01-13"
     },
@@ -955,8 +1473,13 @@
       "cpe23": "cpe:2.3:a:redis:redis:*:*:*:*:*:*:*:*",
       "category": "database",
       "priority": "high",
-      "aliases": ["redis server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "redis server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "In-memory data store.",
       "lastChecked": "2026-01-13"
     },
@@ -968,10 +1491,22 @@
       "cpe23": "cpe:2.3:a:nginx:nginx:*:*:*:*:*:*:*:*",
       "category": "webserver",
       "priority": "high",
-      "aliases": ["nginx server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "nginx server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Web server/reverse proxy.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bnginx\\s*plus\\b",
+        "\\bopenresty\\b",
+        "\\btengine\\b",
+        "\\bnginx\\s*unit\\b",
+        "\\bnginx\\s*ingress\\b"
+      ]
     },
     {
       "id": "apache",
@@ -981,10 +1516,25 @@
       "cpe23": "cpe:2.3:a:apache:http_server:*:*:*:*:*:*:*:*",
       "category": "webserver",
       "priority": "critical",
-      "aliases": ["apache", "httpd", "apache httpd"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "apache",
+        "httpd",
+        "apache httpd"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Web server. Multiple KEV entries.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\btomcat\\b",
+        "\\bstruts\\b",
+        "\\bkafka\\b",
+        "\\bspark\\b",
+        "\\blog4j\\b",
+        "\\bsolr\\b"
+      ]
     },
     {
       "id": "tomcat",
@@ -994,10 +1544,27 @@
       "cpe23": "cpe:2.3:a:apache:tomcat:*:*:*:*:*:*:*:*",
       "category": "webserver",
       "priority": "critical",
-      "aliases": ["tomcat", "apache tomcat"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "tomcat",
+        "apache tomcat"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Java web server. KEV entries.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-13",
+      "versionPattern": "^[789]\\.|^10\\.|^11\\.",
+      "excludePatterns": [
+        "\\btomee\\b",
+        "\\bjetty\\b",
+        "\\bwildfly\\b",
+        "\\bjboss\\b",
+        "\\bglassfish\\b",
+        "\\bweblogic\\b",
+        "\\bspring\\s*boot\\b"
+      ],
+      "eolProductId": "tomcat"
     },
     {
       "id": "iis",
@@ -1007,8 +1574,13 @@
       "cpe23": "cpe:2.3:a:microsoft:internet_information_services:*:*:*:*:*:*:*:*",
       "category": "webserver",
       "priority": "critical",
-      "aliases": ["iis", "internet information services"],
-      "platforms": ["server"],
+      "aliases": [
+        "iis",
+        "internet information services"
+      ],
+      "platforms": [
+        "server"
+      ],
       "notes": "Windows web server. Part of Windows Server.",
       "lastChecked": "2026-01-13"
     },
@@ -1020,12 +1592,23 @@
       "cpe23": "cpe:2.3:a:docker:desktop:*:*:*:*:*:*:*:*",
       "category": "container",
       "priority": "high",
-      "aliases": ["docker", "docker desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "docker",
+        "docker desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Container platform. Current: 4.36.x.",
       "lastChecked": "2026-01-19",
       "versionPattern": "^4\\.",
-      "excludePatterns": ["\\bremote desktop\\b", "\\bwindows.*desktop\\b", "\\brdp\\b", "\\bkubernetes\\b", "\\bcontainerd\\b"],
+      "excludePatterns": [
+        "\\bremote desktop\\b",
+        "\\bwindows.*desktop\\b",
+        "\\brdp\\b",
+        "\\bkubernetes\\b",
+        "\\bcontainerd\\b"
+      ],
       "latestVersion": "4.36.0"
     },
     {
@@ -1036,8 +1619,13 @@
       "cpe23": "cpe:2.3:a:oracle:vm_virtualbox:*:*:*:*:*:*:*:*",
       "category": "virtualization",
       "priority": "high",
-      "aliases": ["virtualbox", "vbox"],
-      "platforms": ["windows"],
+      "aliases": [
+        "virtualbox",
+        "vbox"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Desktop virtualization.",
       "lastChecked": "2026-01-13"
     },
@@ -1049,8 +1637,12 @@
       "cpe23": "cpe:2.3:a:hashicorp:vagrant:*:*:*:*:*:*:*:*",
       "category": "virtualization",
       "priority": "medium",
-      "aliases": ["vagrant"],
-      "platforms": ["windows"],
+      "aliases": [
+        "vagrant"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "VM management tool.",
       "lastChecked": "2026-01-13"
     },
@@ -1062,8 +1654,14 @@
       "cpe23": "cpe:2.3:a:hashicorp:terraform:*:*:*:*:*:*:*:*",
       "category": "iac",
       "priority": "high",
-      "aliases": ["terraform", "tf"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "terraform",
+        "tf"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Infrastructure as Code.",
       "lastChecked": "2026-01-13"
     },
@@ -1075,8 +1673,14 @@
       "cpe23": "cpe:2.3:a:redhat:ansible:*:*:*:*:*:*:*:*",
       "category": "automation",
       "priority": "medium",
-      "aliases": ["ansible", "redhat ansible"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "ansible",
+        "redhat ansible"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Configuration management.",
       "lastChecked": "2026-01-13"
     },
@@ -1088,11 +1692,21 @@
       "cpe23": "cpe:2.3:a:microsoft:powershell:*:*:*:*:*:*:*:*",
       "category": "shell",
       "priority": "high",
-      "aliases": ["powershell", "ps"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "powershell",
+        "ps"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Use specific variant: 'windows powershell' for 5.1 (OS-built-in), 'powershell 6' (EOL), or 'powershell 7' for current standalone.",
       "lastChecked": "2026-01-19",
-      "variants": ["windows_powershell", "powershell6", "powershell7"]
+      "variants": [
+        "windows_powershell",
+        "powershell6",
+        "powershell7"
+      ]
     },
     {
       "id": "windows_powershell",
@@ -1102,8 +1716,16 @@
       "cpe23": "cpe:2.3:a:microsoft:windows_powershell:5.1*:*:*:*:*:*:*:*",
       "category": "shell",
       "priority": "high",
-      "aliases": ["windows powershell", "powershell 5.1", "powershell 5", "built-in powershell"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "windows powershell",
+        "powershell 5.1",
+        "powershell 5",
+        "built-in powershell"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "OS COMPONENT: Updated via Windows Update only. Cannot track independent MSV - keep Windows patched. CVE-2025-54100 (Invoke-WebRequest) patched in Dec 2025 cumulative update.",
       "lastChecked": "2026-01-19",
       "osComponent": true
@@ -1116,8 +1738,15 @@
       "cpe23": "cpe:2.3:a:microsoft:powershell:6*:*:*:*:*:*:*:*",
       "category": "shell",
       "priority": "critical",
-      "aliases": ["powershell 6", "powershell core 6", "ps6"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "powershell 6",
+        "powershell core 6",
+        "ps6"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "END OF LIFE (Sep 2020). First cross-platform PowerShell. Upgrade to PowerShell 7 immediately - no security patches available.",
       "lastChecked": "2026-01-19",
       "versionPattern": "^6\\.",
@@ -1131,8 +1760,16 @@
       "cpe23": "cpe:2.3:a:microsoft:powershell:7*:*:*:*:*:*:*:*",
       "category": "shell",
       "priority": "high",
-      "aliases": ["powershell 7", "powershell core", "pwsh", "ps7"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "powershell 7",
+        "powershell core",
+        "pwsh",
+        "ps7"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Standalone cross-platform PowerShell. LTS: 7.4.x (EOL Nov 2026), Current: 7.5.x (EOL May 2026). Separate from Windows PowerShell 5.1.",
       "lastChecked": "2026-01-19",
       "versionPattern": "^7\\."
@@ -1145,10 +1782,24 @@
       "cpe23": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "critical",
-      "aliases": ["openssh", "ssh"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "openssh",
+        "ssh"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "SSH server/client. Built into Windows.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bdropbear\\b",
+        "\\bputty\\b",
+        "\\bparamiko\\b",
+        "\\blibssh\\b",
+        "\\bssh2\\b",
+        "\\bbitvise\\b"
+      ]
     },
     {
       "id": "telegraf",
@@ -1158,8 +1809,13 @@
       "cpe23": "cpe:2.3:a:influxdata:telegraf:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "medium",
-      "aliases": ["telegraf"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "telegraf"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Metrics collection agent.",
       "lastChecked": "2026-01-13"
     },
@@ -1171,8 +1827,13 @@
       "cpe23": "cpe:2.3:a:grafana:grafana:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["grafana"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "grafana"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Visualization platform. KEV entries.",
       "lastChecked": "2026-01-13"
     },
@@ -1184,8 +1845,13 @@
       "cpe23": "cpe:2.3:a:prometheus:prometheus:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["prometheus"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "prometheus"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Monitoring system.",
       "lastChecked": "2026-01-13"
     },
@@ -1197,8 +1863,14 @@
       "cpe23": "cpe:2.3:a:zabbix:zabbix:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["zabbix", "zabbix agent"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "zabbix",
+        "zabbix agent"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Enterprise monitoring agent.",
       "lastChecked": "2026-01-13"
     },
@@ -1210,8 +1882,13 @@
       "cpe23": "cpe:2.3:a:nagios:nagios:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["nagios"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "nagios"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "IT monitoring.",
       "lastChecked": "2026-01-13"
     },
@@ -1223,8 +1900,13 @@
       "cpe23": "cpe:2.3:a:obsproject:obs_studio:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "low",
-      "aliases": ["obs", "obs studio"],
-      "platforms": ["windows"],
+      "aliases": [
+        "obs",
+        "obs studio"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Streaming/recording software.",
       "lastChecked": "2026-01-13"
     },
@@ -1236,8 +1918,12 @@
       "cpe23": "cpe:2.3:a:handbrake:handbrake:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "low",
-      "aliases": ["hand brake"],
-      "platforms": ["windows"],
+      "aliases": [
+        "hand brake"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Video transcoder.",
       "lastChecked": "2026-01-13"
     },
@@ -1249,8 +1935,12 @@
       "cpe23": "cpe:2.3:a:gimp:gimp:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "low",
-      "aliases": ["gnu image manipulation program"],
-      "platforms": ["windows"],
+      "aliases": [
+        "gnu image manipulation program"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Image editor.",
       "lastChecked": "2026-01-13"
     },
@@ -1262,8 +1952,12 @@
       "cpe23": "cpe:2.3:a:audacityteam:audacity:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "low",
-      "aliases": ["audacity"],
-      "platforms": ["windows"],
+      "aliases": [
+        "audacity"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Audio editor.",
       "lastChecked": "2026-01-13"
     },
@@ -1275,8 +1969,12 @@
       "cpe23": "cpe:2.3:a:blender:blender:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "low",
-      "aliases": ["blender 3d"],
-      "platforms": ["windows"],
+      "aliases": [
+        "blender 3d"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "3D modeling software.",
       "lastChecked": "2026-01-13"
     },
@@ -1288,8 +1986,12 @@
       "cpe23": "cpe:2.3:a:spotify:spotify:*:*:*:*:*:*:*:*",
       "category": "media",
       "priority": "low",
-      "aliases": ["spotify desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "spotify desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Music streaming.",
       "lastChecked": "2026-01-13"
     },
@@ -1301,8 +2003,13 @@
       "cpe23": "cpe:2.3:a:valvesoftware:steam_client:*:*:*:*:*:*:*:*",
       "category": "gaming",
       "priority": "medium",
-      "aliases": ["steam", "steam client"],
-      "platforms": ["windows"],
+      "aliases": [
+        "steam",
+        "steam client"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Gaming platform. Privilege escalation vulns.",
       "lastChecked": "2026-01-13"
     },
@@ -1314,8 +2021,14 @@
       "cpe23": "cpe:2.3:a:nvidia:gpu_display_driver:*:*:*:*:*:*:*:*",
       "category": "driver",
       "priority": "high",
-      "aliases": ["nvidia driver", "geforce driver"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "nvidia driver",
+        "geforce driver"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "latestVersion": "591.74",
       "notes": "GPU driver. Kernel-level access. Latest: 591.74 WHQL (Jan 2026).",
       "lastChecked": "2026-01-19"
@@ -1328,8 +2041,13 @@
       "cpe23": "cpe:2.3:a:amd:radeon_software:*:*:*:*:*:*:*:*",
       "category": "driver",
       "priority": "high",
-      "aliases": ["amd driver", "radeon driver"],
-      "platforms": ["windows"],
+      "aliases": [
+        "amd driver",
+        "radeon driver"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "GPU driver.",
       "lastChecked": "2026-01-13"
     },
@@ -1341,8 +2059,14 @@
       "cpe23": "cpe:2.3:a:intel:graphics_driver:*:*:*:*:*:*:*:*",
       "category": "driver",
       "priority": "high",
-      "aliases": ["intel graphics", "intel driver"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "intel graphics",
+        "intel driver"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Intel GPU driver.",
       "lastChecked": "2026-01-13"
     },
@@ -1354,8 +2078,13 @@
       "cpe23": "cpe:2.3:a:realtek:audio_driver:*:*:*:*:*:*:*:*",
       "category": "driver",
       "priority": "medium",
-      "aliases": ["realtek audio", "realtek hd audio"],
-      "platforms": ["windows"],
+      "aliases": [
+        "realtek audio",
+        "realtek hd audio"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Audio driver.",
       "lastChecked": "2026-01-13"
     },
@@ -1367,8 +2096,13 @@
       "cpe23": "cpe:2.3:a:microsoft:skype:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "medium",
-      "aliases": ["skype", "skype for business"],
-      "platforms": ["windows"],
+      "aliases": [
+        "skype",
+        "skype for business"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Legacy communication. Being replaced by Teams.",
       "lastChecked": "2026-01-13"
     },
@@ -1380,8 +2114,13 @@
       "cpe23": "cpe:2.3:a:signal:signal-desktop:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "medium",
-      "aliases": ["signal", "signal desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "signal",
+        "signal desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Encrypted messaging.",
       "lastChecked": "2026-01-13"
     },
@@ -1393,8 +2132,13 @@
       "cpe23": "cpe:2.3:a:telegram:telegram_desktop:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "medium",
-      "aliases": ["telegram", "telegram desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "telegram",
+        "telegram desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Messaging platform.",
       "lastChecked": "2026-01-13"
     },
@@ -1406,8 +2150,13 @@
       "cpe23": "cpe:2.3:a:whatsapp:whatsapp:*:*:*:*:*:*:*:*",
       "category": "communication",
       "priority": "medium",
-      "aliases": ["whatsapp", "whatsapp desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "whatsapp",
+        "whatsapp desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Messaging platform.",
       "lastChecked": "2026-01-13"
     },
@@ -1419,8 +2168,16 @@
       "cpe23": "cpe:2.3:a:solarwinds:orion_platform:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "critical",
-      "aliases": ["solarwinds orion", "orion platform", "solarwinds", "orion"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds orion",
+        "orion platform",
+        "solarwinds",
+        "orion"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "SUNBURST supply chain attack (2020). Multiple KEV entries. Critical enterprise monitoring.",
       "lastChecked": "2026-01-13"
     },
@@ -1432,8 +2189,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:network_performance_monitor:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "critical",
-      "aliases": ["solarwinds npm", "npm", "network performance monitor"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds npm",
+        "npm",
+        "network performance monitor"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Orion module. Network monitoring and alerting.",
       "lastChecked": "2026-01-13"
     },
@@ -1445,8 +2209,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:server_and_application_monitor:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "critical",
-      "aliases": ["solarwinds sam", "sam", "server application monitor"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds sam",
+        "sam",
+        "server application monitor"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Orion module. Server and application monitoring.",
       "lastChecked": "2026-01-13"
     },
@@ -1458,8 +2229,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:network_configuration_manager:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["solarwinds ncm", "ncm", "network configuration manager"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds ncm",
+        "ncm",
+        "network configuration manager"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Orion module. Network device configuration backup and management.",
       "lastChecked": "2026-01-13"
     },
@@ -1471,8 +2249,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:netflow_traffic_analyzer:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["solarwinds nta", "nta", "netflow traffic analyzer"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds nta",
+        "nta",
+        "netflow traffic analyzer"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Orion module. Network traffic flow analysis.",
       "lastChecked": "2026-01-13"
     },
@@ -1484,8 +2269,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:ip_address_manager:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["solarwinds ipam", "ipam", "ip address manager"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds ipam",
+        "ipam",
+        "ip address manager"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Orion module. IP address management and DHCP/DNS integration.",
       "lastChecked": "2026-01-13"
     },
@@ -1497,8 +2289,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:virtualization_manager:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["solarwinds vman", "vman", "virtualization manager"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds vman",
+        "vman",
+        "virtualization manager"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Orion module. VMware/Hyper-V monitoring.",
       "lastChecked": "2026-01-13"
     },
@@ -1510,8 +2309,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:database_performance_analyzer:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["solarwinds dpa", "dpa", "database performance analyzer"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds dpa",
+        "dpa",
+        "database performance analyzer"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Database monitoring and query analysis.",
       "lastChecked": "2026-01-13"
     },
@@ -1523,8 +2329,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:log_analyzer:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "high",
-      "aliases": ["solarwinds log analyzer", "la", "log analyzer"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds log analyzer",
+        "la",
+        "log analyzer"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Orion module. Syslog and log management.",
       "lastChecked": "2026-01-13"
     },
@@ -1536,8 +2349,14 @@
       "cpe23": "cpe:2.3:a:solarwinds:patch_manager:*:*:*:*:*:*:*:*",
       "category": "management",
       "priority": "critical",
-      "aliases": ["solarwinds patch manager", "patch manager"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds patch manager",
+        "patch manager"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Enterprise patch management. WSUS integration.",
       "lastChecked": "2026-01-13"
     },
@@ -1549,8 +2368,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:web_help_desk:*:*:*:*:*:*:*:*",
       "category": "helpdesk",
       "priority": "high",
-      "aliases": ["solarwinds whd", "whd", "web help desk"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds whd",
+        "whd",
+        "web help desk"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "IT service management and ticketing. Multiple CVEs.",
       "lastChecked": "2026-01-13"
     },
@@ -1562,8 +2388,17 @@
       "cpe23": "cpe:2.3:a:solarwinds:serv-u:*:*:*:*:*:*:*:*",
       "category": "file_transfer",
       "priority": "critical",
-      "aliases": ["serv-u", "servu", "solarwinds serv-u", "serv-u mft", "serv-u ftp"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "serv-u",
+        "servu",
+        "solarwinds serv-u",
+        "serv-u mft",
+        "serv-u ftp"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: Multiple CVEs in CISA KEV. Managed File Transfer server. High-value target.",
       "lastChecked": "2026-01-13"
     },
@@ -1575,8 +2410,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:access_rights_manager:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "critical",
-      "aliases": ["solarwinds arm", "arm", "access rights manager"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds arm",
+        "arm",
+        "access rights manager"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: Multiple RCE vulns (CVE-2024-28991, CVE-2024-23469, etc.) patched in 2024.3. Access management and auditing.",
       "lastChecked": "2026-01-13"
     },
@@ -1588,8 +2430,16 @@
       "cpe23": "cpe:2.3:a:solarwinds:dameware_mini_remote_control:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["dameware", "dameware mrc", "mini remote control", "dameware mini remote control"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "dameware",
+        "dameware mrc",
+        "mini remote control",
+        "dameware mini remote control"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Remote desktop tool. Part of Engineer's Toolset.",
       "lastChecked": "2026-01-13"
     },
@@ -1601,8 +2451,14 @@
       "cpe23": "cpe:2.3:a:solarwinds:dameware_remote_support:*:*:*:*:*:*:*:*",
       "category": "remote_access",
       "priority": "high",
-      "aliases": ["dameware remote support", "dameware rs"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "dameware remote support",
+        "dameware rs"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Full remote support suite. Includes remote control and system tools.",
       "lastChecked": "2026-01-13"
     },
@@ -1614,8 +2470,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:engineers_toolset:*:*:*:*:*:*:*:*",
       "category": "network",
       "priority": "high",
-      "aliases": ["engineer's toolset", "engineers toolset", "ets", "solarwinds toolset"],
-      "platforms": ["windows"],
+      "aliases": [
+        "engineer's toolset",
+        "engineers toolset",
+        "ets",
+        "solarwinds toolset"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Collection of 60+ network diagnostic tools. Includes DameWare, traceroute, SNMP tools.",
       "lastChecked": "2026-01-13"
     },
@@ -1627,8 +2490,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:kiwi_syslog_server:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "medium",
-      "aliases": ["kiwi syslog", "kiwi", "kiwi syslog server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "kiwi syslog",
+        "kiwi",
+        "kiwi syslog server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Lightweight syslog server. Common in small/medium environments.",
       "lastChecked": "2026-01-13"
     },
@@ -1640,8 +2510,15 @@
       "cpe23": "cpe:2.3:a:solarwinds:sftp_scp_server:*:*:*:*:*:*:*:*",
       "category": "file_transfer",
       "priority": "medium",
-      "aliases": ["solarwinds sftp", "sftp server", "scp server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds sftp",
+        "sftp server",
+        "scp server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Free SFTP/SCP server from SolarWinds.",
       "lastChecked": "2026-01-13"
     },
@@ -1653,8 +2530,14 @@
       "cpe23": "cpe:2.3:a:solarwinds:tftp_server:*:*:*:*:*:*:*:*",
       "category": "file_transfer",
       "priority": "medium",
-      "aliases": ["solarwinds tftp", "tftp server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "solarwinds tftp",
+        "tftp server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Free TFTP server. Common for network device firmware updates.",
       "lastChecked": "2026-01-13"
     },
@@ -1666,8 +2549,13 @@
       "cpe23": "cpe:2.3:a:tableau:desktop:*:*:*:*:*:*:*:*",
       "category": "analytics",
       "priority": "high",
-      "aliases": ["tableau", "tableau desktop"],
-      "platforms": ["windows"],
+      "aliases": [
+        "tableau",
+        "tableau desktop"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Data visualization and analytics. Enterprise BI tool.",
       "lastChecked": "2026-01-13"
     },
@@ -1679,8 +2567,13 @@
       "cpe23": "cpe:2.3:a:tableau:server:*:*:*:*:*:*:*:*",
       "category": "analytics",
       "priority": "critical",
-      "aliases": ["tableau server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "tableau server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Enterprise analytics server. High-value target with sensitive data.",
       "lastChecked": "2026-01-13"
     },
@@ -1692,8 +2585,13 @@
       "cpe23": "cpe:2.3:a:tableau:prep_builder:*:*:*:*:*:*:*:*",
       "category": "analytics",
       "priority": "medium",
-      "aliases": ["tableau prep", "prep builder"],
-      "platforms": ["windows"],
+      "aliases": [
+        "tableau prep",
+        "prep builder"
+      ],
+      "platforms": [
+        "windows"
+      ],
       "notes": "Data preparation and ETL tool.",
       "lastChecked": "2026-01-13"
     },
@@ -1705,8 +2603,13 @@
       "cpe23": "cpe:2.3:a:tableau:bridge:*:*:*:*:*:*:*:*",
       "category": "analytics",
       "priority": "high",
-      "aliases": ["tableau bridge"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "tableau bridge"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Secure data connectivity between Tableau Cloud and on-premises data.",
       "lastChecked": "2026-01-13"
     },
@@ -1718,8 +2621,15 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat_dc:*:*:*:*:continuous:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["acrobat dc", "adobe acrobat dc", "acrobat document cloud"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "acrobat dc",
+        "adobe acrobat dc",
+        "acrobat document cloud"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Continuous track (subscription). Auto-updates. 76 Adobe CVEs in KEV.",
       "lastChecked": "2026-01-13"
     },
@@ -1731,8 +2641,14 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat:*:*:*:*:classic:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["acrobat 2024", "adobe acrobat 2024"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "acrobat 2024",
+        "adobe acrobat 2024"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Classic track (perpetual license). Latest perpetual version. Quarterly updates.",
       "lastChecked": "2026-01-13"
     },
@@ -1744,8 +2660,14 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat:20.*:*:*:*:classic:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["acrobat 2020", "adobe acrobat 2020"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "acrobat 2020",
+        "adobe acrobat 2020"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Classic track (perpetual license). Extended support until 2025. Quarterly updates.",
       "lastChecked": "2026-01-13"
     },
@@ -1757,8 +2679,15 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat_reader_dc:*:*:*:*:continuous:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["reader dc", "adobe reader dc", "acrobat reader dc"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "reader dc",
+        "adobe reader dc",
+        "acrobat reader dc"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Free PDF reader. Continuous track (auto-updates). Most deployed PDF reader.",
       "lastChecked": "2026-01-13"
     },
@@ -1770,8 +2699,15 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat_reader:20.*:*:*:*:classic:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["reader 2020", "adobe reader 2020", "acrobat reader 2020"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "reader 2020",
+        "adobe reader 2020",
+        "acrobat reader 2020"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Free PDF reader. Classic track (perpetual). Extended support until 2025.",
       "lastChecked": "2026-01-13"
     },
@@ -1783,8 +2719,15 @@
       "cpe23": "cpe:2.3:a:adobe:acrobat_reader:24.*:*:*:*:classic:*:*:*",
       "category": "pdf",
       "priority": "critical",
-      "aliases": ["reader 2024", "adobe reader 2024", "acrobat reader 2024"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "reader 2024",
+        "adobe reader 2024",
+        "acrobat reader 2024"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Free PDF reader. Classic track 2024 (perpetual license). Quarterly updates.",
       "lastChecked": "2026-01-19"
     },
@@ -1796,8 +2739,15 @@
       "cpe23": "cpe:2.3:a:adobe:coldfusion:*:*:*:*:*:*:*:*",
       "category": "webserver",
       "priority": "critical",
-      "aliases": ["coldfusion", "cf", "adobe cf"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "coldfusion",
+        "cf",
+        "adobe cf"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: Multiple CVEs in CISA KEV. Web application server. High-value target.",
       "lastChecked": "2026-01-13"
     },
@@ -1809,8 +2759,15 @@
       "cpe23": "cpe:2.3:a:adobe:experience_manager:*:*:*:*:*:*:*:*",
       "category": "cms",
       "priority": "critical",
-      "aliases": ["aem", "adobe aem", "experience manager"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "aem",
+        "adobe aem",
+        "experience manager"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "Enterprise CMS. Has KEV entries. Used for web content management.",
       "lastChecked": "2026-01-13"
     },
@@ -1822,8 +2779,15 @@
       "cpe23": "cpe:2.3:a:adobe:commerce:*:*:*:*:*:*:*:*",
       "category": "ecommerce",
       "priority": "critical",
-      "aliases": ["magento", "adobe commerce", "magento commerce"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "magento",
+        "adobe commerce",
+        "magento commerce"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: Multiple CVEs in CISA KEV. E-commerce platform. Handles payment data.",
       "lastChecked": "2026-01-19",
       "versionPattern": "^2\\."
@@ -1836,10 +2800,25 @@
       "cpe23": "cpe:2.3:a:microsoft:exchange_server:*:*:*:*:*:*:*:*",
       "category": "email",
       "priority": "critical",
-      "aliases": ["exchange", "ms exchange", "exchange server", "microsoft exchange"],
-      "platforms": ["server"],
+      "aliases": [
+        "exchange",
+        "ms exchange",
+        "exchange server",
+        "microsoft exchange"
+      ],
+      "platforms": [
+        "server"
+      ],
       "notes": "CRITICAL: 16 CVEs in CISA KEV. ProxyLogon, ProxyShell, ProxyNotShell. Enterprise email server.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bonline\\b",
+        "\\b365\\b",
+        "\\bexchange\\s*web\\s*app\\b",
+        "\\bowa\\b",
+        "\\bexchange\\s*online\\b",
+        "\\bexchange\\s*activesync\\b"
+      ]
     },
     {
       "id": "weblogic",
@@ -1849,8 +2828,15 @@
       "cpe23": "cpe:2.3:a:oracle:weblogic_server:*:*:*:*:*:*:*:*",
       "category": "webserver",
       "priority": "critical",
-      "aliases": ["weblogic", "oracle weblogic", "weblogic server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "weblogic",
+        "oracle weblogic",
+        "weblogic server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 11 CVEs in CISA KEV. Java application server. Deserialization RCE vulnerabilities.",
       "lastChecked": "2026-01-19"
     },
@@ -1862,8 +2848,15 @@
       "cpe23": "cpe:2.3:a:sap:netweaver:*:*:*:*:*:*:*:*",
       "category": "erp",
       "priority": "critical",
-      "aliases": ["netweaver", "sap nw", "sap netweaver"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "netweaver",
+        "sap nw",
+        "sap netweaver"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 10 CVEs in CISA KEV. ERP platform. Business-critical systems.",
       "lastChecked": "2026-01-19"
     },
@@ -1875,10 +2868,25 @@
       "cpe23": "cpe:2.3:a:vmware:vcenter_server:*:*:*:*:*:*:*:*",
       "category": "virtualization",
       "priority": "critical",
-      "aliases": ["vcenter", "vmware vcenter", "vcenter server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "vcenter",
+        "vmware vcenter",
+        "vcenter server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 9 CVEs in CISA KEV. Virtualization management. Full infrastructure access.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bvsphere\\s*client\\b",
+        "\\bvcsa\\b",
+        "\\baria\\b",
+        "\\bvrealize\\b",
+        "\\bworkstation\\b",
+        "\\bfusion\\b"
+      ]
     },
     {
       "id": "apache_struts",
@@ -1888,8 +2896,15 @@
       "cpe23": "cpe:2.3:a:apache:struts:*:*:*:*:*:*:*:*",
       "category": "framework",
       "priority": "critical",
-      "aliases": ["struts", "apache struts", "struts2"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "struts",
+        "apache struts",
+        "struts2"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 7 CVEs in CISA KEV. Java web framework. Equifax breach vector (CVE-2017-5638).",
       "lastChecked": "2026-01-19"
     },
@@ -1901,8 +2916,14 @@
       "cpe23": "cpe:2.3:a:microsoft:sharepoint_server:*:*:*:*:*:*:*:*",
       "category": "collaboration",
       "priority": "critical",
-      "aliases": ["sharepoint", "ms sharepoint", "sharepoint server"],
-      "platforms": ["server"],
+      "aliases": [
+        "sharepoint",
+        "ms sharepoint",
+        "sharepoint server"
+      ],
+      "platforms": [
+        "server"
+      ],
       "notes": "CRITICAL: 7 CVEs in CISA KEV. Enterprise collaboration. RCE and privilege escalation.",
       "lastChecked": "2026-01-19"
     },
@@ -1914,8 +2935,16 @@
       "cpe23": "cpe:2.3:a:ivanti:connect_secure:*:*:*:*:*:*:*:*",
       "category": "vpn",
       "priority": "critical",
-      "aliases": ["ivanti vpn", "pulse secure", "pulse connect secure", "ivanti pulse"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "ivanti vpn",
+        "pulse secure",
+        "pulse connect secure",
+        "ivanti pulse"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 7+ CVEs in CISA KEV. VPN infrastructure. Primary APT target.",
       "lastChecked": "2026-01-19"
     },
@@ -1927,8 +2956,15 @@
       "cpe23": "cpe:2.3:a:zoho:manageengine:*:*:*:*:*:*:*:*",
       "category": "management",
       "priority": "critical",
-      "aliases": ["manageengine", "zoho manageengine", "manage engine"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "manageengine",
+        "zoho manageengine",
+        "manage engine"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 6 CVEs in CISA KEV. IT management suite. Multiple products affected.",
       "lastChecked": "2026-01-19"
     },
@@ -1940,10 +2976,23 @@
       "cpe23": "cpe:2.3:a:atlassian:confluence:*:*:*:*:*:*:*:*",
       "category": "collaboration",
       "priority": "critical",
-      "aliases": ["confluence", "atlassian confluence", "confluence server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "confluence",
+        "atlassian confluence",
+        "confluence server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 5 CVEs in CISA KEV. Enterprise wiki. Data Center and Server editions.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-01-21",
+      "excludePatterns": [
+        "\\bcloud\\b",
+        "\\bconfluence\\s*cloud\\b",
+        "\\bconfluence\\s*plugin\\b",
+        "\\bconfluence\\s*macro\\b"
+      ]
     },
     {
       "id": "veeam_backup",
@@ -1953,8 +3002,16 @@
       "cpe23": "cpe:2.3:a:veeam:backup_and_replication:*:*:*:*:*:*:*:*",
       "category": "backup",
       "priority": "critical",
-      "aliases": ["veeam", "veeam backup", "vbr", "veeam b&r"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "veeam",
+        "veeam backup",
+        "vbr",
+        "veeam b&r"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 4 CVEs in CISA KEV. Backup infrastructure. Ransomware deletes backups first.",
       "lastChecked": "2026-01-19"
     },
@@ -1966,8 +3023,15 @@
       "cpe23": "cpe:2.3:a:trendmicro:apex_one:*:*:*:*:*:*:*:*",
       "category": "security",
       "priority": "critical",
-      "aliases": ["apex one", "trend micro apex", "officescan"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "apex one",
+        "trend micro apex",
+        "officescan"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 4 CVEs in CISA KEV. Endpoint security. Privilege escalation to disable protection.",
       "lastChecked": "2026-01-19"
     },
@@ -1979,8 +3043,16 @@
       "cpe23": "cpe:2.3:a:ivanti:endpoint_manager:*:*:*:*:*:*:*:*",
       "category": "management",
       "priority": "critical",
-      "aliases": ["ivanti epm", "landesk", "ivanti endpoint", "epm"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "ivanti epm",
+        "landesk",
+        "ivanti endpoint",
+        "epm"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 4 CVEs in CISA KEV. Device management. Mass deployment attack vector.",
       "lastChecked": "2026-01-19"
     },
@@ -1992,8 +3064,14 @@
       "cpe23": "cpe:2.3:a:crushftp:crushftp:*:*:*:*:*:*:*:*",
       "category": "file_transfer",
       "priority": "critical",
-      "aliases": ["crush ftp", "crushftp server"],
-      "platforms": ["windows", "server"],
+      "aliases": [
+        "crush ftp",
+        "crushftp server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
       "notes": "CRITICAL: 3 CVEs in CISA KEV. MFT server. Actively exploited for data exfiltration.",
       "lastChecked": "2026-01-19"
     },
@@ -2005,10 +3083,789 @@
       "cpe23": "cpe:2.3:o:vmware:esxi:*:*:*:*:*:*:*:*",
       "category": "virtualization",
       "priority": "critical",
-      "aliases": ["esxi", "vmware esxi", "vsphere esxi"],
-      "platforms": ["server"],
+      "aliases": [
+        "esxi",
+        "vmware esxi",
+        "vsphere esxi"
+      ],
+      "platforms": [
+        "server"
+      ],
       "notes": "CRITICAL: 3 CVEs in CISA KEV. Hypervisor. Direct VM compromise and ransomware encryption.",
       "lastChecked": "2026-01-19"
+    },
+    {
+      "id": "vmware_vcenter",
+      "displayName": "VMware vCenter Server",
+      "vendor": "vmware",
+      "product": "vcenter",
+      "cpe23": "cpe:2.3:a:vmware:vcenter_server:*:*:*:*:*:*:*:*",
+      "category": "virtualization",
+      "priority": "critical",
+      "aliases": [
+        "vcenter",
+        "vmware vcenter",
+        "vsphere vcenter"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: Enterprise virtualization management. VMSA advisories via Broadcom API.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "vmware_workstation",
+      "displayName": "VMware Workstation",
+      "vendor": "vmware",
+      "product": "workstation",
+      "cpe23": "cpe:2.3:a:vmware:workstation:*:*:*:*:*:*:*:*",
+      "category": "virtualization",
+      "priority": "high",
+      "aliases": [
+        "workstation",
+        "vmware workstation pro"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "Desktop hypervisor. VM escape vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "jira",
+      "displayName": "Atlassian Jira",
+      "vendor": "atlassian",
+      "product": "jira",
+      "cpe23": "cpe:2.3:a:atlassian:jira:*:*:*:*:*:*:*:*",
+      "category": "development",
+      "priority": "critical",
+      "aliases": [
+        "jira",
+        "atlassian jira",
+        "jira software",
+        "jira server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "CRITICAL: Issue tracking. Multiple high-severity CVEs. Data Center and Server editions.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "bamboo",
+      "displayName": "Atlassian Bamboo",
+      "vendor": "atlassian",
+      "product": "bamboo",
+      "cpe23": "cpe:2.3:a:atlassian:bamboo:*:*:*:*:*:*:*:*",
+      "category": "development",
+      "priority": "high",
+      "aliases": [
+        "bamboo",
+        "atlassian bamboo",
+        "bamboo server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "CI/CD server. RCE vulnerabilities via build agents.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "bitbucket",
+      "displayName": "Atlassian Bitbucket",
+      "vendor": "atlassian",
+      "product": "bitbucket",
+      "cpe23": "cpe:2.3:a:atlassian:bitbucket:*:*:*:*:*:*:*:*",
+      "category": "development",
+      "priority": "high",
+      "aliases": [
+        "bitbucket",
+        "atlassian bitbucket",
+        "bitbucket server"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "Git repository management. Data Center and Server editions.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "netscaler_adc",
+      "displayName": "Citrix NetScaler ADC",
+      "vendor": "citrix",
+      "product": "netscaler",
+      "cpe23": "cpe:2.3:a:citrix:netscaler:*:*:*:*:*:*:*:*",
+      "category": "network",
+      "priority": "critical",
+      "aliases": [
+        "netscaler",
+        "citrix adc",
+        "netscaler adc",
+        "citrix netscaler"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: ADC appliance. Multiple critical CVEs actively exploited.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "netscaler_gateway",
+      "displayName": "Citrix NetScaler Gateway",
+      "vendor": "citrix",
+      "product": "netscaler_gateway",
+      "cpe23": "cpe:2.3:a:citrix:netscaler_gateway:*:*:*:*:*:*:*:*",
+      "category": "vpn",
+      "priority": "critical",
+      "aliases": [
+        "citrix gateway",
+        "netscaler gateway",
+        "citrix access gateway"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: VPN gateway. Authentication bypass and RCE vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "xenserver",
+      "displayName": "Citrix XenServer",
+      "vendor": "citrix",
+      "product": "xenserver",
+      "cpe23": "cpe:2.3:a:citrix:xenserver:*:*:*:*:*:*:*:*",
+      "category": "virtualization",
+      "priority": "high",
+      "aliases": [
+        "xenserver",
+        "citrix hypervisor",
+        "xen server"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "Hypervisor. VM escape vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "oracle_java_se",
+      "displayName": "Oracle Java SE",
+      "vendor": "oracle",
+      "product": "java",
+      "cpe23": "cpe:2.3:a:oracle:jdk:*:*:*:*:*:*:*:*",
+      "category": "runtime",
+      "priority": "critical",
+      "aliases": [
+        "jdk",
+        "jre",
+        "oracle java",
+        "java se",
+        "java runtime"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "CRITICAL: Java runtime. Quarterly CPU updates. Multiple CVEs per quarter.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "oracle_weblogic",
+      "displayName": "Oracle WebLogic Server",
+      "vendor": "oracle",
+      "product": "weblogic",
+      "cpe23": "cpe:2.3:a:oracle:weblogic_server:*:*:*:*:*:*:*:*",
+      "category": "application_server",
+      "priority": "critical",
+      "aliases": [
+        "weblogic",
+        "oracle weblogic",
+        "wls"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: Java app server. Deserialization RCE vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "carbon_black",
+      "displayName": "VMware Carbon Black",
+      "vendor": "vmware",
+      "product": "carbon_black_cloud",
+      "cpe23": "cpe:2.3:a:vmware:carbon_black_cloud:*:*:*:*:*:*:*:*",
+      "category": "security",
+      "priority": "high",
+      "aliases": [
+        "carbon black",
+        "cb defense",
+        "vmware carbon black",
+        "cb cloud"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "EDR/endpoint protection. Sensor and cloud connector.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "trellix_endpoint",
+      "displayName": "Trellix Endpoint Security",
+      "vendor": "trellix",
+      "product": "endpoint_security",
+      "cpe23": "cpe:2.3:a:trellix:endpoint_security:*:*:*:*:*:*:*:*",
+      "category": "security",
+      "priority": "high",
+      "aliases": [
+        "trellix",
+        "mcafee endpoint",
+        "trellix endpoint",
+        "mcafee epo"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "Formerly McAfee. Enterprise endpoint protection.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "symantec_endpoint",
+      "displayName": "Symantec Endpoint Protection",
+      "vendor": "broadcom",
+      "product": "symantec_endpoint_protection",
+      "cpe23": "cpe:2.3:a:broadcom:symantec_endpoint_protection:*:*:*:*:*:*:*:*",
+      "category": "security",
+      "priority": "high",
+      "aliases": [
+        "sep",
+        "symantec endpoint",
+        "broadcom endpoint",
+        "symantec av"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "Broadcom/Symantec enterprise endpoint protection.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "globalprotect",
+      "displayName": "Palo Alto GlobalProtect",
+      "vendor": "paloaltonetworks",
+      "product": "globalprotect",
+      "cpe23": "cpe:2.3:a:paloaltonetworks:globalprotect:*:*:*:*:*:*:*:*",
+      "category": "vpn",
+      "priority": "critical",
+      "aliases": [
+        "globalprotect",
+        "palo alto vpn",
+        "pan globalprotect",
+        "gp client"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "CRITICAL: Enterprise VPN client. Authentication and RCE vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "cisco_anyconnect",
+      "displayName": "Cisco AnyConnect",
+      "vendor": "cisco",
+      "product": "anyconnect_secure_mobility_client",
+      "cpe23": "cpe:2.3:a:cisco:anyconnect_secure_mobility_client:*:*:*:*:*:*:*:*",
+      "category": "vpn",
+      "priority": "critical",
+      "aliases": [
+        "anyconnect",
+        "cisco vpn",
+        "cisco anyconnect",
+        "anyconnect vpn"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "CRITICAL: Enterprise VPN client. Privilege escalation vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "forticlient",
+      "displayName": "Fortinet FortiClient",
+      "vendor": "fortinet",
+      "product": "forticlient",
+      "cpe23": "cpe:2.3:a:fortinet:forticlient:*:*:*:*:*:*:*:*",
+      "category": "vpn",
+      "priority": "high",
+      "aliases": [
+        "forticlient",
+        "fortinet vpn",
+        "forti vpn"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "VPN client and endpoint protection. SSL-VPN vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "fortios",
+      "displayName": "Fortinet FortiOS",
+      "vendor": "fortinet",
+      "product": "fortios",
+      "cpe23": "cpe:2.3:o:fortinet:fortios:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "fortios",
+        "fortigate",
+        "fortinet firewall",
+        "fortigate firewall"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: Enterprise firewall OS. 18+ KEV CVEs. Remote code execution.",
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^[67]\\.",
+      "excludePatterns": [
+        "\\bforticlient\\b",
+        "\\bfortimanager\\b",
+        "\\bfortianalyzer\\b",
+        "\\bfortisiem\\b",
+        "\\bfortimail\\b",
+        "\\bfortiweb\\b",
+        "\\bfortiproxy\\b"
+      ]
+    },
+    {
+      "id": "panos",
+      "displayName": "Palo Alto PAN-OS",
+      "vendor": "palo_alto",
+      "product": "pan-os",
+      "cpe23": "cpe:2.3:o:paloaltonetworks:pan-os:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "pan-os",
+        "panos",
+        "palo alto firewall",
+        "paloalto firewall"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: Enterprise firewall OS. 6+ KEV CVEs. Authentication bypass.",
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^(9|10|11)\\.",
+      "excludePatterns": [
+        "\\bglobalprotect\\b",
+        "\\bcortex\\b",
+        "\\bprisma\\b",
+        "\\bpanorama\\b",
+        "\\bxdr\\b",
+        "\\bwildfire\\b",
+        "\\btraps\\b"
+      ]
+    },
+    {
+      "id": "cisco_asa",
+      "displayName": "Cisco ASA",
+      "vendor": "cisco",
+      "product": "adaptive_security_appliance_software",
+      "cpe23": "cpe:2.3:o:cisco:adaptive_security_appliance_software:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "cisco asa",
+        "asa",
+        "asa firewall",
+        "cisco adaptive security"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: Enterprise firewall. 12+ KEV CVEs. Path traversal vulnerabilities.",
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^9\\.",
+      "excludePatterns": [
+        "\\bftd\\b",
+        "\\bfirepower\\b",
+        "\\banyconnect\\b",
+        "\\bsecure\\s*client\\b",
+        "\\bise\\b",
+        "\\bduo\\b",
+        "\\bmeraki\\b"
+      ]
+    },
+    {
+      "id": "cisco_ftd",
+      "displayName": "Cisco Firepower Threat Defense",
+      "vendor": "cisco",
+      "product": "firepower_threat_defense",
+      "cpe23": "cpe:2.3:a:cisco:firepower_threat_defense:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "cisco ftd",
+        "ftd",
+        "firepower",
+        "cisco firepower"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "Next-gen firewall. SSL VPN vulnerabilities. RCE exploits.",
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^[67]\\.",
+      "excludePatterns": [
+        "\\basa\\b",
+        "\\bfmc\\b",
+        "\\bfirepower\\s*management\\b",
+        "\\banyconnect\\b",
+        "\\bsecure\\s*client\\b",
+        "\\bamp\\b",
+        "\\bsecure\\s*endpoint\\b"
+      ]
+    },
+    {
+      "id": "sonicos",
+      "displayName": "SonicWall SonicOS",
+      "vendor": "sonicwall",
+      "product": "sonicos",
+      "cpe23": "cpe:2.3:o:sonicwall:sonicos:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "sonicos",
+        "sonicwall",
+        "sonicwall firewall",
+        "sonic os"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: Enterprise firewall OS. 6+ KEV CVEs. SSL VPN exploits.",
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^[67]\\.",
+      "excludePatterns": [
+        "\\bsma\\b",
+        "\\bsecure\\s*mobile\\b",
+        "\\bnetextender\\b",
+        "\\bgms\\b",
+        "\\banalyzer\\b",
+        "\\bcapture\\s*client\\b"
+      ]
+    },
+    {
+      "id": "sonicwall_sma",
+      "displayName": "SonicWall SMA",
+      "vendor": "sonicwall",
+      "product": "secure_mobile_access",
+      "cpe23": "cpe:2.3:o:sonicwall:sma100:*:*:*:*:*:*:*:*",
+      "category": "vpn",
+      "priority": "critical",
+      "aliases": [
+        "sma 100",
+        "sma 1000",
+        "sonicwall sma",
+        "sonicwall vpn"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: VPN appliance. Multiple KEV CVEs. RCE exploits.",
+      "lastChecked": "2026-01-21",
+      "versionPattern": "^(10|12)\\.",
+      "excludePatterns": [
+        "\\bsonicos\\b",
+        "\\bsonicwall\\s*firewall\\b",
+        "\\bnetextender\\b",
+        "\\bgms\\b"
+      ]
+    },
+    {
+      "id": "visual_studio",
+      "displayName": "Microsoft Visual Studio",
+      "vendor": "microsoft",
+      "product": "visual_studio",
+      "cpe23": "cpe:2.3:a:microsoft:visual_studio:*:*:*:*:*:*:*:*",
+      "category": "development",
+      "priority": "medium",
+      "aliases": [
+        "visual studio",
+        "vs",
+        "vs2022",
+        "vs2019",
+        "visual studio 2022"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "IDE for Windows development. Occasional RCE via project files.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "intellij_idea",
+      "displayName": "JetBrains IntelliJ IDEA",
+      "vendor": "jetbrains",
+      "product": "intellij_idea",
+      "cpe23": "cpe:2.3:a:jetbrains:intellij_idea:*:*:*:*:*:*:*:*",
+      "category": "development",
+      "priority": "medium",
+      "aliases": [
+        "intellij",
+        "idea",
+        "jetbrains idea",
+        "intellij idea"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "Java IDE. Plugin and project file vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "webex",
+      "displayName": "Cisco Webex",
+      "vendor": "cisco",
+      "product": "webex_meetings",
+      "cpe23": "cpe:2.3:a:cisco:webex_meetings:*:*:*:*:*:*:*:*",
+      "category": "communication",
+      "priority": "high",
+      "aliases": [
+        "webex",
+        "cisco webex",
+        "webex meetings",
+        "webex teams"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "Video conferencing. Memory corruption and RCE vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "acronis_cyber_protect",
+      "displayName": "Acronis Cyber Protect",
+      "vendor": "acronis",
+      "product": "cyber_protect",
+      "cpe23": "cpe:2.3:a:acronis:cyber_protect:*:*:*:*:*:*:*:*",
+      "category": "backup",
+      "priority": "high",
+      "aliases": [
+        "acronis",
+        "acronis backup",
+        "cyber protect",
+        "acronis agent"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "Backup and security. Agent vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "ivanti_connect_secure",
+      "displayName": "Ivanti Connect Secure",
+      "vendor": "ivanti",
+      "product": "connect_secure",
+      "cpe23": "cpe:2.3:a:ivanti:connect_secure:*:*:*:*:*:*:*:*",
+      "category": "vpn",
+      "priority": "critical",
+      "aliases": [
+        "ivanti vpn",
+        "pulse secure",
+        "ivanti connect",
+        "pulse vpn"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: VPN gateway. Multiple actively exploited CVEs in CISA KEV.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "ivanti_epmm",
+      "displayName": "Ivanti Endpoint Manager Mobile",
+      "vendor": "ivanti",
+      "product": "endpoint_manager_mobile",
+      "cpe23": "cpe:2.3:a:ivanti:endpoint_manager_mobile:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": [
+        "ivanti epmm",
+        "mobileiron",
+        "ivanti mdm",
+        "epmm"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: MDM solution. Authentication bypass CVEs in KEV.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "progress_moveit",
+      "displayName": "Progress MOVEit Transfer",
+      "vendor": "progress",
+      "product": "moveit_transfer",
+      "cpe23": "cpe:2.3:a:progress:moveit_transfer:*:*:*:*:*:*:*:*",
+      "category": "file_transfer",
+      "priority": "critical",
+      "aliases": [
+        "moveit",
+        "moveit transfer",
+        "progress moveit"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: Managed file transfer. Mass exploitation in 2023 (Cl0p ransomware).",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "beyond_trust_remote",
+      "displayName": "BeyondTrust Remote Support",
+      "vendor": "beyondtrust",
+      "product": "remote_support",
+      "cpe23": "cpe:2.3:a:beyondtrust:remote_support:*:*:*:*:*:*:*:*",
+      "category": "remote_access",
+      "priority": "critical",
+      "aliases": [
+        "beyondtrust",
+        "bomgar",
+        "remote support"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "CRITICAL: Remote support tool. Command injection CVEs in KEV.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "barracuda_esg",
+      "displayName": "Barracuda Email Security Gateway",
+      "vendor": "barracuda",
+      "product": "email_security_gateway",
+      "cpe23": "cpe:2.3:h:barracuda:email_security_gateway:*:*:*:*:*:*:*:*",
+      "category": "security",
+      "priority": "critical",
+      "aliases": [
+        "barracuda esg",
+        "barracuda email",
+        "email security gateway"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: Email gateway. Zero-day exploitation in 2023.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "papercut_mf",
+      "displayName": "PaperCut MF/NG",
+      "vendor": "papercut",
+      "product": "mf",
+      "cpe23": "cpe:2.3:a:papercut:mf:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": [
+        "papercut",
+        "papercut mf",
+        "papercut ng",
+        "print management"
+      ],
+      "platforms": [
+        "windows",
+        "server"
+      ],
+      "notes": "CRITICAL: Print management. RCE actively exploited by ransomware groups.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "veritas_netbackup",
+      "displayName": "Veritas NetBackup",
+      "vendor": "veritas",
+      "product": "netbackup",
+      "cpe23": "cpe:2.3:a:veritas:netbackup:*:*:*:*:*:*:*:*",
+      "category": "backup",
+      "priority": "high",
+      "aliases": [
+        "netbackup",
+        "veritas backup",
+        "veritas netbackup"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "Enterprise backup. Pre-auth RCE vulnerabilities.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "manageengine_desktop_central",
+      "displayName": "ManageEngine Desktop Central",
+      "vendor": "zohocorp",
+      "product": "manageengine_desktop_central",
+      "cpe23": "cpe:2.3:a:zohocorp:manageengine_desktop_central:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": [
+        "desktop central",
+        "manageengine",
+        "me desktop central"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: Endpoint management. Multiple CVEs in CISA KEV.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "sophos_firewall",
+      "displayName": "Sophos Firewall",
+      "vendor": "sophos",
+      "product": "firewall",
+      "cpe23": "cpe:2.3:a:sophos:firewall:*:*:*:*:*:*:*:*",
+      "category": "network",
+      "priority": "critical",
+      "aliases": [
+        "sophos firewall",
+        "sophos xg",
+        "sophos utm"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: Network firewall. SQL injection and RCE CVEs.",
+      "lastChecked": "2026-01-21"
+    },
+    {
+      "id": "f5_big_ip",
+      "displayName": "F5 BIG-IP",
+      "vendor": "f5",
+      "product": "big-ip",
+      "cpe23": "cpe:2.3:a:f5:big-ip:*:*:*:*:*:*:*:*",
+      "category": "network",
+      "priority": "critical",
+      "aliases": [
+        "big-ip",
+        "f5 big-ip",
+        "bigip",
+        "f5 ltm"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: Load balancer/ADC. Multiple actively exploited CVEs.",
+      "lastChecked": "2026-01-21"
     }
   ]
 }
