@@ -8,6 +8,7 @@ A collection of skills for [Claude Code](https://claude.ai/claude-code), Anthrop
 |-------|-------------|--------|
 | [MSV](skills/MSV/) | Minimum Safe Version calculator - determines the lowest software version free of known-exploited vulnerabilities | Stable |
 | [Hashcrack](skills/Hashcrack/) | Distributed password hash cracking using Hashtopolis across 6 cloud/hypervisor providers | Stable |
+| [FoldingAtCloud](skills/FoldingAtCloud/) | Deploy Folding@Home workers on spare cloud credits - GPU/CPU folding on AWS, Azure, GCP, OCI | Stable |
 
 ## Quick Installation
 
@@ -87,3 +88,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 - [FIRST.org](https://first.org) for EPSS
 - [AppThreat](https://github.com/AppThreat) for the vulnerability database
 - [Hashtopolis](https://github.com/hashtopolis/server) for distributed hash cracking orchestration
+- [Folding@home](https://foldingathome.org) for distributed computing science
+- [lufah](https://github.com/kbernhagen/lufah) for FAH client management

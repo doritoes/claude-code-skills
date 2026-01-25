@@ -1,0 +1,180 @@
+#cloud-config
+# =============================================================================
+# Folding@Home GPU Worker - One-Shot Mode (AWS)
+# Ubuntu 24.04 LTS + NVIDIA CUDA + FAH v8.5.5
+#
+# CRITICAL: GPU drivers require reboot to load.
+# Two-phase boot: install drivers → reboot → start FAH
+# =============================================================================
+
+hostname: ${hostname}
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - python3
+  - python3-pip
+  - python3-venv
+  - curl
+  - wget
+  - jq
+
+write_files:
+  # FAH client configuration
+  - path: /etc/fah-client/config.xml
+    permissions: '0644'
+    content: |
+      <config>
+        <account-token v="${fah_account_token}"/>
+        <machine-name v="${machine_name}"/>
+      </config>
+
+  # Two-phase boot script
+  - path: /usr/local/bin/fah-gpu-setup
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Two-phase GPU setup for AWS
+      LOG=/var/log/fah-gpu-setup.log
+      PHASE_FILE=/var/lib/fah-gpu-setup-phase
+
+      exec >> $LOG 2>&1
+      echo "=== $(date): FAH GPU Setup Starting ==="
+
+      if [ ! -f "$PHASE_FILE" ]; then
+        # PHASE 1: Install NVIDIA drivers
+        echo "PHASE 1: Installing NVIDIA drivers..."
+        echo "1" > $PHASE_FILE
+
+        # Install kernel headers
+        apt-get install -y linux-headers-$(uname -r) || true
+
+        # Install NVIDIA drivers for AWS GPU instances
+        apt-get install -y nvidia-headless-550-server nvidia-utils-550-server || \
+          apt-get install -y nvidia-driver-550-server || true
+
+        # Install CUDA
+        wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb
+        dpkg -i /tmp/cuda-keyring.deb
+        apt-get update
+        apt-get install -y cuda-toolkit-12-6 || apt-get install -y cuda-toolkit-12-4 || true
+        rm -f /tmp/cuda-keyring.deb
+
+        echo "PHASE 1 COMPLETE: Rebooting..."
+        echo "2" > $PHASE_FILE
+        reboot
+        exit 0
+
+      elif [ "$(cat $PHASE_FILE)" = "2" ]; then
+        # PHASE 2: Start FAH with GPU
+        echo "PHASE 2: Starting FAH with GPU..."
+
+        # Verify GPU driver
+        if ! nvidia-smi > /dev/null 2>&1; then
+          echo "ERROR: nvidia-smi failed!"
+          exit 1
+        fi
+        nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+
+        # Install lufah
+        pip3 install --break-system-packages lufah
+
+        # Install FAH v8.5.5
+        wget -q -O /tmp/fah-client.deb https://download.foldingathome.org/releases/public/fah-client/debian-10-64bit/release/fah-client_8.5.5_amd64.deb
+        apt install -y /tmp/fah-client.deb || apt install -y -f
+        rm -f /tmp/fah-client.deb
+
+        # Start FAH
+        systemctl enable fah-client
+        systemctl start fah-client
+
+        # Wait for FAH websocket to be ready (with retries)
+        echo "Waiting for FAH websocket..."
+        for i in {1..30}; do
+          if lufah state >/dev/null 2>&1; then
+            echo "FAH websocket ready after $i attempts"
+            break
+          fi
+          echo "Attempt $i: FAH not ready, waiting 10s..."
+          sleep 10
+        done
+
+        # Enable GPU folding with retries
+        echo "Enabling GPU folding..."
+        for i in {1..5}; do
+          lufah -a / enable-all-gpus && break || sleep 5
+        done
+        for i in {1..5}; do
+          lufah -a / config cpus 0 && break || sleep 5
+        done
+        for i in {1..5}; do
+          lufah -a / config cuda true && break || sleep 5
+        done
+        lufah fold || true
+        sleep 15
+
+        # ONE-SHOT: Send finish signal with retries
+        echo "ONE-SHOT: Sending finish signal..."
+        for i in {1..5}; do
+          lufah finish && break || sleep 5
+        done
+
+        # Start monitor
+        nohup /usr/local/bin/fah-oneshot-monitor &
+
+        echo "3" > $PHASE_FILE
+        echo "=== $(date): PHASE 2 COMPLETE ==="
+      fi
+
+  # One-shot monitor
+  - path: /usr/local/bin/fah-oneshot-monitor
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      LOG=/var/log/fah-oneshot.log
+      exec >> $LOG 2>&1
+      echo "$(date): Monitor started"
+      sleep 60
+      while true; do
+        UNITS=$(lufah units 2>/dev/null | grep -c "Running\|Downloading\|Uploading" || echo "0")
+        FINISH=$(lufah state 2>/dev/null | jq -r '.groups[""].config.finish // false')
+        echo "$(date): Units=$UNITS, Finish=$FINISH"
+        if [ "$FINISH" = "true" ] && [ "$UNITS" = "0" ]; then
+          echo "$(date): ONE-SHOT COMPLETE!"
+          touch /tmp/fah-oneshot-complete
+          sleep 3600
+        fi
+        sleep 60
+      done
+
+  # Systemd service for phase 2
+  - path: /etc/systemd/system/fah-gpu-setup.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=FAH GPU Setup Phase 2
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=/var/lib/fah-gpu-setup-phase
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/fah-gpu-setup
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable fah-gpu-setup.service
+  - /usr/local/bin/fah-gpu-setup
+
+final_message: |
+  FAH GPU worker setup initiated.
+  Machine: ${machine_name}
+  Mode: ONE-SHOT GPU
+
+  VM will reboot after driver install.
+  Check: /var/log/fah-gpu-setup.log

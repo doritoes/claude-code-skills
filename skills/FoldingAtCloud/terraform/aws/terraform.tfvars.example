@@ -1,0 +1,21 @@
+# =============================================================================
+# Folding@Cloud AWS Configuration - One-Shot GPU
+# Copy to terraform.tfvars and fill in values
+# =============================================================================
+
+# AWS Configuration
+aws_region    = "us-east-1"
+instance_type = "g4dn.xlarge"  # T4 GPU, 4 vCPUs, 16GB RAM
+
+# SSH Configuration
+key_name       = "fah-gpu-key"
+ssh_public_key = "ssh-ed25519 AAAA... your-key-here"
+
+# Folding@Home Configuration (get from https://v8-4.foldingathome.org/)
+fah_account_token = "your-account-token"
+fah_machine_name  = "pai-fold-gpu-aws"
+fah_team_id       = "245143"
+fah_passkey       = "your-passkey"
+
+# One-Shot Mode (complete 1 GPU WU then pause)
+one_shot_mode = true
