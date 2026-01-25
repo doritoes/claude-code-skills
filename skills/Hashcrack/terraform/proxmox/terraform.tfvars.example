@@ -1,0 +1,78 @@
+# =============================================================================
+# Hashcrack Proxmox Deployment Configuration
+# =============================================================================
+
+# =============================================================================
+# Proxmox Connection
+# =============================================================================
+
+proxmox_url      = "https://192.168.99.205:8006"
+proxmox_user     = "root@pam"
+proxmox_password = "proxmox123"
+proxmox_insecure = true  # Allow self-signed certs (lab)
+
+# =============================================================================
+# Proxmox Resources
+# =============================================================================
+
+proxmox_node   = "proxmox-lab"      # Verified via API
+template_id    = 9000               # ubuntu-cloud-init template (created by terraform)
+create_template = true              # Create template if needed
+storage_name   = "local-lvm"        # Storage for VM disks
+network_bridge = "vmbr0"            # Network bridge
+
+# =============================================================================
+# Infrastructure Naming
+# =============================================================================
+
+project_name = "hashcrack"
+environment  = "lab"
+
+# =============================================================================
+# VM ID Assignment
+# =============================================================================
+
+server_vmid       = 200   # VM ID for server
+worker_vmid_start = 210   # Starting VM ID for workers
+
+# =============================================================================
+# Server Configuration
+# =============================================================================
+
+server_cpus      = 2
+server_memory_mb = 4096   # 4 GB
+server_disk_gb   = 50
+
+# =============================================================================
+# Worker Configuration (2 workers x 4 vCPU = 8 vCPU total)
+# =============================================================================
+
+worker_count     = 4
+worker_cpus      = 4
+worker_memory_mb = 4096   # 4 GB each
+worker_disk_gb   = 30
+
+# =============================================================================
+# Hashtopolis Credentials
+# =============================================================================
+
+hashtopolis_admin_user     = "hashcrack"
+hashtopolis_admin_password = "CHANGE_ME_secure_password"
+worker_voucher             = ""  # Auto-generate unique voucher per worker
+
+# =============================================================================
+# SSH Access (using your existing key)
+# =============================================================================
+
+ssh_public_key = "ssh-ed25519 AAAA... your-public-key"
+ssh_user       = "ubuntu"
+
+# =============================================================================
+# Network Configuration
+# =============================================================================
+
+network_gateway = "192.168.99.254"   # pfSense gateway
+network_prefix  = "192.168.99"
+use_dhcp        = true               # Use DHCP (recommended for short-lived VMs)
+server_ip       = "192.168.99.220/24"  # Only used if use_dhcp = false
+worker_ip_start = 221                  # Only used if use_dhcp = false

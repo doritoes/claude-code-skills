@@ -1,0 +1,8 @@
+# Cloud-init network config v1 format for XenOrchestra
+# Uses wildcard for interface name (works with enX0, eth0, etc.)
+version: 1
+config:
+  - type: physical
+    name: enX0
+    subnets:
+      - type: dhcp

@@ -1,0 +1,67 @@
+# =============================================================================
+# Hashcrack OCI Deployment Configuration
+# =============================================================================
+
+# =============================================================================
+# OCI Authentication
+# =============================================================================
+
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaae7h3a7hnw2fzjqs3hizd6axxotdtarakcgpwvmi43p6wer3f2ccq"
+user_ocid        = "ocid1.user.oc1..aaaaaaaan47gsibocqr2warqqbxqacgqasbcwquepaqqdero7cpta5nclqwa"
+fingerprint      = "20:17:1e:79:4b:3d:85:a4:b8:8b:c3:20:56:c5:95:d1"
+private_key_path = "C:/Users/sethh/.oci/oci_api_key.pem"
+
+# =============================================================================
+# Region Selection
+# =============================================================================
+
+oci_region = "us-ashburn-1"
+
+# Use AD-1 (index 0) - will work with paid shapes after payment verification
+availability_domain_index = 0
+
+# =============================================================================
+# Infrastructure Naming
+# =============================================================================
+
+project_name = "hashcrack"
+environment  = "lab"
+
+# =============================================================================
+# Server Configuration (E4.Flex - requested 25 core limit per AD)
+# =============================================================================
+
+server_shape     = "VM.Standard.E4.Flex"
+server_ocpus     = 2
+server_memory_gb = 8
+server_disk_gb   = 50
+
+# =============================================================================
+# Worker Configuration (4 workers x 4 OCPU = 16 cores + 2 server = 18 total)
+# =============================================================================
+
+cpu_worker_count     = 4
+cpu_worker_shape     = "VM.Standard.E4.Flex"
+cpu_worker_ocpus     = 4
+cpu_worker_memory_gb = 16
+
+gpu_worker_count = 0
+gpu_worker_shape = "VM.GPU2.1"
+
+worker_disk_gb   = 50
+use_preemptible  = false  # Disabled for free tier ARM instances
+
+# =============================================================================
+# Hashtopolis Credentials
+# =============================================================================
+
+hashtopolis_admin_user     = "hashcrack"
+hashtopolis_admin_password = "CHANGE_ME_secure_password"
+worker_voucher             = ""  # Auto-generate unique voucher per worker
+
+# =============================================================================
+# SSH Access
+# =============================================================================
+
+ssh_public_key = "ssh-ed25519 AAAA... your-public-key"
+ssh_user       = "ubuntu"

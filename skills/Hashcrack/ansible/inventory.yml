@@ -1,0 +1,19 @@
+---
+# Dynamic Inventory Template
+# This file is auto-generated from Terraform outputs
+# Do not edit manually - use: terraform output -json ansible_inventory > inventory.json
+
+all:
+  children:
+    server:
+      hosts:
+        hashcrack-server:
+          ansible_host: "{{ server_ip }}"
+          ansible_user: ubuntu
+    workers:
+      hosts:
+        # Workers are dynamically populated from Terraform
+  vars:
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ansible_python_interpreter: /usr/bin/python3
+    hashtopolis_server_url: "https://{{ server_ip }}:8080"

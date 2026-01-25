@@ -7,7 +7,7 @@ A collection of skills for [Claude Code](https://claude.ai/claude-code), Anthrop
 | Skill | Description | Status |
 |-------|-------------|--------|
 | [MSV](skills/MSV/) | Minimum Safe Version calculator - determines the lowest software version free of known-exploited vulnerabilities | Stable |
-| [Hashcrack](skills/Hashcrack/) | Distributed password hash cracking using Hashtopolis | Coming Soon |
+| [Hashcrack](skills/Hashcrack/) | Distributed password hash cracking using Hashtopolis across 6 cloud/hypervisor providers | Stable |
 
 ## Quick Installation
 
@@ -86,3 +86,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 - [CISA](https://cisa.gov) for the KEV catalog
 - [FIRST.org](https://first.org) for EPSS
 - [AppThreat](https://github.com/AppThreat) for the vulnerability database
+- [Hashtopolis](https://github.com/hashtopolis/server) for distributed hash cracking orchestration

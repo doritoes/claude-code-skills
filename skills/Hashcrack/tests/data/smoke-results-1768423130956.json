@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "Azure",
+    "status": "pass",
+    "deployTime": 696,
+    "crackTime": 306,
+    "crackedCount": 0,
+    "totalHashes": 10
+  }
+]

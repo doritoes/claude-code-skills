@@ -1,0 +1,11 @@
+---
+# Hashtopolis agent handlers
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Restart agent
+  systemd:
+    name: "{{ agent_service_name }}"
+    state: restarted

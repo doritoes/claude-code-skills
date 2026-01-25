@@ -1,0 +1,7 @@
+[
+  {
+    "provider": "AWS",
+    "status": "fail",
+    "error": "Failed with exit code 1"
+  }
+]

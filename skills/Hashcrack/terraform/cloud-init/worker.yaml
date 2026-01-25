@@ -1,0 +1,175 @@
+#cloud-config
+# Hashcat Worker - Cloud-Init Configuration
+# Ubuntu Server 24.04 LTS
+
+hostname: ${hostname}
+fqdn: ${hostname}.local
+manage_etc_hosts: true
+
+# Create user with SSH access
+users:
+  - name: ${ssh_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Update and install packages
+package_update: true
+package_upgrade: true
+
+packages:
+  - qemu-guest-agent
+  - hashcat
+  - hashcat-data
+  - python3
+  - python3-pip
+  - python3-venv
+  - python3-requests
+  - python3-psutil
+  - curl
+  - wget
+  - unzip
+  - htop
+  - vim
+  - net-tools
+  - p7zip-full
+  - ocl-icd-libopencl1
+  - opencl-headers
+
+# Write configuration files
+write_files:
+  # Agent installation script
+  - path: /opt/hashcrack/install-agent.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      AGENT_DIR="/opt/hashtopolis-agent"
+      SERVER_URL="${server_url}"
+      VOUCHER="${voucher_code}"
+      WORKER_ID="${worker_id}"
+
+      echo "=== Installing Hashtopolis Agent ==="
+      echo "Server: $SERVER_URL"
+      echo "Worker ID: $WORKER_ID"
+
+      # Create agent directory
+      mkdir -p $AGENT_DIR
+      cd $AGENT_DIR
+
+      # Download agent from GitHub (tar.gz, not zip)
+      echo "Downloading Hashtopolis agent v0.7.4..."
+      curl -sL https://github.com/hashtopolis/agent-python/archive/refs/tags/v0.7.4.tar.gz -o agent.tar.gz
+      tar xzf agent.tar.gz --strip-components=1
+
+      # Install Python dependencies system-wide
+      pip3 install requests psutil --break-system-packages 2>/dev/null || pip3 install requests psutil
+
+      # Create configuration (use HTTP, not HTTPS)
+      cat > config.json << EOF
+      {
+        "url": "http://$SERVER_URL:8080/api/server.php",
+        "voucher": "$VOUCHER"
+      }
+      EOF
+
+      echo "Agent installed successfully"
+
+  # Agent registration script (runs after server is ready)
+  - path: /opt/hashcrack/register-agent.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      AGENT_DIR="/opt/hashtopolis-agent"
+      SERVER_URL="${server_url}"
+      MAX_ATTEMPTS=30
+
+      echo "=== Registering Hashtopolis Agent ==="
+
+      # Wait for server to be reachable (use HTTP)
+      echo "Waiting for Hashtopolis server..."
+      for i in $(seq 1 $MAX_ATTEMPTS); do
+        if curl -s "http://$SERVER_URL:8080/api/user.php" -X POST -H 'Content-Type: application/json' -d '{"section":"test","request":"connection"}' 2>/dev/null | grep -q SUCCESS; then
+          echo "Server API is ready!"
+          break
+        fi
+        echo "Attempt $i/$MAX_ATTEMPTS - server not ready, waiting 30s..."
+        sleep 30
+      done
+
+      # Run the agent once to register (entry point is __main__.py)
+      # Use increased recursion limit to work around Python 3.12 cookiejar bug
+      cd $AGENT_DIR
+      echo "Registering agent with server..."
+      timeout 60 python3 -c "import sys; sys.setrecursionlimit(10000); exec(open('__main__.py').read())" || echo "Initial registration attempt complete"
+
+      echo "Agent registration initiated"
+
+  # Systemd service for agent
+  # Note: Uses increased Python recursion limit (10000) to work around Python 3.12 cookiejar bug
+  # that causes RecursionError during HTTP requests in the Hashtopolis agent
+  # Testing showed 5000 still hits errors; 10000 works reliably
+  - path: /etc/systemd/system/hashtopolis-agent.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Hashtopolis Agent
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=root
+      WorkingDirectory=/opt/hashtopolis-agent
+      ExecStart=/usr/bin/python3 -c "import sys; sys.setrecursionlimit(10000); exec(open('__main__.py').read())"
+      Restart=always
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Worker info file
+  - path: /opt/hashcrack/worker-info.json
+    permissions: '0644'
+    content: |
+      {
+        "worker_id": ${worker_id},
+        "hostname": "${hostname}",
+        "server_url": "${server_url}",
+        "voucher": "${voucher_code}"
+      }
+
+# Run commands after boot
+runcmd:
+  # Start qemu-guest-agent early for Proxmox/XCP-ng IP reporting
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent || true
+
+  # Create directories
+  - mkdir -p /opt/hashcrack/agent
+  - mkdir -p /opt/hashcrack/wordlists
+
+  # Install agent (downloads and configures)
+  - /opt/hashcrack/install-agent.sh
+
+  # Enable and start agent service IMMEDIATELY after install
+  # The agent itself waits for server connectivity and retries
+  - systemctl daemon-reload
+  - systemctl enable hashtopolis-agent.service
+  - systemctl start hashtopolis-agent.service
+
+  # Signal completion
+  - touch /var/run/cloud-init-complete
+
+final_message: |
+  Hashcat worker ${worker_id} provisioning complete!
+
+  Server: ${server_url}
+  Worker ID: ${worker_id}
+
+  Cloud-init completed at $TIMESTAMP

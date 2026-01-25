@@ -1,0 +1,8 @@
+[
+  {
+    "provider": "AWS",
+    "status": "fail",
+    "agentCount": 1,
+    "error": "FAILED: No hashes were cracked"
+  }
+]

@@ -1,0 +1,27 @@
+# =============================================================================
+# Hashcrack AWS Deployment - GPU Validation Testing
+# =============================================================================
+
+aws_region   = "us-west-2"
+project_name = "hashcrack"
+environment  = "lab"
+
+# Server configuration
+server_instance_type = "t3.medium"
+server_disk_gb       = 50
+
+# Worker configuration - GPU validation testing
+cpu_worker_count         = 0
+cpu_worker_instance_type = "c5.xlarge"   # Not used for GPU test
+gpu_worker_count         = 2
+gpu_worker_instance_type = "g4dn.xlarge" # Tesla T4 GPU
+worker_disk_gb           = 30
+
+# SSH access
+ssh_public_key = "ssh-ed25519 AAAA... your-public-key"
+ssh_user       = "ubuntu"
+
+# Hashtopolis credentials
+hashtopolis_admin_user     = "admin"
+hashtopolis_admin_password = "CHANGE_ME_secure_password"
+worker_voucher             = ""  # Auto-generate unique voucher per worker

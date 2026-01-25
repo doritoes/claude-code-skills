@@ -1,0 +1,165 @@
+#cloud-config
+# Hashcat GPU Worker - Cloud-Init Configuration
+# Ubuntu Server 24.04 LTS with NVIDIA GPU Support
+
+hostname: ${hostname}
+fqdn: ${hostname}.local
+manage_etc_hosts: true
+
+users:
+  - name: ${ssh_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - hashcat
+  - hashcat-data
+  - python3
+  - python3-pip
+  - python3-venv
+  - python3-requests
+  - python3-psutil
+  - curl
+  - wget
+  - unzip
+  - htop
+  - vim
+  - net-tools
+  - p7zip-full
+  - build-essential
+  - linux-headers-$(uname -r)
+  - nvidia-driver-535
+  - nvidia-cuda-toolkit
+
+write_files:
+  - path: /opt/hashcrack/install-agent.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      AGENT_DIR="/opt/hashtopolis-agent"
+      SERVER_URL="${server_url}"
+      VOUCHER="${voucher_code}"
+      WORKER_ID="${worker_id}"
+
+      echo "=== Installing Hashtopolis Agent (GPU Worker) ==="
+      echo "Server: $SERVER_URL"
+      echo "Worker ID: $WORKER_ID"
+
+      mkdir -p $AGENT_DIR
+      cd $AGENT_DIR
+
+      echo "Downloading Hashtopolis agent v0.7.4..."
+      curl -sL https://github.com/hashtopolis/agent-python/archive/refs/tags/v0.7.4.tar.gz -o agent.tar.gz
+      tar xzf agent.tar.gz --strip-components=1
+
+      pip3 install requests psutil --break-system-packages 2>/dev/null || pip3 install requests psutil
+
+      cat > config.json << EOFCFG
+      {
+        "url": "http://$SERVER_URL:8080/api/server.php",
+        "voucher": "$VOUCHER"
+      }
+      EOFCFG
+
+      echo "Agent installed successfully"
+
+  - path: /opt/hashcrack/register-agent.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      AGENT_DIR="/opt/hashtopolis-agent"
+      SERVER_URL="${server_url}"
+      MAX_ATTEMPTS=30
+
+      echo "=== Registering Hashtopolis GPU Agent ==="
+
+      echo "Waiting for Hashtopolis server..."
+      for i in $(seq 1 $MAX_ATTEMPTS); do
+        if curl -s "http://$SERVER_URL:8080/api/user.php" -X POST -H 'Content-Type: application/json' -d '{"section":"test","request":"connection"}' 2>/dev/null | grep -q SUCCESS; then
+          echo "Server API is ready!"
+          break
+        fi
+        echo "Attempt $i/$MAX_ATTEMPTS - server not ready, waiting 30s..."
+        sleep 30
+      done
+
+      cd $AGENT_DIR
+      echo "Registering agent with server..."
+      timeout 60 python3 __main__.py || echo "Initial registration attempt complete"
+
+      echo "Agent registration initiated"
+
+  # Note: Uses increased Python recursion limit (10000) to work around Python 3.12 cookiejar bug
+  # Testing showed 5000 still hits errors; 10000 works reliably
+  - path: /etc/systemd/system/hashtopolis-agent.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Hashtopolis Agent (GPU)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=root
+      WorkingDirectory=/opt/hashtopolis-agent
+      ExecStart=/usr/bin/python3 -c "import sys; sys.setrecursionlimit(10000); exec(open('__main__.py').read())"
+      Restart=always
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /opt/hashcrack/worker-info.json
+    permissions: '0644'
+    content: |
+      {
+        "worker_id": ${worker_id},
+        "hostname": "${hostname}",
+        "server_url": "${server_url}",
+        "voucher": "${voucher_code}",
+        "type": "gpu"
+      }
+
+runcmd:
+  - mkdir -p /opt/hashcrack/agent
+  - mkdir -p /opt/hashcrack/wordlists
+  
+  # Install agent
+  - /opt/hashcrack/install-agent.sh
+  
+  # Wait for server (give it time to start + extra for GPU driver setup)
+  - sleep 180
+  
+  # Check NVIDIA GPU
+  - nvidia-smi || echo "NVIDIA driver not ready yet"
+  
+  # Register agent
+  - /opt/hashcrack/register-agent.sh || echo "Registration will retry via systemd"
+  
+  # Enable and start agent service
+  - systemctl daemon-reload
+  - systemctl enable hashtopolis-agent.service
+  - systemctl start hashtopolis-agent.service
+  
+  # Signal completion
+  - touch /var/run/cloud-init-complete
+
+final_message: |
+  Hashcat GPU worker ${worker_id} provisioning complete!
+  
+  Server: ${server_url}
+  Worker ID: ${worker_id}
+  Type: GPU (NVIDIA)
+  
+  Cloud-init completed at $TIMESTAMP

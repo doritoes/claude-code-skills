@@ -1,0 +1,15 @@
+
+xo_url      = "wss://192.168.99.206"
+xo_username = "admin"
+xo_password = "gr0kLabs"
+
+# Hashtopolis admin credentials (avoid special chars for cloud-init compatibility)
+hashtopolis_admin_user     = "hashcrack"
+hashtopolis_admin_password = "CHANGE_ME_secure_password"
+
+worker_count = 4
+server_cpus  = 2
+server_memory_gb = 4
+worker_cpus  = 4
+worker_memory_gb = 8
+ssh_public_key = "ssh-ed25519 AAAA... your-public-key"

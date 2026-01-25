@@ -1,0 +1,35 @@
+# =============================================================================
+# Hashcrack Azure Deployment Configuration
+# =============================================================================
+
+azure_location = "eastus2"
+project_name   = "hashcrack"
+environment    = "lab"
+
+# Server configuration
+server_vm_size = "Standard_D2s_v3"  # 2 vCPU, 8 GB RAM (D-series more available)
+server_disk_gb = 50
+
+# Worker configuration - 4 workers for performance test
+cpu_worker_count   = 4
+cpu_worker_vm_size = "Standard_D4s_v3"  # 4 vCPU, 16 GB RAM - matches GCP/AWS
+
+gpu_worker_count   = 0  # GPU quota is 0 for NCASv3_T4 in eastus2
+gpu_worker_vm_size = "Standard_NC4as_T4_v3"  # Tesla T4 GPU (quota must be requested)
+
+worker_disk_gb     = 50
+use_spot_instances = false  # On-demand for reliability
+
+# SSH access
+ssh_public_key = "ssh-rsa AAAA... your-public-key"
+ssh_user       = "ubuntu"
+
+# Hashtopolis credentials
+hashtopolis_admin_user     = "hashcrack"
+hashtopolis_admin_password = "CHANGE_ME_secure_password"
+worker_voucher             = ""  # Empty to generate N unique vouchers
+
+# Network (defaults are fine for most deployments)
+# vnet_cidr       = "10.0.0.0/16"
+# subnet_cidr     = "10.0.1.0/24"
+# allowed_ssh_cidr = ["0.0.0.0/0"]  # Restrict in production

@@ -1,0 +1,42 @@
+# =============================================================================
+# Hashcrack GCP Deployment Configuration
+# =============================================================================
+
+# GCP Project and Region
+gcp_project = "pai-gcp"
+gcp_region  = "us-central1"
+gcp_zone    = "us-central1-f"  # Has T4 + regional quota exists (1 GPU)
+
+project_name = "hashcrack"
+environment  = "lab"
+
+# Server configuration
+server_machine_type = "e2-medium"  # 2 vCPU, 4 GB RAM - sufficient for orchestration
+server_disk_gb      = 50
+
+# Worker configuration - 4 CPU workers for comparison test
+cpu_worker_count        = 4
+cpu_worker_machine_type = "n2-standard-4"  # 4 vCPU, 16GB RAM
+
+gpu_worker_count        = 0   # No GPU workers for comparison test
+gpu_worker_machine_type = "n1-standard-4"
+gpu_type                = "nvidia-tesla-t4"
+gpu_count               = 1
+
+worker_disk_gb   = 30
+use_preemptible  = false  # Using on-demand to leverage regional quota
+worker_public_ip = true   # Public IPs for direct internet access (simpler than Cloud NAT)
+use_cloud_nat    = false  # Not needed with public IPs
+
+# SSH access
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJokdtk5lBb0AmV/7NLRHmqZaoTg0u9lKX4grNFTtn/U hashcrack-gcp"
+ssh_user       = "ubuntu"
+
+# Hashtopolis credentials
+hashtopolis_admin_user     = "hashcrack"
+hashtopolis_admin_password = "CHANGE_ME_secure_password"
+worker_voucher             = ""  # Empty to generate N unique vouchers
+
+# Network
+# network_cidr = "10.0.1.0/24"
+# allowed_ssh_cidr = ["0.0.0.0/0"]

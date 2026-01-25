@@ -1,0 +1,15 @@
+[Unit]
+Description=Hashtopolis Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory={{ agent_dir }}
+ExecStart=/usr/bin/python3 {{ agent_dir }}/hashtopolis.zip
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

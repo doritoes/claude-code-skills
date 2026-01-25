@@ -1,0 +1,51 @@
+# Terraform State (contains infrastructure details)
+*.tfstate
+*.tfstate.*
+**/*.tfstate
+**/*.tfstate.*
+
+# Terraform Variables (may contain secrets)
+*.tfvars
+*.tfvars.json
+**/*.tfvars
+**/*.tfvars.json
+
+# Terraform Provider Binaries (~1.5GB)
+.terraform/
+**/.terraform/
+.terraform.lock.hcl
+**/.terraform.lock.hcl
+
+# Terraform Crash Logs
+crash.log
+crash.*.log
+**/crash.log
+**/crash.*.log
+
+# Terraform Plan Files
+tfplan
+*.tfplan
+**/*.tfplan
+
+# Terraform Override Files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Keep example files
+!*.tfvars.example
+!**/*.tfvars.example
+
+# Cache files
+data/*.json
+!data/SoftwareCatalog.json
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
