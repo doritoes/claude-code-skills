@@ -21,13 +21,15 @@ packages:
   - jq
 
 write_files:
-  # FAH client configuration
+  # FAH client configuration - GPU-only mode (cpus=0 from start)
   - path: /etc/fah-client/config.xml
     permissions: '0644'
     content: |
       <config>
         <account-token v="${fah_account_token}"/>
         <machine-name v="${machine_name}"/>
+        <cpus v="0"/>
+        <cuda v="true"/>
       </config>
 
   # Two-phase boot script

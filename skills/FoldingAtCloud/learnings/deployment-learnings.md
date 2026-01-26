@@ -137,7 +137,23 @@ Even for one-shot GPU jobs, the risk of preemption during the WU computation out
 - **Impact:** FAH starts using CPUs instead of GPU, gets CPU WU
 - **Solution:** Two-phase boot: install drivers → reboot → then start FAH
 
-### Anti-Pattern 4: Running lufah Before FAH Websocket is Ready
+### Anti-Pattern 4: Configuring cpus=0 After FAH Starts (GPU Mode)
+**ALWAYS set cpus=0 in config.xml BEFORE FAH service starts**
+
+- **Problem:** FAH requests work immediately on startup with default config
+- **Impact:** CPU WU assigned before `lufah config cpus 0` runs; WU stuck as "Resources not available"
+- **Solution:** Set `<cpus v="0"/>` and `<cuda v="true"/>` in `/etc/fah-client/config.xml` before FAH starts
+
+```xml
+<config>
+  <account-token v="your-token"/>
+  <machine-name v="gpu-worker"/>
+  <cpus v="0"/>
+  <cuda v="true"/>
+</config>
+```
+
+### Anti-Pattern 5: Running lufah Before FAH Websocket is Ready
 **ALWAYS wait for FAH websocket before running lufah commands**
 
 - **Problem:** FAH service starts but websocket (port 7396) takes additional time
