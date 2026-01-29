@@ -173,7 +173,12 @@ WHERE taskId IN (SELECT taskId FROM Task WHERE isArchived=1);
 ## Batch Lifecycle Management
 
 ### When Batch Completes (8/8 tasks done)
-1. Verify all tasks complete:
+
+**CRITICAL: NEVER trust keyspaceProgress alone! ALWAYS check chunk status.**
+
+**Safe Archiving Checklist (ALL must be true):**
+
+1. **Verify all tasks show keyspaceProgress >= keyspace:**
    ```sql
    SELECT COUNT(*) FROM Task
    WHERE taskName LIKE '%batch-00XX%'
@@ -181,12 +186,39 @@ WHERE taskId IN (SELECT taskId FROM Task WHERE isArchived=1);
    ```
    Should return 0.
 
-2. Archive the batch:
+2. **CRITICAL: Verify NO active or pending chunks:**
+   ```sql
+   SELECT COUNT(*) FROM Chunk c
+   JOIN Task t ON c.taskId = t.taskId
+   WHERE t.taskName LIKE '%batch-00XX%'
+   AND c.state IN (0, 2);  -- 0=NEW, 2=DISPATCHED
+   ```
+   **MUST return 0 before archiving!**
+
+3. **Only then archive:**
    ```sql
    UPDATE Task SET isArchived=1 WHERE taskName LIKE '%batch-00XX%';
    ```
 
-3. Adjust priorities for remaining batches (move next batch to highest).
+**WHY THIS MATTERS:**
+- keyspaceProgress can show 100% while chunks are still in DISPATCHED state
+- Archiving a task with active chunks ABORTS those chunks
+- This kills the agent's work and causes it to become unresponsive
+- Cracked results may not be fully reported yet
+
+**Combined Safe Archive Query:**
+```sql
+-- Only archive tasks with NO active chunks
+UPDATE Task t SET t.isArchived=1
+WHERE t.taskName LIKE '%batch-00XX%'
+AND t.keyspaceProgress >= t.keyspace
+AND t.keyspace > 0
+AND NOT EXISTS (
+  SELECT 1 FROM Chunk c
+  WHERE c.taskId = t.taskId
+  AND c.state IN (0, 2)
+);
+```
 
 ### When Queuing New Batches
 1. Set priority 10 lower than current lowest (ensure older batches complete first)
@@ -200,11 +232,34 @@ WHERE taskId IN (SELECT taskId FROM Task WHERE isArchived=1);
 1. **DO NOT** manually assign tasks to agents
 2. **DO NOT** manually create chunks
 3. **DO NOT** run hashcat outside of Hashtopolis
-4. **DO** let Hashtopolis handle work distribution
-5. **DO** only intervene for:
+4. **DO NOT** archive tasks based on keyspaceProgress alone - ALWAYS check chunk state
+5. **DO NOT** trust the keyspace display - always verify with chunk queries
+6. **DO** let Hashtopolis handle work distribution
+7. **DO** only intervene for:
    - Infrastructure issues (worker reboot)
    - Bug workarounds (crackPos null)
    - Priority correction
+
+### CRITICAL ANTI-PATTERN: Premature Archiving
+
+**NEVER do this:**
+```sql
+-- WRONG! This can kill active chunks!
+UPDATE Task SET isArchived=1 WHERE keyspaceProgress >= keyspace;
+```
+
+**ALWAYS check chunks first:**
+```sql
+-- CORRECT: Only archive if no active chunks exist
+SELECT COUNT(*) FROM Chunk WHERE taskId=<id> AND state IN (0, 2);
+-- Must return 0 before archiving!
+```
+
+**Consequence of premature archiving:**
+- Active chunks get aborted mid-work
+- Agents become unresponsive (need reboot)
+- Some cracked results may be lost
+- GPU time wasted on aborted work
 
 ---
 
