@@ -39,12 +39,24 @@ const ROCKYOU_FILE_ID = 1;
 const ONERULE_FILE_ID = 2;
 const ATTACK_FILES = [ROCKYOU_FILE_ID, ONERULE_FILE_ID];
 
-// rockyou.txt line count (14,344,391 passwords)
-const ROCKYOU_LINES = 14_344_391;
-// OneRuleToRuleThemAll.rule line count
-const ONERULE_LINES = 51_993;
-// Keyspace = wordlist × rules
-const RULE_ATTACK_KEYSPACE = ROCKYOU_LINES * ONERULE_LINES;
+// =============================================================================
+// CRITICAL: Rule Attack Keyspace (READ THIS!)
+// =============================================================================
+// For rule attacks (-a 0 -r), hashcat's -s (skip) parameter skips WORDLIST
+// ENTRIES, not keyspace positions. Setting keyspace=wordlist×rules causes
+// Hashtopolis to create chunks with skip values > wordlist size, which fail.
+//
+// CORRECT: keyspace=0 (auto-calculate = wordlist size ~14M)
+// WRONG:   keyspace=746B (wordlist × rules) - causes "Restore value > keyspace"
+//
+// Parallelization for rule attacks: Split HASHES into N hashlists, N tasks,
+// with maxAgents=1 per task. This gives N parallel workers.
+// See: Hashcrack/docs/PARALLELIZATION.md
+// =============================================================================
+
+// File line counts (for reference only - NOT used for keyspace!)
+const ROCKYOU_LINES = 14_344_390;  // rockyou.txt
+const ONERULE_LINES = 52_014;      // OneRuleToRuleThemAll.rule
 
 // =============================================================================
 // SSH + Database Task Creation (API createTask is broken in Hashtopolis 0.14.x)
@@ -110,13 +122,21 @@ async function runPreFlightGates(config: { serverIp: string; dbPassword: string;
   }
   console.log(`  ✓ File download works (${(downloadSize / 1024 / 1024).toFixed(1)}MB)`);
 
-  // GATE C: Agents trusted
-  console.log("GATE C: Checking agent trust...");
+  // GATE C: Agents trusted + ignoreErrors=1 (CRITICAL for rule attacks)
+  console.log("GATE C: Checking agent trust and error handling...");
   const trustedCount = parseInt(execSQL(config, "SELECT COUNT(*) FROM Agent WHERE isActive=1 AND isTrusted=1"));
   if (trustedCount < 1) {
     throw new Error("GATE C FAILED: No trusted agents. Trust agents first.");
   }
   console.log(`  ✓ ${trustedCount} trusted agents`);
+
+  // Set ignoreErrors=1 on ALL agents (required for rule attacks - prevents "Keyspace measure failed!")
+  const noIgnoreErrors = parseInt(execSQL(config, "SELECT COUNT(*) FROM Agent WHERE ignoreErrors=0"));
+  if (noIgnoreErrors > 0) {
+    console.log(`  Fixing: Setting ignoreErrors=1 on ${noIgnoreErrors} agents...`);
+    execSQL(config, "UPDATE Agent SET ignoreErrors=1 WHERE ignoreErrors=0");
+  }
+  console.log(`  ✓ All agents have ignoreErrors=1`);
 
   // GATE D: Files marked isSecret=1
   console.log("GATE D: Checking file secrets...");
