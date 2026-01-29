@@ -150,6 +150,52 @@ Before terminating any worker:
 
 ---
 
+## ANTI-PATTERNS - NEVER DO THESE
+
+### 1. SSH Failure → Assume VM Stopped
+**WRONG:** If SSH times out, mark worker as stopped/terminated
+```bash
+# DANGEROUS - DO NOT DO THIS
+if [[ -z "$ssh_output" ]]; then
+    POWERED_DOWN[$ip]="true"  # WRONG!
+fi
+```
+**RIGHT:** SSH failure = UNKNOWN state. Verify via cloud provider API (az, oci, terraform state).
+
+### 2. Empty lufah output → Assume Paused
+**WRONG:** No running units in `lufah units` output means safe to terminate
+**RIGHT:** Only `"paused": true` in `lufah state` JSON confirms safe to terminate
+
+### 3. Background Destructive Commands
+**WRONG:** Send stop/deallocate commands in background (`&`) and move on
+```bash
+# DANGEROUS - DO NOT DO THIS
+az vm deallocate --name $VM --no-wait &
+```
+**RIGHT:** Wait for command completion, verify state changed
+
+### 4. Batch Stop Without Individual Verification
+**WRONG:** Loop through all workers sending stop commands
+```bash
+# DANGEROUS - DO NOT DO THIS
+for ip in $WORKER_IPS; do
+    send_stop $ip  # Without checking FAH state first
+done
+```
+**RIGHT:** Check each worker's FAH state (`paused: true`) before acting on that specific worker
+
+### 5. Power Off vs Destroy Confusion
+**WRONG:** Use `terraform destroy` to stop running VMs
+**RIGHT:**
+- Power off (stop VM, keep resources): `az vm deallocate` / OCI stop / SSH shutdown
+- Destroy (delete all resources): `terraform destroy` - only after ALL VMs powered off
+
+### 6. Retry Failing Approach Repeatedly
+**WRONG:** If OCI CLI times out, try same command 5+ more times
+**RIGHT:** After 1-2 failures, try alternative (terraform, console, ask user)
+
+---
+
 ## Monitoring During Shutdown
 
 Watch the shutdown progress:

@@ -9,6 +9,24 @@ Convert spare cloud credits into Folding@Home compute donations. Deploys ephemer
 
 ---
 
+## CRITICAL SAFETY RULES
+
+**These rules are non-negotiable. Violation causes lost research.**
+
+1. **SSH failure does NOT mean VM stopped.** SSH can fail for many reasons. NEVER assume a VM is stopped because SSH timed out. Verify via cloud provider API.
+
+2. **Only `paused: true` is safe to stop.** The ONLY signal that a worker is safe to terminate is `"paused": true` from `lufah state`. Nothing else.
+
+3. **FAH Portal is the source of truth.** Not SSH output, not inferred state. The Portal shows actual worker status.
+
+4. **User confirms each worker.** Claude assists but NEVER autonomously powers off a VM. Each worker requires explicit user confirmation.
+
+5. **Use documented tools.** Use `WorkerControl.ts`, not ad-hoc bash scripts. The tools have safety checks built in.
+
+**See `GracefulShutdown.md` ANTI-PATTERNS section for details.**
+
+---
+
 ## Quick Start
 
 ```bash
@@ -57,7 +75,7 @@ Cloud provider credentials via standard methods (AWS CLI, Azure CLI, gcloud, OCI
 | **Deploy** | "deploy folding", "spin up folders" | `Workflows/Deploy.md` |
 | **Monitor** | "check folding", "folding status" | `Workflows/Monitor.md` |
 | **Scale** | "scale folding", "add/remove workers" | `Workflows/Scale.md` |
-| **Teardown** | "stop folding", "teardown folding" | `Workflows/Teardown.md` |
+| **SafeTeardown** | "stop folding", "teardown folding" | `Workflows/SafeTeardown.md` |
 | **Status** | "folding stats", "points earned" | `Workflows/Status.md` |
 
 ---
@@ -135,8 +153,101 @@ GPU WUs complete in 15-60 minutes vs 14+ hours for CPU.
 
 | Tool | Purpose |
 |------|---------|
-| `WorkerControl.ts` | lufah/SSH wrapper for finish/pause/status |
+| `WorkerControl.ts` | lufah/SSH wrapper for finish/pause/status/can-stop |
+| `MonitorWorkers.ts` | READ-ONLY monitoring (NO destructive actions) |
+| `ProviderControl.ts` | Cloud API operations with safety checks |
+| `StateTracker.ts` | Persistent state across context boundaries |
+| `AuditLog.ts` | Audit logging for destructive actions |
 | `BudgetTracker.ts` | Cost tracking and enforcement |
+
+### WorkerControl.ts Commands
+
+```bash
+# Get worker status (JSON output)
+bun run WorkerControl.ts status <ip> --provider azure
+
+# Send finish command (complete WU then pause)
+bun run WorkerControl.ts finish <ip> --provider azure
+
+# SAFETY CHECK - Must use before any stop action
+bun run WorkerControl.ts can-stop <ip> --provider azure
+# Returns: {safe: true/false, reason: "...", status: {...}}
+
+# Wait until paused (for graceful shutdown)
+bun run WorkerControl.ts wait-paused <ip> --timeout 1800 --provider azure
+```
+
+### Provider-Specific SSH Credentials
+
+Set in `.claude/.env`:
+```
+AZURE_SSH_USER=foldingadmin
+AZURE_SSH_KEY=$HOME/.ssh/azure_hashcrack
+OCI_SSH_USER=ubuntu
+OCI_SSH_KEY=$HOME/.ssh/id_ed25519
+```
+
+### MonitorWorkers.ts (READ-ONLY)
+
+```bash
+# List workers from terraform state
+bun run MonitorWorkers.ts list azure
+
+# Get FAH status of all workers
+bun run MonitorWorkers.ts status azure
+
+# Continuous monitoring (Ctrl+C to stop)
+bun run MonitorWorkers.ts watch azure --interval 60
+```
+
+### ProviderControl.ts (Cloud API with Safety)
+
+```bash
+# Get VM power state
+bun run ProviderControl.ts vm-state azure foldingcloud-worker-1
+
+# List VMs
+bun run ProviderControl.ts vm-list azure
+
+# Stop VM (requires safety checks + --confirm)
+bun run ProviderControl.ts vm-stop azure foldingcloud-worker-1 --confirm --ip 20.120.1.100
+```
+
+### StateTracker.ts (Persistent State)
+
+```bash
+# Record worker state
+bun run StateTracker.ts record 20.120.1.100 PAUSED --provider azure --name pai-fold-1
+
+# List all recorded states
+bun run StateTracker.ts list
+
+# Check age of state
+bun run StateTracker.ts age 20.120.1.100
+```
+
+### AuditLog.ts
+
+```bash
+# View recent audit entries
+bun run AuditLog.ts show 20
+
+# Search audit log
+bun run AuditLog.ts search "STOP"
+```
+
+---
+
+## Safe Teardown Workflow
+
+**Always use `Workflows/SafeTeardown.md` for graceful shutdown.**
+
+Summary:
+1. Send FINISH signal to all workers
+2. User monitors FAH Portal for PAUSED state
+3. Verify each worker with `can-stop` before stopping
+4. User confirms each worker before power-off
+5. Destroy infrastructure only after ALL workers stopped
 
 ---
 

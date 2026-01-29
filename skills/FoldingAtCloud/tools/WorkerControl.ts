@@ -18,10 +18,49 @@
 import { $ } from "bun";
 import { parseArgs } from "util";
 
-// Configuration
-const SSH_USER = process.env.SSH_USER || "foldingadmin";
-const SSH_KEY = process.env.SSH_PRIVATE_KEY_PATH || `${process.env.HOME}/.ssh/id_ed25519`;
+// Configuration - Provider-specific credentials
+const HOME = process.env.HOME || process.env.USERPROFILE;
 const DEFAULT_TIMEOUT = parseInt(process.env.FOLDING_GRACEFUL_TIMEOUT || "1800");
+
+// Provider-specific SSH configuration
+// Set via environment or auto-detect from IP ranges
+interface ProviderConfig {
+  sshUser: string;
+  sshKey: string;
+}
+
+const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
+  azure: {
+    sshUser: process.env.AZURE_SSH_USER || "foldingadmin",
+    sshKey: process.env.AZURE_SSH_KEY || `${HOME}/.ssh/azure_hashcrack`,
+  },
+  oci: {
+    sshUser: process.env.OCI_SSH_USER || "ubuntu",
+    sshKey: process.env.OCI_SSH_KEY || `${HOME}/.ssh/id_ed25519`,
+  },
+  aws: {
+    sshUser: process.env.AWS_SSH_USER || "ubuntu",
+    sshKey: process.env.AWS_SSH_KEY || `${HOME}/.ssh/aws_hashcrack`,
+  },
+  gcp: {
+    sshUser: process.env.GCP_SSH_USER || "foldingadmin",
+    sshKey: process.env.GCP_SSH_KEY || `${HOME}/.ssh/gcp_hashcrack`,
+  },
+};
+
+// Legacy fallback
+const SSH_USER = process.env.SSH_USER || "foldingadmin";
+const SSH_KEY = process.env.SSH_PRIVATE_KEY_PATH || `${HOME}/.ssh/id_ed25519`;
+
+/**
+ * Get provider config - specify provider or use legacy defaults
+ */
+function getProviderConfig(provider?: string): ProviderConfig {
+  if (provider && PROVIDER_CONFIGS[provider]) {
+    return PROVIDER_CONFIGS[provider];
+  }
+  return { sshUser: SSH_USER, sshKey: SSH_KEY };
+}
 
 interface WorkerStatus {
   ip: string;
@@ -31,12 +70,16 @@ interface WorkerStatus {
   error?: string;
 }
 
+// Global provider setting (can be set via --provider flag)
+let currentProvider: string | undefined;
+
 /**
  * Execute SSH command on worker
  */
 async function sshCommand(ip: string, command: string): Promise<string> {
+  const config = getProviderConfig(currentProvider);
   try {
-    const result = await $`ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ${SSH_KEY} ${SSH_USER}@${ip} ${command}`.text();
+    const result = await $`ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ${config.sshKey} ${config.sshUser}@${ip} ${command}`.text();
     return result.trim();
   } catch (error: any) {
     throw new Error(`SSH command failed: ${error.message}`);
@@ -158,6 +201,38 @@ async function healthCheck(ip: string): Promise<boolean> {
   return status.healthy;
 }
 
+/**
+ * CRITICAL SAFETY CHECK - Must be called before any stop/power-off action
+ * Returns whether it's safe to stop the worker
+ */
+async function canSafelyStop(ip: string): Promise<{safe: boolean, reason: string, status?: WorkerStatus}> {
+  const status = await getStatus(ip);
+
+  // If we can't connect, we CANNOT assume it's safe
+  if (status.error) {
+    return {
+      safe: false,
+      reason: `CANNOT VERIFY STATE: ${status.error}. SSH failure does NOT mean VM is stopped.`,
+      status
+    };
+  }
+
+  // Only paused: true is safe
+  if (!status.paused) {
+    return {
+      safe: false,
+      reason: `Worker NOT paused (paused=${status.paused}). Still has active work.`,
+      status
+    };
+  }
+
+  return {
+    safe: true,
+    reason: "Worker confirmed paused - safe to stop",
+    status
+  };
+}
+
 // =============================================================================
 // Main CLI
 // =============================================================================
@@ -182,11 +257,15 @@ Commands:
 
 Options:
   --timeout <seconds>  Timeout for wait-paused (default: ${DEFAULT_TIMEOUT})
+  --provider <name>    Cloud provider: azure, oci, aws, gcp (sets SSH creds)
 
-Environment:
-  SSH_USER              SSH username (default: foldingadmin)
-  SSH_PRIVATE_KEY_PATH  Path to SSH private key
-  FOLDING_GRACEFUL_TIMEOUT  Default timeout in seconds
+Environment (Provider-Specific):
+  AZURE_SSH_USER, AZURE_SSH_KEY   Azure credentials
+  OCI_SSH_USER, OCI_SSH_KEY       OCI credentials
+  AWS_SSH_USER, AWS_SSH_KEY       AWS credentials
+  GCP_SSH_USER, GCP_SSH_KEY       GCP credentials
+
+  FOLDING_GRACEFUL_TIMEOUT        Default timeout in seconds
 
 Examples:
   bun run WorkerControl.ts status 20.120.1.100
@@ -204,6 +283,16 @@ Examples:
   const timeoutIdx = args.indexOf("--timeout");
   if (timeoutIdx !== -1 && args[timeoutIdx + 1]) {
     timeout = parseInt(args[timeoutIdx + 1]);
+  }
+
+  // Parse provider option
+  const providerIdx = args.indexOf("--provider");
+  if (providerIdx !== -1 && args[providerIdx + 1]) {
+    currentProvider = args[providerIdx + 1].toLowerCase();
+    if (!PROVIDER_CONFIGS[currentProvider]) {
+      console.error(`Unknown provider: ${currentProvider}. Valid: azure, oci, aws, gcp`);
+      process.exit(1);
+    }
   }
 
   switch (command) {
@@ -241,6 +330,14 @@ Examples:
       const healthy = await healthCheck(ip);
       console.log(healthy ? "healthy" : "unhealthy");
       process.exit(healthy ? 0 : 1);
+      break;
+    }
+
+    case "can-stop": {
+      // CRITICAL: Safety check before any stop action
+      const check = await canSafelyStop(ip);
+      console.log(JSON.stringify(check, null, 2));
+      process.exit(check.safe ? 0 : 1);
       break;
     }
 
