@@ -13,6 +13,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
+import { execSync } from "node:child_process";
 import { StateManager } from "./StateManager";
 
 // Import Hashcrack client (relative path from skill to skill)
@@ -29,8 +30,157 @@ const CANDIDATES_DIR = resolve(DATA_DIR, "candidates");
 
 // Cracking settings
 const HASH_TYPE_SHA1 = 100;
-const DEFAULT_ATTACK_CMD = "#HL# -r OneRuleToRuleThemAll.rule rockyou.txt";
+// Note: hashcat syntax is: #HL# wordlist -r rulefile (wordlist BEFORE -r)
+const DEFAULT_ATTACK_CMD = "#HL# rockyou.txt -r OneRuleToRuleThemAll.rule";
 const MAX_HASHES_PER_TASK = 1_000_000; // 1M hashes per hashlist
+
+// File IDs in Hashtopolis (must be uploaded first)
+const ROCKYOU_FILE_ID = 1;
+const ONERULE_FILE_ID = 2;
+const ATTACK_FILES = [ROCKYOU_FILE_ID, ONERULE_FILE_ID];
+
+// rockyou.txt line count (14,344,391 passwords)
+const ROCKYOU_LINES = 14_344_391;
+// OneRuleToRuleThemAll.rule line count
+const ONERULE_LINES = 51_993;
+// Keyspace = wordlist × rules
+const RULE_ATTACK_KEYSPACE = ROCKYOU_LINES * ONERULE_LINES;
+
+// =============================================================================
+// SSH + Database Task Creation (API createTask is broken in Hashtopolis 0.14.x)
+// =============================================================================
+
+/**
+ * Get server connection details from terraform or environment
+ */
+function getServerConfig(): { serverIp: string; dbPassword: string; sshUser: string } {
+  // Try terraform outputs first (HASHCRACK_DIR is skills/Hashcrack/tools)
+  const terraformDir = resolve(HASHCRACK_DIR, "..", "terraform", "aws");
+  console.log(`  Looking for terraform at: ${terraformDir}`);
+
+  try {
+    const serverIp = execSync(`terraform output -raw server_ip`, { encoding: "utf-8", cwd: terraformDir }).trim();
+    const dbPassword = execSync(`terraform output -raw db_password`, { encoding: "utf-8", cwd: terraformDir }).trim();
+    return { serverIp, dbPassword, sshUser: "ubuntu" };
+  } catch (e) {
+    console.error(`  Terraform error: ${(e as Error).message}`);
+    throw new Error("Cannot get server config from terraform. Ensure terraform is deployed in skills/Hashcrack/terraform/aws");
+  }
+}
+
+/**
+ * Execute SQL on Hashtopolis database via SSH
+ */
+function execSQL(config: { serverIp: string; dbPassword: string; sshUser: string }, sql: string): string {
+  const cmd = `ssh -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sNe \\"${sql.replace(/"/g, '\\"')}\\""`;
+  try {
+    return execSync(cmd, { encoding: "utf-8", timeout: 60000 }).trim();
+  } catch (e) {
+    console.error(`SQL Error: ${sql}`);
+    throw e;
+  }
+}
+
+/**
+ * Pre-flight gates to ensure infrastructure is ready
+ * Returns useNewBench value based on agent benchmark format
+ */
+async function runPreFlightGates(config: { serverIp: string; dbPassword: string; sshUser: string }): Promise<{ useNewBench: number }> {
+  console.log("\n=== PRE-FLIGHT GATES ===\n");
+
+  // GATE A: Files exist in correct location
+  console.log("GATE A: Checking files exist...");
+  const fileCheckCmd = `ssh -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "sudo docker exec hashtopolis-backend ls /usr/local/share/hashtopolis/files/"`;
+  const files = execSync(fileCheckCmd, { encoding: "utf-8", timeout: 30000 }).trim();
+  if (!files.includes("rockyou.txt") || !files.includes("OneRuleToRuleThemAll.rule")) {
+    throw new Error("GATE A FAILED: Files not found at /usr/local/share/hashtopolis/files/. Stage files first.");
+  }
+  console.log("  ✓ Files found");
+
+  // GATE B: File download test
+  console.log("GATE B: Testing file download...");
+  const token = execSQL(config, "SELECT token FROM Agent LIMIT 1");
+  if (!token) {
+    throw new Error("GATE B FAILED: No agents registered. Wait for agents to register.");
+  }
+  const downloadCmd = `ssh -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "curl -s -w '%{size_download}' -o /dev/null 'http://localhost:8080/getFile.php?file=1&token=${token}'"`;
+  const downloadSize = parseInt(execSync(downloadCmd, { encoding: "utf-8", timeout: 60000 }).trim());
+  if (downloadSize < 1000000) {
+    throw new Error(`GATE B FAILED: File download returned ${downloadSize} bytes. Expected ~139MB.`);
+  }
+  console.log(`  ✓ File download works (${(downloadSize / 1024 / 1024).toFixed(1)}MB)`);
+
+  // GATE C: Agents trusted
+  console.log("GATE C: Checking agent trust...");
+  const trustedCount = parseInt(execSQL(config, "SELECT COUNT(*) FROM Agent WHERE isActive=1 AND isTrusted=1"));
+  if (trustedCount < 1) {
+    throw new Error("GATE C FAILED: No trusted agents. Trust agents first.");
+  }
+  console.log(`  ✓ ${trustedCount} trusted agents`);
+
+  // GATE D: Files marked isSecret=1
+  console.log("GATE D: Checking file secrets...");
+  const secretFiles = parseInt(execSQL(config, "SELECT COUNT(*) FROM File WHERE isSecret=1 AND fileId IN (1,2)"));
+  if (secretFiles < 2) {
+    console.log("  Fixing: Setting isSecret=1 on files...");
+    execSQL(config, "UPDATE File SET isSecret=1 WHERE fileId IN (1,2)");
+  }
+  console.log("  ✓ Files marked as secret");
+
+  // GATE E: Detect benchmark format
+  console.log("GATE E: Detecting benchmark format...");
+  const benchmark = execSQL(config, "SELECT benchmark FROM Assignment LIMIT 1");
+  let useNewBench = 1; // Default to new format
+  if (benchmark && benchmark.includes(":")) {
+    useNewBench = 0; // OLD format (time:speed)
+    console.log(`  ✓ OLD benchmark format detected: ${benchmark} → useNewBench=0`);
+  } else if (benchmark) {
+    console.log(`  ✓ NEW benchmark format detected: ${benchmark} → useNewBench=1`);
+  } else {
+    console.log("  ⚠ No benchmarks yet, defaulting to useNewBench=1 (GPU)");
+  }
+
+  console.log("\n=== ALL GATES PASSED ===\n");
+  return { useNewBench };
+}
+
+/**
+ * Create task via database (bypasses broken API)
+ */
+async function createTaskViaDB(
+  config: { serverIp: string; dbPassword: string; sshUser: string },
+  params: {
+    name: string;
+    hashlistId: number;
+    attackCmd: string;
+    maxAgents: number;
+    priority: number;
+    fileIds: number[];
+    useNewBench?: number;
+  }
+): Promise<{ wrapperId: number; taskId: number }> {
+  const useNewBench = params.useNewBench ?? 1;
+
+  // 1. Create TaskWrapper (links hashlist to task)
+  const wrapperSQL = `INSERT INTO TaskWrapper (priority, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked, maxAgents) VALUES (${params.priority}, 0, ${params.hashlistId}, 1, '${params.name}', 0, 0, ${params.maxAgents})`;
+
+  execSQL(config, wrapperSQL);
+  const wrapperId = parseInt(execSQL(config, "SELECT MAX(taskWrapperId) FROM TaskWrapper"));
+
+  // 2. Create Task with ALL required fields
+  const taskSQL = `INSERT INTO Task (taskName, attackCmd, chunkTime, statusTimer, keyspace, keyspaceProgress, priority, maxAgents, color, isSmall, isCpuTask, useNewBench, skipKeyspace, crackerBinaryId, crackerBinaryTypeId, taskWrapperId, isArchived, notes, staticChunks, chunkSize, forcePipe, usePreprocessor, preprocessorCommand) VALUES ('${params.name}', '${params.attackCmd}', 600, 5, 0, 0, ${params.priority}, ${params.maxAgents}, NULL, 0, 0, ${useNewBench}, 0, 1, 1, ${wrapperId}, 0, '', 0, 0, 0, 0, '')`;
+
+  execSQL(config, taskSQL);
+  const taskId = parseInt(execSQL(config, "SELECT MAX(taskId) FROM Task"));
+
+  // 3. Link files to task
+  for (const fileId of params.fileIds) {
+    execSQL(config, `INSERT INTO FileTask (fileId, taskId) VALUES (${fileId}, ${taskId})`);
+  }
+
+  console.log(`    TaskWrapper ${wrapperId}, Task ${taskId} (useNewBench=${useNewBench})`);
+  return { wrapperId, taskId };
+}
 
 // =============================================================================
 // Hashcrack Client Import
@@ -161,7 +311,7 @@ async function submitBatches(options: {
     return;
   }
 
-  // Initialize Hashcrack client
+  // Initialize Hashcrack client (for hashlist creation - API works for this)
   const { HashtopolisClient, HASH_TYPES } = await getHashtopolisClient();
   const client = HashtopolisClient.fromEnv();
 
@@ -173,7 +323,14 @@ async function submitBatches(options: {
     process.exit(1);
   }
   console.log("Connected successfully");
-  console.log("");
+
+  // Get server config for database task creation (API createTask is broken)
+  console.log("Getting server config for database operations...");
+  const serverConfig = getServerConfig();
+  console.log(`Server: ${serverConfig.serverIp}`);
+
+  // Run pre-flight gates (MANDATORY)
+  const { useNewBench } = await runPreFlightGates(serverConfig);
 
   state.startCrack();
 
@@ -201,15 +358,17 @@ async function submitBatches(options: {
             hashes: subHashes,
           });
 
-          console.log(`  Created hashlist ${hashlistId}: ${hashlistName} (${subHashes.length} hashes)`);
+          console.log(`  Created hashlist ${hashlistId}: ${hashlistName} (${subHashes.length.toLocaleString()} hashes)`);
 
-          // Create task with maxAgents=1 for parallel rule attack
-          const taskId = await client.createTask({
+          // Create task via database (API createTask is broken in Hashtopolis 0.14.x)
+          const { taskId } = await createTaskViaDB(serverConfig, {
             name: `Crack-${hashlistName}`,
             hashlistId,
             attackCmd: DEFAULT_ATTACK_CMD,
             maxAgents: 1, // Force one agent per task for parallelization
             priority: 10,
+            fileIds: ATTACK_FILES,
+            useNewBench,
           });
 
           console.log(`  Created task ${taskId}`);
@@ -228,12 +387,15 @@ async function submitBatches(options: {
 
         console.log(`  Created hashlist ${hashlistId}: ${hashlistName}`);
 
-        const taskId = await client.createTask({
+        // Create task via database (API createTask is broken in Hashtopolis 0.14.x)
+        const { taskId } = await createTaskViaDB(serverConfig, {
           name: `Crack-${hashlistName}`,
           hashlistId,
           attackCmd: DEFAULT_ATTACK_CMD,
           maxAgents: workers > 1 ? 1 : 0, // Unlimited if single worker mode
           priority: 10,
+          fileIds: ATTACK_FILES,
+          useNewBench,
         });
 
         console.log(`  Created task ${taskId}`);
