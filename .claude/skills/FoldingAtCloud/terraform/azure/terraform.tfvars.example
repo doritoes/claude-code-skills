@@ -1,0 +1,29 @@
+# =============================================================================
+# Folding@Cloud Azure Configuration - CPU Workers
+# Copy to terraform.tfvars and fill in values
+# =============================================================================
+
+# Project Configuration
+project_name = "foldingcloud"
+environment  = "production"
+location     = "eastus"
+
+# Worker Configuration
+worker_count   = 5
+worker_vm_size = "Standard_D2s_v3"  # 2 vCPU, 8 GB RAM
+worker_disk_gb = 30
+
+# IMPORTANT: Never use spot instances for Folding@Home (WUs get abandoned on preemption)
+use_spot_instances = false
+spot_max_price     = -1  # Only used if use_spot_instances = true
+
+# SSH Configuration
+# NOTE: Azure requires RSA keys, ed25519 is not supported
+ssh_user       = "foldingadmin"
+ssh_public_key = "ssh-rsa AAAA... your-rsa-key-here"
+
+# Folding@Home Configuration (get from https://v8-4.foldingathome.org/)
+fah_account_token  = "your-account-token"
+fah_machine_prefix = "pai-fold"
+fah_team_id        = "245143"
+fah_passkey        = "your-passkey"

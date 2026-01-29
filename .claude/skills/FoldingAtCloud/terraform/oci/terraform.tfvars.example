@@ -1,0 +1,41 @@
+# =============================================================================
+# Folding@Cloud OCI Configuration - CPU Workers
+# Copy to terraform.tfvars and fill in values
+# =============================================================================
+
+# OCI Authentication (from ~/.oci/config or OCI Console)
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaa..."
+user_ocid        = "ocid1.user.oc1..aaaa..."
+fingerprint      = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+private_key_path = "~/.oci/oci_api_key.pem"
+oci_region       = "us-ashburn-1"
+
+# Compartment (leave empty to use tenancy root)
+compartment_ocid = ""
+
+# Project Configuration
+project_name = "foldingcloud"
+environment  = "production"
+
+# Network Configuration
+vcn_cidr    = "10.200.0.0/16"
+subnet_cidr = "10.200.1.0/24"
+
+# Worker Configuration
+worker_count     = 4
+worker_shape     = "VM.Standard.E4.Flex"  # AMD EPYC, flexible shape
+worker_ocpus     = 4                       # OCPUs per worker (2 vCPUs per OCPU)
+worker_memory_gb = 16                      # Memory per worker
+worker_disk_gb   = 50
+
+# IMPORTANT: Never use preemptible for Folding@Home (WUs get abandoned)
+use_preemptible = false
+
+# SSH Configuration
+ssh_user       = "ubuntu"
+ssh_public_key = "ssh-ed25519 AAAA... your-key-here"
+
+# Folding@Home Configuration (get from https://v8-4.foldingathome.org/)
+fah_account_token  = "your-account-token"
+fah_machine_prefix = "pai-fold-oci"
+fah_team_id        = "245143"

@@ -1,0 +1,111 @@
+#cloud-config
+# =============================================================================
+# Folding@Home Worker Cloud-Init
+# Ubuntu 24.04 LTS + FAH Client v8.5 + lufah
+# =============================================================================
+
+hostname: ${hostname}
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - python3
+  - python3-pip
+  - python3-venv
+  - curl
+  - wget
+  - jq
+
+write_files:
+  # FAH client configuration
+  - path: /etc/fah-client/config.xml
+    permissions: '0644'
+    content: |
+      <config>
+        <account-token v="${fah_account_token}"/>
+        <machine-name v="${machine_name}"/>
+        <cpus v="${cpu_count}"/>
+      </config>
+
+  # Graceful shutdown script
+  - path: /usr/local/bin/fah-graceful-stop
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Graceful FAH shutdown - finish current WU before stopping
+      set -e
+
+      echo "Sending finish command to FAH client..."
+      lufah finish || true
+
+      # Wait for paused state (max 30 minutes)
+      TIMEOUT=1800
+      ELAPSED=0
+      INTERVAL=30
+
+      while [ $ELAPSED -lt $TIMEOUT ]; do
+        STATE=$(lufah state 2>/dev/null | jq -r '.paused // false' || echo "unknown")
+        if [ "$STATE" = "true" ]; then
+          echo "FAH client paused, safe to shutdown"
+          exit 0
+        fi
+        echo "Waiting for WU to complete... ($ELAPSED/$TIMEOUT seconds)"
+        sleep $INTERVAL
+        ELAPSED=$((ELAPSED + INTERVAL))
+      done
+
+      echo "Timeout reached, forcing shutdown"
+      exit 0
+
+  # Health check script
+  - path: /usr/local/bin/fah-health-check
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Check FAH client health
+      if systemctl is-active --quiet fah-client; then
+        echo "healthy"
+        exit 0
+      else
+        echo "unhealthy"
+        exit 1
+      fi
+
+runcmd:
+  # Install FAH client v8.5.5 (latest)
+  - echo "Installing Folding@Home client v8.5.5..."
+  - wget -q -O /tmp/fah-client.deb https://download.foldingathome.org/releases/public/fah-client/debian-10-64bit/release/fah-client_8.5.5_amd64.deb
+  - apt install -y /tmp/fah-client.deb || apt install -y -f
+  - rm -f /tmp/fah-client.deb
+
+  # Install lufah for CLI control
+  - echo "Installing lufah CLI..."
+  - pip3 install --break-system-packages lufah
+
+  # Ensure config directory exists
+  - mkdir -p /etc/fah-client
+
+  # Start FAH client
+  - echo "Starting FAH client..."
+  - systemctl enable fah-client
+  - systemctl restart fah-client
+
+  # Wait for client to initialize
+  - sleep 15
+
+  # Configure CPU resources and start folding
+  - echo "Configuring CPU resources..."
+  - lufah -a / config cpus ${cpu_count} || true
+  - lufah fold || true
+
+  # Log success
+  - echo "Folding@Home worker ${hostname} initialized successfully"
+
+final_message: |
+  Folding@Home worker ready!
+  Machine: ${machine_name}
+  Team: ${fah_team_id}
+
+  Check status: lufah units
+  View logs: journalctl -u fah-client -f

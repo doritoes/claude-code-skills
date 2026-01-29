@@ -1,0 +1,33 @@
+# Terraform State (contains sensitive data)
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# Actual variable files (contain credentials)
+terraform.tfvars
+*.auto.tfvars
+
+# Environment files
+.env
+.env.local
+
+# Tool state files
+.budget-tracking.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+/tmp/
