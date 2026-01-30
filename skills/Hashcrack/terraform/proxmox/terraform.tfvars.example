@@ -1,23 +1,24 @@
 # =============================================================================
-# Hashcrack Proxmox Deployment Configuration
+# Hashcrack Proxmox Deployment Configuration - EXAMPLE
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
 # =============================================================================
 
 # =============================================================================
 # Proxmox Connection
 # =============================================================================
 
-proxmox_url      = "https://192.168.99.205:8006"
+proxmox_url      = "https://YOUR_PROXMOX_IP:8006"
 proxmox_user     = "root@pam"
-proxmox_password = "proxmox123"
+proxmox_password = "your-password-here"
 proxmox_insecure = true  # Allow self-signed certs (lab)
 
 # =============================================================================
 # Proxmox Resources
 # =============================================================================
 
-proxmox_node   = "proxmox-lab"      # Verified via API
-template_id    = 9000               # ubuntu-cloud-init template (created by terraform)
-create_template = true              # Create template if needed
+proxmox_node   = "your-node-name"     # Node name from Proxmox UI
+template_id    = 9000               # VM ID of Ubuntu 24.04 cloud-init template
 storage_name   = "local-lvm"        # Storage for VM disks
 network_bridge = "vmbr0"            # Network bridge
 
@@ -33,22 +34,26 @@ environment  = "lab"
 # =============================================================================
 
 server_vmid       = 200   # VM ID for server
-worker_vmid_start = 210   # Starting VM ID for workers
+worker_vmid_start = 210   # Starting VM ID for workers (210, 211, 212...)
 
 # =============================================================================
-# Server Configuration
+# Server Configuration (2 vCPU, 4GB RAM for orchestration)
 # =============================================================================
 
 server_cpus      = 2
 server_memory_mb = 4096   # 4 GB
-server_disk_gb   = 50
+server_disk_gb   = 250
 
 # =============================================================================
-# Worker Configuration (2 workers x 4 vCPU = 8 vCPU total)
+# Worker Configuration
 # =============================================================================
+# i7-10710U: 12 cores total, 32GB RAM
+# Reserved: 2 vCPU + 4GB for server
+# Available: 10 vCPU + 28GB for workers
+# Config: 2 workers x 2 vCPU = 4 vCPU (conservative start)
 
-worker_count     = 4
-worker_cpus      = 4
+worker_count     = 2
+worker_cpus      = 2
 worker_memory_mb = 4096   # 4 GB each
 worker_disk_gb   = 30
 
@@ -57,22 +62,21 @@ worker_disk_gb   = 30
 # =============================================================================
 
 hashtopolis_admin_user     = "hashcrack"
-hashtopolis_admin_password = "CHANGE_ME_secure_password"
-worker_voucher             = ""  # Auto-generate unique voucher per worker
+hashtopolis_admin_password = "CHANGE_ME"  # Simple password, no special chars
+worker_voucher             = "PAI_PROXMOX_WORKER"
 
 # =============================================================================
-# SSH Access (using your existing key)
+# SSH Access
 # =============================================================================
 
-ssh_public_key = "ssh-ed25519 AAAA... your-public-key"
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
 ssh_user       = "ubuntu"
 
 # =============================================================================
-# Network Configuration
+# Network Configuration (Static IPs)
 # =============================================================================
 
-network_gateway = "192.168.99.254"   # pfSense gateway
-network_prefix  = "192.168.99"
-use_dhcp        = true               # Use DHCP (recommended for short-lived VMs)
-server_ip       = "192.168.99.220/24"  # Only used if use_dhcp = false
-worker_ip_start = 221                  # Only used if use_dhcp = false
+network_gateway = "192.168.1.1"
+network_prefix  = "192.168.1"
+server_ip       = "192.168.1.220/24"
+worker_ip_start = 221   # Workers get .221, .222, etc.

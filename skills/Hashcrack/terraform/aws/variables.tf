@@ -53,7 +53,7 @@ variable "server_instance_type" {
 variable "server_disk_gb" {
   description = "Root volume size in GB for Hashtopolis server"
   type        = number
-  default     = 50
+  default     = 250
 }
 
 # =============================================================================
