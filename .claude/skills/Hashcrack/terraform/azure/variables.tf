@@ -33,7 +33,7 @@ variable "server_vm_size" {
 variable "server_disk_gb" {
   description = "Server OS disk size in GB"
   type        = number
-  default     = 50
+  default     = 250
 }
 
 # =============================================================================

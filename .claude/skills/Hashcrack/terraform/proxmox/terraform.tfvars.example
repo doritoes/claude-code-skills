@@ -42,7 +42,7 @@ worker_vmid_start = 210   # Starting VM ID for workers (210, 211, 212...)
 
 server_cpus      = 2
 server_memory_mb = 4096   # 4 GB
-server_disk_gb   = 50
+server_disk_gb   = 250
 
 # =============================================================================
 # Worker Configuration

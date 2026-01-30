@@ -39,7 +39,7 @@ environment  = "lab"
 server_shape     = "VM.Standard.E4.Flex"  # AMD EPYC, flexible OCPU/memory
 server_ocpus     = 2                      # 2 OCPUs (equivalent to 4 vCPUs)
 server_memory_gb = 8                      # 8 GB RAM
-server_disk_gb   = 50                     # 50 GB boot volume
+server_disk_gb   = 250                    # 250 GB boot volume for large hashlists
 
 # =============================================================================
 # Worker Configuration

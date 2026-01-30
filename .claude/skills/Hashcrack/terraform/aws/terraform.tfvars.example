@@ -9,7 +9,7 @@ environment  = "lab"
 
 # Server configuration
 server_instance_type = "t3.medium"
-server_disk_gb       = 50
+server_disk_gb       = 250
 
 # Worker configuration
 cpu_worker_count         = 4

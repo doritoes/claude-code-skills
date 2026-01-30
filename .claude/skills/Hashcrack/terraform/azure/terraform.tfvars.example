@@ -9,7 +9,7 @@ environment    = "lab"
 
 # Server configuration
 server_vm_size = "Standard_D2s_v3"  # 2 vCPU, 8 GB RAM
-server_disk_gb = 50
+server_disk_gb = 250
 
 # Worker configuration
 cpu_worker_count   = 2

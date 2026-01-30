@@ -104,7 +104,7 @@ variable "server_memory_mb" {
 variable "server_disk_gb" {
   description = "Disk size in GB for Hashtopolis server"
   type        = number
-  default     = 50
+  default     = 250
 }
 
 # =============================================================================

@@ -98,7 +98,7 @@ variable "server_memory_gb" {
 variable "server_disk_gb" {
   description = "Boot volume size in GB for Hashtopolis server"
   type        = number
-  default     = 50
+  default     = 250
 }
 
 # =============================================================================
