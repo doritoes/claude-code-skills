@@ -34,6 +34,17 @@ packages:
 
 # Write configuration files
 write_files:
+  # PHP custom configuration for large hashlists
+  - path: /opt/hashtopolis/custom.ini
+    permissions: '0644'
+    content: |
+      ; Hashtopolis PHP Configuration - Optimized for large hashlists
+      ; See: https://docs.hashtopolis.org/faq_tips/faq/
+      memory_limit = 1G
+      upload_max_filesize = 500M
+      post_max_size = 500M
+      max_execution_time = 300
+
   # Docker Compose for Hashtopolis
   - path: /opt/hashtopolis/docker-compose.yml
     permissions: '0644'
@@ -75,6 +86,7 @@ write_files:
             - files:/var/www/hashtopolis/files
             - import:/var/www/hashtopolis/import
             - log:/var/www/hashtopolis/log
+            - /opt/hashtopolis/custom.ini:/usr/local/etc/php/conf.d/custom.ini:ro
           depends_on:
             db:
               condition: service_healthy
