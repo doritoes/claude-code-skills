@@ -94,6 +94,38 @@ function execSQL(config: { serverIp: string; dbPassword: string; sshUser: string
 }
 
 /**
+ * CRITICAL: Check if a task with the given name already exists (prevents duplicate work!)
+ * Returns task ID if exists, null if not
+ */
+function checkTaskExists(config: { serverIp: string; dbPassword: string; sshUser: string }, taskName: string): number | null {
+  const result = execSQL(config, `SELECT taskId FROM Task WHERE taskName = '${taskName}' AND isArchived = 0 LIMIT 1`);
+  if (result && result.trim()) {
+    return parseInt(result.trim());
+  }
+  return null;
+}
+
+/**
+ * Check if any tasks for a batch already exist
+ * Returns array of existing part numbers
+ */
+function checkBatchExists(config: { serverIp: string; dbPassword: string; sshUser: string }, batchName: string): number[] {
+  const result = execSQL(config, `SELECT taskName FROM Task WHERE taskName LIKE 'Crack-HIBP-${batchName}%' AND isArchived = 0`);
+  if (!result || !result.trim()) {
+    return [];
+  }
+  // Extract part numbers from task names
+  const existingParts: number[] = [];
+  for (const line of result.split('\n')) {
+    const match = line.match(/-part(\d+)$/);
+    if (match) {
+      existingParts.push(parseInt(match[1]));
+    }
+  }
+  return existingParts;
+}
+
+/**
  * Pre-flight gates to ensure infrastructure is ready
  * Returns useNewBench value based on agent benchmark format
  */
@@ -286,6 +318,37 @@ async function loadBatches(batchNumber?: number): Promise<BatchFile[]> {
 }
 
 /**
+ * Calculate priority based on batch number.
+ * Older batches (lower numbers) get HIGHER priority to ensure they complete first.
+ * This prevents disk space issues from too many concurrent batches.
+ *
+ * Strategy: Use inverse batch number with high base
+ * - batch-0001: priority 999
+ * - batch-0100: priority 900
+ * - batch-1000: priority 1
+ * - batch-3000+: priority 1 (minimum)
+ *
+ * This scales to thousands of batches while maintaining relative order.
+ *
+ * CRITICAL: Minimum priority is 1, NOT 0!
+ * Hashtopolis uses priority=0 to indicate completed tasks.
+ * Using priority=0 for incomplete work is an ANTIPATTERN.
+ */
+function calculatePriority(batchNumber: number): number {
+  const maxPriority = 1000;
+  const calculated = maxPriority - batchNumber;
+  return Math.max(1, calculated); // Never go below 1 (0 = completed task indicator)
+}
+
+/**
+ * Extract batch number from batch name (e.g., "batch-0006" -> 6)
+ */
+function extractBatchNumber(batchName: string): number {
+  const match = batchName.match(/batch-(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+/**
  * Submit batches to Hashcrack
  */
 async function submitBatches(options: {
@@ -293,8 +356,9 @@ async function submitBatches(options: {
   all?: boolean;
   dryRun?: boolean;
   workers?: number;
+  priorityOverride?: number;
 } = {}): Promise<void> {
-  const { dryRun = false, workers = 1 } = options;
+  const { dryRun = false, workers = 1, priorityOverride } = options;
 
   const state = new StateManager(DATA_DIR);
   const pipelineState = state.load();
@@ -357,6 +421,19 @@ async function submitBatches(options: {
   for (const batch of batches) {
     console.log(`Submitting ${batch.name}...`);
 
+    // Calculate priority from batch number (older = higher priority)
+    const batchNum = extractBatchNumber(batch.name);
+    const priority = priorityOverride ?? calculatePriority(batchNum);
+    console.log(`  Batch ${batchNum} → Priority ${priority}`);
+
+    // CRITICAL: Check for existing tasks to prevent duplicate work
+    const existingParts = checkBatchExists(serverConfig, batch.name);
+    if (existingParts.length > 0) {
+      console.log(`  ⚠️  SKIPPING: Batch already has ${existingParts.length} existing tasks (parts: ${existingParts.join(', ')})`);
+      console.log(`     To resubmit, first archive existing tasks with: SafeArchiver.ts --batch ${batch.name}`);
+      continue;
+    }
+
     try {
       // For parallel rule attacks with multiple workers, split hashes
       if (workers > 1 && batch.hashes.length > workers) {
@@ -372,6 +449,13 @@ async function submitBatches(options: {
 
           const hashlistName = `HIBP-${batch.name}-part${i + 1}`;
 
+          // Double-check this specific task doesn't exist
+          const existingTaskId = checkTaskExists(serverConfig, `Crack-${hashlistName}`);
+          if (existingTaskId) {
+            console.log(`  ⚠️  SKIPPING part${i + 1}: Task ${existingTaskId} already exists`);
+            continue;
+          }
+
           const hashlistId = await client.createHashlist({
             name: hashlistName,
             hashTypeId: HASH_TYPE_SHA1,
@@ -381,23 +465,34 @@ async function submitBatches(options: {
           console.log(`  Created hashlist ${hashlistId}: ${hashlistName} (${subHashes.length.toLocaleString()} hashes)`);
 
           // Create task via database (API createTask is broken in Hashtopolis 0.14.x)
+          // CRITICAL: Both Task.priority AND TaskWrapper.priority must match
+          // Priority set in createTaskViaDB for both
           const { taskId } = await createTaskViaDB(serverConfig, {
             name: `Crack-${hashlistName}`,
             hashlistId,
             attackCmd: DEFAULT_ATTACK_CMD,
             maxAgents: 1, // Force one agent per task for parallelization
-            priority: 10,
+            priority, // Dynamic priority based on batch number
             fileIds: ATTACK_FILES,
             useNewBench,
           });
 
-          console.log(`  Created task ${taskId}`);
+          console.log(`  Created task ${taskId} (priority=${priority})`);
 
           state.addHashlist(hashlistId, taskId, subHashes.length);
         }
       } else {
         // Single hashlist for this batch
         const hashlistName = `HIBP-${batch.name}`;
+        const taskName = `Crack-${hashlistName}`;
+
+        // CRITICAL: Check for existing task to prevent duplicate work
+        const existingTaskId = checkTaskExists(serverConfig, taskName);
+        if (existingTaskId !== null) {
+          console.log(`  ⚠️  SKIPPING: Task "${taskName}" already exists (ID: ${existingTaskId})`);
+          console.log(`     To resubmit, first archive the existing task with: SafeArchiver.ts --task ${existingTaskId}`);
+          continue;
+        }
 
         const hashlistId = await client.createHashlist({
           name: hashlistName,
@@ -408,17 +503,20 @@ async function submitBatches(options: {
         console.log(`  Created hashlist ${hashlistId}: ${hashlistName}`);
 
         // Create task via database (API createTask is broken in Hashtopolis 0.14.x)
+        // CRITICAL: For rule attacks, ALWAYS set maxAgents=1
+        // Rule attacks can only effectively use 1 worker per task due to hashcat -s behavior
+        // See: Hashcrack/docs/PARALLELIZATION.md
         const { taskId } = await createTaskViaDB(serverConfig, {
-          name: `Crack-${hashlistName}`,
+          name: taskName,
           hashlistId,
           attackCmd: DEFAULT_ATTACK_CMD,
-          maxAgents: workers > 1 ? 1 : 0, // Unlimited if single worker mode
-          priority: 10,
+          maxAgents: 1, // Rule attacks: ALWAYS 1 worker per task (hashcat -s limitation)
+          priority, // Dynamic priority based on batch number
           fileIds: ATTACK_FILES,
           useNewBench,
         });
 
-        console.log(`  Created task ${taskId}`);
+        console.log(`  Created task ${taskId} (priority=${priority})`);
 
         state.addHashlist(hashlistId, taskId, batch.hashes.length);
       }
@@ -458,12 +556,18 @@ Usage:
   bun CrackSubmitter.ts --batch <n>        Submit specific batch number
   bun CrackSubmitter.ts --dry-run          Show what would be submitted
   bun CrackSubmitter.ts --workers <n>      Split across N parallel workers
+  bun CrackSubmitter.ts --priority <n>     Override auto-calculated priority
 
 Options:
   --all             Submit all available batches
   --batch <n>       Submit only batch number N
   --dry-run         Preview without submitting
   --workers <n>     Number of parallel workers (splits hashes)
+  --priority <n>    Override priority (default: auto-calculated from batch number)
+                    Higher priority = worked first. Older batches get higher priority.
+                    Auto-calculation: priority = 1000 - batch_number
+                    Example: batch-0006 gets priority 994, batch-0100 gets priority 900
+                    CRITICAL: Minimum priority is 1, NOT 0 (0 = completed task indicator)
 
 Input: ${CANDIDATES_DIR}/
 `);
@@ -475,6 +579,7 @@ Input: ${CANDIDATES_DIR}/
   let all = false;
   let dryRun = false;
   let workers = 1;
+  let priorityOverride: number | undefined;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -490,6 +595,9 @@ Input: ${CANDIDATES_DIR}/
       case "--workers":
         workers = parseInt(args[++i]) || 1;
         break;
+      case "--priority":
+        priorityOverride = parseInt(args[++i]);
+        break;
     }
   }
 
@@ -499,7 +607,7 @@ Input: ${CANDIDATES_DIR}/
   }
 
   try {
-    await submitBatches({ batchNumber, all, dryRun, workers });
+    await submitBatches({ batchNumber, all, dryRun, workers, priorityOverride });
   } catch (e) {
     console.error(`Error: ${(e as Error).message}`);
     process.exit(1);

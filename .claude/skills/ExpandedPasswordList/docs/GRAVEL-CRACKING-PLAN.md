@@ -3,7 +3,7 @@
 ## Objective
 Crack 1B+ GRAVEL hashes (HIBP minus rockyou matches) using rockyou+OneRuleToRuleThemAll, producing PEARLS (cracked passwords) and SAND (uncracked hard hashes).
 
-## Lesson Learned from First Attempt
+## Lessons Learned
 
 | Issue | Root Cause | Prevention |
 |-------|-----------|------------|
@@ -13,6 +13,7 @@ Crack 1B+ GRAVEL hashes (HIBP minus rockyou matches) using rockyou+OneRuleToRule
 | useNewBench wrong | Didn't check benchmark format | Auto-detect from Assignment table |
 | keyspace=1 | Agents couldn't measure due to missing files | Stage files first, test download |
 | Agents stuck | Direct DB manipulation caused state issues | Follow Hashcrack skill gates exactly |
+| **ENOMEM in filter** | completedPrefixes array grew to 1M strings (5MB+), O(n) includes checks, large countsBuffer (5MB) | Use 128KB bitmap file, reduce buffers, periodic state saves |
 
 ---
 
@@ -167,6 +168,24 @@ PHASE 3: Rule attack (rockyou + OneRule) - SLOW (optional)
 |------|--------|
 | `Tools/CrackSubmitter.ts` | Fixed attack command order, added database task creation |
 | `docs/GRAVEL-CRACKING-PLAN.md` | This document |
+
+## Memory-Efficient Filter
+
+The filter step (`SetDifference.ts --batched`) uses these memory optimizations:
+
+| Optimization | Before | After |
+|--------------|--------|-------|
+| Progress tracking | 5MB+ string array | 128KB bitmap file |
+| Completed prefix lookup | O(n) array.includes | O(1) bitmap lookup |
+| Counts buffer | 100K strings (~5MB) | 10K strings (~500KB) |
+| Candidate batch | 1M hashes (~40MB) | 500K hashes (~20MB) |
+| State saves | Per-prefix (JSON stringify 1M array) | Every 30 seconds |
+
+**Options to reduce memory further:**
+- `--no-counts` - Skip counts-index.txt (saves ~500KB buffer)
+- `--batch-size 250000` - Smaller output batches
+
+---
 
 ## Next Steps
 

@@ -6,6 +6,56 @@ This document captures critical lessons learned from the pipeline operation sess
 
 ---
 
+## GOLDEN RULES (Read First!)
+
+**These rules are non-negotiable. Violating them wastes money and time.**
+
+### 1. NEVER Manipulate Database Directly
+- **NO** direct Chunk state changes (state, progress, agentId)
+- **NO** direct Task keyspaceProgress updates
+- **IF STUCK:** Archive task, create NEW task via API
+- **Hashtopolis manages chunks. You don't.**
+
+### 2. ALWAYS Validate Before Acting
+- Check task names match hashlist names
+- Check all batch parts complete before archiving
+- Verify keyspace > 0 before assuming task is ready
+- Monitor frequently (30s intervals), not infrequently
+- **NEVER trust keyspaceProgress alone - ALWAYS check chunk states**
+- **Task is only complete when ALL chunks are state=4 (FINISHED) or state=9 (TRIMMED)**
+- **keyspaceProgress=keyspace does NOT mean task is done if chunks are still state=2**
+
+### 3. Archive Whole Batches, Not Individual Tasks
+- Wait for ALL 8 parts of a batch to reach 100%
+- **Wait for ALL chunks to finish (no state=2 chunks)**
+- Archive all 8 together in one operation
+- This maintains data integrity for research
+
+### 4. When Things Go Wrong
+- **DON'T** try to "fix" chunk/task state
+- **DO** archive the broken task
+- **DO** create a fresh replacement via API
+- **DO** document what went wrong in LESSONS-LEARNED.md
+
+### 5. Monitor Actively
+- Check PEARLS count every 30 seconds
+- Verify all 8 workers have active chunks
+- Watch for benchmarks completing (keyspace going from 0 to value)
+- Check server health (memory, disk) periodically
+
+### 6. Safeguards Must Be in Code, Not Just Docs
+- Claude ignores documentation when it thinks it knows better
+- Tools must ENFORCE rules automatically (validation, guards)
+- Don't expose dangerous capabilities (direct chunk manipulation)
+- Build tools that guide toward correct behavior, not just warn
+
+**Tool enforcement examples:**
+- CrackSubmitter: Validate task name matches hashlist (prevent mismatch)
+- SafeArchiver: Require ALL batch parts complete (prevent partial archive)
+- No tool should allow direct Chunk.state modification (prevent corruption)
+
+---
+
 ## Critical Errors Made (DO NOT REPEAT)
 
 ### 1. Archiving Without Validation
@@ -256,24 +306,21 @@ SELECT taskId, taskName, useNewBench FROM Task WHERE keyspace=0 AND useNewBench=
 UPDATE Task SET useNewBench=1 WHERE keyspace=0 AND useNewBench=0;
 ```
 
-### 17. Benchmark Format Mismatch Prevents Task Initialization (CRITICAL)
-**What happened:** 97 tasks stuck at keyspace=0 despite useNewBench=1 being set.
-**Root cause:** Agent benchmarks use OLD format (time:speed like "84480:6512.17") but tasks had useNewBench=1 (NEW format).
+### 17. Benchmark Format Must Match Agent Configuration
+**What happened:** 97 tasks stuck at keyspace=0 - benchmark mismatch suspected.
+**Root cause:** Initially thought agents used OLD format but they actually use NEW format (decimal speed).
 **Technical detail:** Hashtopolis benchmark formats:
 - OLD format: "time:speed" (e.g., "84480:6512.17") → useNewBench=0
-- NEW format: just speed number → useNewBench=1
-**Impact:** Tasks never get benchmarked, keyspace stays 0, no chunks created, no work done.
-**Prevention:** CrackSubmitter.ts GATE E checks existing benchmarks and sets useNewBench accordingly:
+- NEW format: decimal speed (e.g., "0.17302763622033") → useNewBench=1
+**Our agents use NEW format** - benchmarks show decimal values like "0.17302763622033".
+**Prevention:** Check existing benchmarks before creating tasks:
 ```sql
--- Check benchmark format before creating tasks
-SELECT benchmark FROM Assignment LIMIT 1;
--- If contains ":", use useNewBench=0 (OLD format)
--- Otherwise use useNewBench=1 (NEW format)
+-- Check benchmark format
+SELECT benchmark FROM Assignment LIMIT 3;
+-- Decimal values = NEW format → useNewBench=1
+-- "time:speed" values = OLD format → useNewBench=0
 ```
-**Fix for existing tasks:**
-```sql
-UPDATE Task SET useNewBench=0 WHERE isArchived=0 AND keyspace=0;
-```
+**Note:** The real issue with stuck tasks was chunk manipulation antipattern (see #21), not benchmark format.
 
 ### 18. Archive Validation Must Check keyspaceProgress > 0 (CRITICAL)
 **What happened:** After manually setting keyspace, archive check (keyspace>0) passed but tasks were never worked.
@@ -335,6 +382,187 @@ ssh ubuntu@SERVER "df -h / && free -h | head -2 && sudo docker ps --format 'tabl
 3. Check EC2 instance status checks
 4. If possible, check `/var/log/` for errors
 5. Document findings before remediation
+
+### 21. NEVER Manipulate Chunk State Directly (CRITICAL ANTIPATTERN)
+**What happened:** Reset stuck chunks by directly setting `state=0, progress=0` in database.
+**Root cause:** Thought direct DB manipulation would "fix" stuck chunks faster than proper methods.
+**Impact:**
+1. Chunks marked finished still had remaining keyspace uncovered
+2. Tasks showed progress but had no workable chunks
+3. Agents got "You are not assigned to this chunk" errors
+4. 12 tasks became permanently stuck - partial progress, no agents, no chunks
+5. Had to archive and recreate all affected tasks
+
+**Why direct manipulation fails:**
+- Hashtopolis manages chunk lifecycle internally
+- Marking a chunk "finished" doesn't create new chunks for remaining keyspace
+- Resetting chunk state breaks agent assignments
+- Progress values become inconsistent with actual work done
+
+**The ONLY correct approaches:**
+1. **Let it finish naturally** - Wait for agent timeout/completion
+2. **Archive and recreate** - Archive broken task, create NEW task for same hashlist
+3. **Use Hashtopolis UI** - Task reset/abort functions handle cleanup properly
+
+**Prevention:**
+```sql
+-- WRONG (ANTIPATTERN - causes stuck tasks!)
+UPDATE Chunk SET state=0, progress=0 WHERE ...
+UPDATE Chunk SET state=4, progress=checkpoint WHERE ...
+UPDATE Task SET keyspaceProgress = ... WHERE ...
+
+-- RIGHT: Archive broken task, create new one via API
+UPDATE Task SET isArchived=1 WHERE taskId=X;
+-- Then use API to create replacement task for same hashlist
+curl -X POST http://server/api/user.php -d '{
+  "section": "task",
+  "request": "createTask",
+  "hashlistId": <same_hashlist>,
+  ...
+}'
+```
+
+**Rule:** Hashtopolis manages chunks. Claude does NOT.
+
+### 22. Archive Whole Batches Together, Not Individual Tasks
+**What happened:** Archived 55 individual tasks as they hit 100%, regardless of batch completion.
+**Root cause:** Focused on task-level completion rather than batch-level integrity.
+**Impact:** Data inconsistency - some batch parts archived while others still in progress.
+**Prevention:** Wait for ALL parts of a batch to complete before archiving:
+```sql
+-- Check batch completion before archiving
+SELECT SUBSTRING_INDEX(taskName, '-part', 1) as batch,
+  COUNT(*) as total_parts,
+  SUM(CASE WHEN keyspaceProgress >= keyspace THEN 1 ELSE 0 END) as done_parts
+FROM Task
+WHERE isArchived = 0 AND keyspace > 0
+GROUP BY SUBSTRING_INDEX(taskName, '-part', 1)
+HAVING done_parts < total_parts;
+-- Only archive when done_parts = total_parts (all 8 parts complete)
+```
+**Archiving process:**
+1. Identify batches where ALL 8 parts are 100% complete
+2. Verify no active chunks on any part
+3. Archive all 8 parts together in single transaction
+
+### 23. Validate Task Name Matches Hashlist Name
+**What happened:** Task 376 named "Crack-HIBP-batch-0040-part6" was created with hashlist "HIBP-batch-0041-part1".
+**Root cause:** Task creation didn't validate that task name matches hashlist name.
+**Impact:**
+1. batch-0040-part6 hashlist was NEVER cracked (missing work)
+2. batch-0041-part1 was cracked twice (wasted GPU time)
+3. Data integrity compromised - can't trust task names for tracking
+
+**Prevention:** After batch submission, verify task names match hashlists:
+```sql
+-- Find mismatches (task name doesn't contain hashlist identifier)
+SELECT t.taskId, t.taskName, h.hashlistName
+FROM Task t
+JOIN TaskWrapper tw ON t.taskWrapperId = tw.taskWrapperId
+JOIN Hashlist h ON tw.hashlistId = h.hashlistId
+WHERE t.taskName NOT LIKE CONCAT('%', SUBSTRING_INDEX(h.hashlistName, '-', -2), '%');
+```
+**Add to CrackSubmitter.ts:** Validation that taskName contains hashlistName identifier.
+
+### 24. PHP Memory Limit Causes Server 500 Errors
+**What happened:** All agents getting HTTP 500 errors, server logs showed PHP memory exhaustion.
+**Root cause:** PHP memory_limit=256MB in hashtopolis-backend container, exhausted under load.
+**Impact:** Agents couldn't report progress, submit cracks, or get new work.
+**Resolution:** Increased PHP memory limit to 1GB and restarted container:
+```bash
+sudo docker exec -u root hashtopolis-backend bash -c \
+  'echo "memory_limit = 1024M" > /usr/local/etc/php/conf.d/memory.ini'
+sudo docker restart hashtopolis-backend
+```
+**Prevention:** Add PHP memory check to server health monitoring. Consider making this change permanent in Docker compose/Terraform.
+
+### 25. NEVER Archive Tasks With Active Chunks (CRITICAL)
+**What happened:** Archived batch-0047 (tasks 427-434) while agents still had dispatched chunks on them.
+**Root cause:** Checked that keyspaceProgress = keyspace (100%) but didn't verify no state=2 chunks.
+**Impact:** Agent 1 (hashcrack-gpu-worker-6) went stale - hasn't responded in 6+ minutes after its task was archived while it was working on it.
+**Why it happens:** Keyspace can show 100% complete while chunks are still in-flight being processed. The agent is still running hashcat on the chunk.
+**Prevention:** Before archiving, verify BOTH conditions:
+```sql
+-- Check 1: Task is 100% complete
+SELECT taskId, taskName FROM Task
+WHERE keyspaceProgress >= keyspace AND keyspace > 0;
+
+-- Check 2: NO active chunks for this task
+SELECT taskId, COUNT(*) as active_chunks FROM Chunk
+WHERE state = 2 AND taskId IN (<tasks_to_archive>)
+GROUP BY taskId;
+-- If ANY tasks have active_chunks > 0, DO NOT ARCHIVE THEM
+```
+**Rule:** Wait for all chunks to finish (state=4) before archiving. A task with state=2 chunks is still being worked.
+
+**Root cause of THIS incident:** SafeArchiver.ts already has this check (lines 173-176). But Claude bypassed it by calling the archive API directly via curl, ignoring the tool entirely.
+
+**Required behavior change:** NEVER call archive API directly. ALWAYS use `bun SafeArchiver.ts --batch <pattern>` which enforces all validations. No exceptions. If SafeArchiver blocks an archive, that's the tool doing its job.
+
+### 26. Archiving Does NOT Clear Agent Assignments (CRITICAL)
+**What happened:** Archived tasks 467-474 but their Assignment records remained. 8 agents were stuck trying to work on archived tasks.
+**Root cause:** The archive API only sets `isArchived=1` - it doesn't clear Assignment table entries.
+**Impact:** All 8 workers were idle despite 6 active tasks with work available.
+**Resolution:** Manually cleaned stale assignments:
+```sql
+DELETE FROM Assignment WHERE taskId IN (SELECT taskId FROM Task WHERE isArchived = 1);
+```
+**Prevention:** After archiving tasks, ALWAYS clean up stale assignments:
+```sql
+-- Add to archive process
+DELETE FROM Assignment WHERE taskId = <archived_task_id>;
+-- Or batch cleanup:
+DELETE FROM Assignment WHERE taskId IN (SELECT taskId FROM Task WHERE isArchived = 1);
+```
+**Required tool fix:** SafeArchiver.ts must delete Assignment entries after successful archive.
+
+### 27. NEVER Trust keyspaceProgress for Completion (CRITICAL)
+**What happened:** Announced "Task 482 complete at 100%!" based on keyspaceProgress = keyspace.
+**Reality:** Chunk 956 was still at state=2 (DISPATCHED) with only 0.08% progress on its portion.
+**Root cause:** keyspaceProgress shows how much keyspace is COVERED by chunks, not how much is FINISHED.
+**The difference:**
+- keyspaceProgress = sum of (skip + length) for all created chunks
+- Actual progress = chunks in state=4 (FINISHED) or state=9 (TRIMMED)
+- A chunk can cover keyspace (increasing keyspaceProgress) while still running (state=2)
+
+**CORRECT completion check:**
+```sql
+-- Task is complete ONLY when:
+-- 1. All chunks are FINISHED (state=4) or TRIMMED (state=9)
+-- 2. NO chunks are NEW (state=0), DISPATCHED (state=2), or ABORTED (state=6)
+SELECT t.taskId, t.taskName,
+  CASE WHEN NOT EXISTS(
+    SELECT 1 FROM Chunk c WHERE c.taskId=t.taskId AND c.state IN (0, 2, 6)
+  ) THEN 'COMPLETE' ELSE 'RUNNING' END as status
+FROM Task t WHERE t.taskId = <taskId>;
+```
+
+**WRONG completion check:**
+```sql
+-- This is MISLEADING - keyspaceProgress can equal keyspace while chunks still running!
+SELECT * FROM Task WHERE keyspaceProgress >= keyspace;
+```
+
+**Rule:** ALWAYS check chunk.state, NEVER trust keyspaceProgress alone.
+
+### 28. Archiving Requires BOTH Task.isArchived AND TaskWrapper.isArchived
+**What happened:** Archived tasks via `UPDATE Task SET isArchived=1` but they still appeared in UI.
+**Root cause:** Hashtopolis UI uses `TaskWrapper.isArchived` to filter the task list, not `Task.isArchived`.
+**The UI Archive button sets BOTH:**
+```sql
+UPDATE Task SET isArchived=1 WHERE taskId=X;
+UPDATE TaskWrapper SET isArchived=1 WHERE taskWrapperId=(SELECT taskWrapperId FROM Task WHERE taskId=X);
+```
+**My manual archiving only set Task.isArchived, leaving TaskWrapper.isArchived=0.**
+**Prevention:** Always update BOTH tables when archiving:
+```sql
+-- Correct archiving (both tables)
+UPDATE Task t
+JOIN TaskWrapper tw ON t.taskWrapperId = tw.taskWrapperId
+SET t.isArchived = 1, t.priority = 0, tw.isArchived = 1
+WHERE t.taskId = <taskId>;
+```
+**Required tool fix:** SafeArchiver.ts must set TaskWrapper.isArchived = 1.
 
 ---
 

@@ -264,45 +264,58 @@ async function collectResults(options: {
   writeFileSync(resolve(RESULTS_DIR, "passwords.txt"), passwords.join("\n") + "\n");
   console.log(`  passwords.txt: ${passwords.length} unique passwords`);
 
-  // Calculate hard passwords (uncracked) by comparing candidates to cracked
-  console.log("Extracting hard (uncracked) passwords...");
-  const crackedHashes = new Set(uniqueEntries.keys());
-  const hardHashes: string[] = [];
+  // Calculate hard passwords (SAND) - only for small datasets
+  // For large datasets (>100 batches), use SandCalculator.ts instead
+  let hardCount = 0;
 
-  // Read all candidate batches and find uncracked (supports .txt and .txt.gz)
   if (existsSync(CANDIDATES_DIR)) {
     const batchFiles = readdirSync(CANDIDATES_DIR)
       .filter((f) => f.startsWith("batch-") && (f.endsWith(".txt") || f.endsWith(".txt.gz")))
       .sort();
 
-    for (const batchFile of batchFiles) {
-      const batchPath = resolve(CANDIDATES_DIR, batchFile);
-      let content: string;
+    // Only do in-memory SAND calculation for small datasets
+    const MAX_BATCHES_IN_MEMORY = 100;
 
-      if (batchFile.endsWith(".gz")) {
-        const compressed = readFileSync(batchPath);
-        content = gunzipSync(compressed).toString("utf-8");
-      } else {
-        content = readFileSync(batchPath, "utf-8");
-      }
+    if (batchFiles.length <= MAX_BATCHES_IN_MEMORY) {
+      console.log("Extracting hard (uncracked) passwords...");
+      const crackedHashes = new Set(uniqueEntries.keys());
+      const hardHashes: string[] = [];
 
-      const hashes = content.trim().split("\n").filter((h) => h.length === 40);
+      for (const batchFile of batchFiles) {
+        const batchPath = resolve(CANDIDATES_DIR, batchFile);
+        let content: string;
 
-      for (const hash of hashes) {
-        if (!crackedHashes.has(hash)) {
-          hardHashes.push(hash);
+        if (batchFile.endsWith(".gz")) {
+          const compressed = readFileSync(batchPath);
+          content = gunzipSync(compressed).toString("utf-8");
+        } else {
+          content = readFileSync(batchPath, "utf-8");
+        }
+
+        const hashes = content.trim().split("\n").filter((h) => h.length === 40);
+
+        for (const hash of hashes) {
+          if (!crackedHashes.has(hash)) {
+            hardHashes.push(hash);
+          }
         }
       }
+
+      // Write hard passwords (uncracked SHA-1 hashes = SAND)
+      if (hardHashes.length > 0) {
+        writeFileSync(resolve(RESULTS_DIR, "uncracked.txt"), hardHashes.join("\n") + "\n");
+        console.log(`  uncracked.txt: ${hardHashes.length.toLocaleString()} hard hashes (SAND)`);
+      }
+
+      hardCount = hardHashes.length;
+    } else {
+      console.log("");
+      console.log(`  NOTE: ${batchFiles.length} GRAVEL batches detected (too large for in-memory SAND).`);
+      console.log(`  Run SandCalculator.ts separately for streaming SAND calculation:`);
+      console.log(`    bun Tools/SandCalculator.ts`);
+      console.log("");
     }
   }
-
-  // Write hard passwords (uncracked SHA-1 hashes = SAND)
-  if (hardHashes.length > 0) {
-    writeFileSync(resolve(RESULTS_DIR, "uncracked.txt"), hardHashes.join("\n") + "\n");
-    console.log(`  uncracked.txt: ${hardHashes.length.toLocaleString()} hard hashes (SAND)`);
-  }
-
-  const hardCount = hardHashes.length;
 
   // Update state
   state.updateResults(passwords.length, hardCount);

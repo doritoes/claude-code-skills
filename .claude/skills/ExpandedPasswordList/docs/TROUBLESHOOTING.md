@@ -133,6 +133,23 @@ DELETE FROM Assignment WHERE taskId IN (SELECT taskId FROM Task WHERE isArchived
 
 ## Priority Management (Critical for Queue Order)
 
+### Root Cause: CrackSubmitter Priority Calculation
+CrackSubmitter automatically calculates priority based on batch number:
+- **Formula:** `priority = 1000 - batch_number`
+- **Result:** Older batches (lower numbers) get HIGHER priority
+- **Example:** batch-0001 gets priority 999, batch-0100 gets priority 900
+
+This ensures oldest batches complete first, minimizing concurrent disk usage.
+Scales to 1000 batches before hitting minimum priority of 1.
+
+**CRITICAL:** Priority is NEVER set to 0 for incomplete work.
+Priority=0 is reserved for completed tasks (set by Hashtopolis automatically).
+
+**To override auto-calculation:**
+```bash
+bun CrackSubmitter.ts --batch 17 --workers 8 --priority 90
+```
+
 ### Problem: Lower Priority Tasks Being Worked First
 Agents may work on low-priority batches while high-priority batches sit idle. This wastes disk space and GPU time.
 
@@ -187,6 +204,17 @@ Agents will then pick up the highest-priority available work.
 - Continue descending by 10 for each new batch
 - This ensures older batches complete first, minimizing concurrent disk usage
 
+### Priority Reset on Completion (CRITICAL)
+**Hashtopolis automatically resets task priority to 0 when a task completes normally.**
+
+This means:
+1. You cannot rely on priority values to track which batch a completed task belonged to
+2. The `isArchived` flag we set manually does NOT affect the Hashtopolis web UI
+3. The web UI (tasks.php) shows all tasks - "archived" tasks still appear because UI uses priority=0 as completion indicator
+4. Priority is only useful for controlling work ORDER, not for historical tracking
+
+**Workaround:** Use task naming convention (`batch-00XX`) to identify batch membership, not priority values.
+
 ## Disk Space
 
 ### Server Disk
@@ -200,3 +228,46 @@ bun run Tools/WorkerCleanup.ts --status
 ```
 
 If workers show as unreachable via SSH but are active in Hashtopolis, they're working correctly - the SSH connectivity is a network topology issue (workers only accessible from within VPC).
+
+---
+
+## Outstanding Issues (TODO)
+
+### batch-0001: Archived Without Completion
+**Status:** UNRESOLVED
+**Date Identified:** 2026-01-30
+**Issue:** batch-0001 was archived while all 8 parts showed 0% progress. No work was ever done.
+**Impact:** ~500K hashes never cracked
+**Resolution:** Need to re-submit batch-0001 for cracking
+**Query to verify:**
+```sql
+SELECT taskName, ROUND(keyspaceProgress/keyspace*100,1) as pct
+FROM Task WHERE taskName LIKE '%batch-0001%';
+```
+
+### Task 173 (batch-0019-part4): Stuck at 51.9%
+**Status:** UNRESOLVED
+**Date Identified:** 2026-01-30
+**Issue:** Task has 6.9M remaining keyspace (7,449,755 to 14,344,384) but agents won't pick up work
+**Attempts made:**
+1. Fixed Task.priority and TaskWrapper.priority - priority keeps resetting
+2. Created manual chunk (317) for remaining keyspace - not picked up
+3. Cleared assignments - agents still won't take work
+**Root cause:** Unknown - Hashtopolis may think task is in bad state
+**Resolution:** May need to:
+1. Create NEW task for remaining hashes (extract uncracked from hashlist 157)
+2. Or recreate the entire task
+**Query to check:**
+```sql
+SELECT taskId, keyspace, keyspaceProgress, (keyspace-keyspaceProgress) as remaining
+FROM Task WHERE taskId=173;
+```
+
+### Task Stuck Not Getting Chunks (General)
+**Symptom:** Task has remaining keyspace, priority > 0, but no chunks created
+**Possible causes:**
+1. TaskWrapper.priority mismatched with Task.priority
+2. Task in bad state - may need recreation
+3. Chunks exist but overlap/coverage calculated incorrectly
+4. Priority keeps resetting to 0 due to Hashtopolis auto-complete logic
+**Resolution:** May need to recreate task entirely for remaining work

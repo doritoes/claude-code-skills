@@ -30,31 +30,57 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS analysis (future: improved ru
 
 | Trigger | Workflow |
 |---------|----------|
+| "monitor pipeline", "check health", "pipeline status" | `bun Tools/PipelineMonitor.ts` |
+| "archive batch", "archive task", "safe archive" | `bun Tools/SafeArchiver.ts --check` |
+| "submit batch", "start cracking" | `bun Tools/CrackSubmitter.ts --batch N` |
 | "download HIBP", "fetch ROCKS" | `Workflows/Download.md` |
 | "filter rockyou", "create GRAVEL" | `Workflows/Filter.md` |
 | "initial crack", "rockyou+rule" | `Workflows/Crack.md` |
 | "crack SAND", "systematic attack" | `Workflows/CrackingPipeline.md` |
 | "collect PEARLS", "get cracked" | `Workflows/Collect.md` |
 | "publish passwords", "push to github" | `Workflows/Publish.md` |
-| "pipeline status", "check progress" | `Workflows/Status.md` |
 | "create GLASS", "build UNOBTAINIUM", "optimize rules" | `Workflows/Optimize.md` |
 
 ## Quick Commands
 
 ```bash
+# ============================================================================
+# MONITORING & OPERATIONS (Use these FIRST for ongoing batches)
+# ============================================================================
+
+# Comprehensive pipeline health check (PREFERRED - reduces manual SQL)
+bun Tools/PipelineMonitor.ts              # Full health checks (20s wait for chunk check)
+bun Tools/PipelineMonitor.ts --quick      # Quick status only
+bun Tools/PipelineMonitor.ts --fix        # Auto-fix simple issues
+bun Tools/PipelineMonitor.ts --watch      # Continuous monitoring (60s interval)
+
+# Safe task archiving with full validation
+bun Tools/SafeArchiver.ts --check batch-0020     # Check batch before archiving
+bun Tools/SafeArchiver.ts --batch batch-0020 --dry-run  # Preview archive
+bun Tools/SafeArchiver.ts --batch batch-0020     # Archive batch
+bun Tools/SafeArchiver.ts --task 150             # Archive single task
+
+# ============================================================================
+# BATCH SUBMISSION
+# ============================================================================
+
+# Submit new batches for cracking
+bun Tools/CrackSubmitter.ts --batch 17 --workers 8   # Submit batch 17 with 8 workers
+bun Tools/CrackSubmitter.ts --batch 17 --workers 8 --priority 90  # Override priority
+
+# ============================================================================
+# INITIAL SETUP (Run once)
+# ============================================================================
+
 # Download HIBP (ROCKS) - batched storage recommended
 bun Tools/HibpDownloader.ts --batched --parallel 10
 
 # Filter to GRAVEL (preserves HIBP occurrence counts)
 bun Tools/SetDifference.ts --batched --compress
 
-# Initial crack (GRAVEL → SAND + PEARLS)
-bun Tools/CrackSubmitter.ts --all --workers 10
-
-# Systematic SAND cracking
-bun Tools/SandCracker.ts --list        # Show attack phases
-bun Tools/SandCracker.ts --all         # Run all phases
-bun Tools/SandCracker.ts --status      # Check progress
+# ============================================================================
+# RESULTS
+# ============================================================================
 
 # Collect results
 bun Tools/ResultCollector.ts
@@ -63,12 +89,6 @@ bun Tools/ResultCollector.ts
 bun Tools/PearlPrioritizer.ts          # Full prioritized list
 bun Tools/PearlPrioritizer.ts --top 10000   # Top 10K most common
 bun Tools/PearlPrioritizer.ts --analyze     # Count distribution
-
-# Future: Optimization pipeline (GLASS + UNOBTAINIUM)
-bun Tools/GlassExtractor.ts            # Extract base words from PEARLS
-bun Tools/RuleAnalyzer.ts              # Analyze OneRule effectiveness
-bun Tools/UnobtainiumBuilder.ts        # Generate optimized rule file
-bun Tools/BenchmarkRunner.ts           # Compare baseline vs enhanced
 ```
 
 ## Cracking Pipeline (SAND → PEARLS)

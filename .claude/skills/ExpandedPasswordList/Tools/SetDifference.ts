@@ -9,13 +9,14 @@
  * @license MIT
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, appendFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, appendFileSync, createWriteStream } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { StateManager } from "./StateManager";
 import { RockyouHashIndex } from "./RockyouHasher";
 import { HibpBatchManager } from "./HibpBatchManager";
+import { PrefixBitmap } from "./PrefixBitmap";
 
 // =============================================================================
 // Configuration
@@ -315,7 +316,11 @@ function* generateAllPrefixes(): Generator<string> {
  * Filter all prefixes from batched storage with optional compression
  * Writes both hash batches and a counts index for prioritization
  *
- * MEMORY EFFICIENT: Processes one HIBP batch (4096 prefixes) at a time
+ * MEMORY EFFICIENT:
+ * - Uses bitmap file for progress tracking (128KB vs 5MB+ array)
+ * - Processes one HIBP batch (4096 prefixes) at a time
+ * - Streams counts directly to disk with small buffer
+ * - Reduces candidate batch size to limit memory
  */
 async function filterAllBatched(options: {
   batchSize?: number;
@@ -351,49 +356,68 @@ async function filterAllBatched(options: {
     console.warn("Warning: Download stage not complete");
   }
 
-  // Get already completed prefixes (without loading all batches)
-  const completed = new Set(
-    resume ? pipelineState.filter.completedPrefixes : []
-  );
+  // Use bitmap file for progress tracking (128KB vs 5MB+ string array)
+  const bitmapPath = resolve(DATA_DIR, "filter-progress.bitmap");
+  const progressBitmap = new PrefixBitmap(bitmapPath);
+
+  // If not resuming, reset the bitmap
+  if (!resume) {
+    progressBitmap.reset();
+  }
 
   // Total prefixes is known: 1,048,576 (00000-FFFFF)
   const TOTAL_PREFIXES = 1048576;
-  const pendingCount = TOTAL_PREFIXES - completed.size;
+  const completedCount = progressBitmap.count();
+  const pendingCount = TOTAL_PREFIXES - completedCount;
 
   console.log("");
   console.log("SetDifference Filter (Batched - Memory Efficient)");
   console.log("=================================================");
   console.log(`HIBP prefixes: ${TOTAL_PREFIXES.toLocaleString()}`);
-  console.log(`Already filtered: ${completed.size.toLocaleString()}`);
+  console.log(`Already filtered: ${completedCount.toLocaleString()}`);
   console.log(`Remaining: ${pendingCount.toLocaleString()}`);
   console.log(`Batch size: ${batchSize.toLocaleString()} hashes`);
   console.log(`Compression: ${compress}`);
+  console.log(`Progress tracking: bitmap file (128KB)`);
   console.log("");
 
   if (pendingCount === 0) {
     console.log("All prefixes already filtered!");
+    progressBitmap.close();
     return;
   }
 
   state.startFilter();
 
   let processed = 0;
-  let totalRockyouMatches = 0;
-  let totalCandidates = 0;
+  let totalRockyouMatches = pipelineState.filter.rockyouMatches || 0;
+  let totalCandidates = pipelineState.filter.candidates || 0;
   const startTime = Date.now();
   let lastReport = startTime;
+  let lastStateSave = startTime;
 
-  // Current batch buffer
+  // Current batch buffer - reduced from 1M to 500K to save memory
+  const EFFECTIVE_BATCH_SIZE = Math.min(batchSize, 500000);
   let currentBatch: string[] = [];
   let batchNumber = pipelineState.filter.batchesWritten;
 
-  // Counts index: HASH:COUNT for all candidates (for PEARLS prioritization)
-  // Use append mode to support resume
+  // Counts index: stream directly to file with small buffer
   const countsIndexPath = resolve(CANDIDATES_DIR, "counts-index.txt");
-  let countsFileHandle: Bun.FileSink | null = null;
+  let countsStream: ReturnType<typeof createWriteStream> | null = null;
   if (withCounts) {
-    countsFileHandle = Bun.file(countsIndexPath).writer();
+    countsStream = createWriteStream(countsIndexPath, { flags: "a" });
   }
+
+  // Small buffer for counts (10K instead of 100K to reduce memory)
+  let countsBuffer: string[] = [];
+  const COUNTS_FLUSH_SIZE = 10000;
+
+  const flushCountsBuffer = () => {
+    if (countsBuffer.length > 0 && countsStream) {
+      countsStream.write(countsBuffer.join("\n") + "\n");
+      countsBuffer = [];
+    }
+  };
 
   // Helper to flush batch to disk (with optional compression)
   const flushBatch = () => {
@@ -435,14 +459,9 @@ async function filterAllBatched(options: {
     const hibpBatch = batchManager.loadBatch(hibpBatchId);
     const prefixesInBatch = Object.keys(hibpBatch.entries).sort();
 
-    // Buffer for counts to write in bulk (reduces network I/O)
-    // Large buffer (100K) reduces write calls over network drives
-    let countsBuffer: string[] = [];
-    const COUNTS_FLUSH_SIZE = 100000;
-
     for (const prefix of prefixesInBatch) {
-      // Skip already completed
-      if (completed.has(prefix)) {
+      // Skip already completed (O(1) bitmap lookup vs O(n) array includes)
+      if (progressBitmap.has(prefix)) {
         continue;
       }
 
@@ -469,17 +488,16 @@ async function filterAllBatched(options: {
             candidates++;
             currentBatch.push(fullHash);
 
-            // Buffer counts for batch write
+            // Buffer counts for batch write (smaller buffer now)
             if (withCounts) {
               countsBuffer.push(`${fullHash}:${count}`);
               if (countsBuffer.length >= COUNTS_FLUSH_SIZE) {
-                countsFileHandle?.write(countsBuffer.join("\n") + "\n");
-                countsBuffer = [];
+                flushCountsBuffer();
               }
             }
 
-            // Flush candidate batch if full
-            if (currentBatch.length >= batchSize) {
+            // Flush candidate batch if full (reduced size)
+            if (currentBatch.length >= EFFECTIVE_BATCH_SIZE) {
               flushBatch();
             }
           }
@@ -489,7 +507,8 @@ async function filterAllBatched(options: {
         totalRockyouMatches += rockyouMatches;
         totalCandidates += candidates;
 
-        state.addFilteredPrefix(prefix, rockyouMatches, candidates);
+        // Mark prefix as completed in bitmap (O(1) operation)
+        progressBitmap.set(prefix);
 
         // Progress report
         const now = Date.now();
@@ -511,31 +530,44 @@ async function filterAllBatched(options: {
           );
           lastReport = now;
         }
+
+        // Save state periodically (every 30 seconds) instead of per-prefix
+        if (now - lastStateSave > 30000) {
+          pipelineState.filter.rockyouMatches = totalRockyouMatches;
+          pipelineState.filter.candidates = totalCandidates;
+          state.save();
+          lastStateSave = now;
+        }
       } catch (e) {
         console.error(`Error processing prefix ${prefix}: ${e}`);
       }
     }
 
-    // Flush remaining counts buffer for this HIBP batch
-    if (countsBuffer.length > 0 && countsFileHandle) {
-      countsFileHandle.write(countsBuffer.join("\n") + "\n");
-      countsBuffer = [];
-    }
+    // Flush counts buffer after each HIBP batch
+    flushCountsBuffer();
 
-    // Clear the batch from memory explicitly
-    // (batchManager goes out of scope, but help GC)
+    // Explicitly release HIBP batch memory
+    // @ts-ignore - help GC
+    hibpBatch.entries = null;
   }
 
   // Flush remaining candidate batch
   flushBatch();
 
-  // Close counts index file
-  if (countsFileHandle) {
-    countsFileHandle.end();
+  // Close counts stream
+  if (countsStream) {
+    flushCountsBuffer();
+    countsStream.end();
     console.log(`  Wrote counts index: ${countsIndexPath}`);
   }
 
+  // Save final state
+  pipelineState.filter.rockyouMatches = totalRockyouMatches;
+  pipelineState.filter.candidates = totalCandidates;
   state.completeFilter();
+
+  // Close bitmap
+  progressBitmap.close();
 
   // Summary
   const totalTime = (Date.now() - startTime) / 1000;
@@ -612,6 +644,7 @@ Options:
   --no-resume         Start fresh, ignore previous progress
   --batched           Read from batched HIBP storage (use with --batched download)
   --compress          Compress output batches with gzip
+  --no-counts         Skip writing counts-index.txt (saves memory)
 
 Input Modes:
   Default:  Individual files from ${HIBP_DIR}/
@@ -628,6 +661,7 @@ Output: ${CANDIDATES_DIR}/
   let resume = true;
   let batched = false;
   let compress = false;
+  let withCounts = true;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -646,6 +680,9 @@ Output: ${CANDIDATES_DIR}/
       case "--compress":
         compress = true;
         break;
+      case "--no-counts":
+        withCounts = false;
+        break;
     }
   }
 
@@ -653,7 +690,7 @@ Output: ${CANDIDATES_DIR}/
     if (prefix) {
       await filterSingle(prefix);
     } else if (batched) {
-      await filterAllBatched({ batchSize, resume, compress });
+      await filterAllBatched({ batchSize, resume, compress, withCounts });
     } else {
       await filterAll({ batchSize, resume });
     }

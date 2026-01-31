@@ -42,6 +42,7 @@ interface TaskValidation {
   finishedChunks: number;
   maxCoverage: number;
   cracked: number;
+  assignedAgents: number;
   isValid: boolean;
   issues: string[];
 }
@@ -67,7 +68,7 @@ function getServerConfig(): ServerConfig {
     return { serverIp, dbPassword, sshUser: "ubuntu" };
   } catch (e) {
     return {
-      serverIp: "16.147.88.9",
+      serverIp: "16.146.72.52",
       dbPassword: "NJyf6IviJRC1jYQ0u57tRuCm",
       sshUser: "ubuntu"
     };
@@ -131,6 +132,12 @@ function validateTask(config: ServerConfig, taskId: number): TaskValidation {
 
   const [active, aborted, finished, maxCoverage] = chunkResult.split("\t");
 
+  // Get assigned agents count
+  const agentResult = execSQL(config, `
+    SELECT COUNT(*) FROM Assignment WHERE taskId = ${taskId}
+  `);
+  const assignedAgents = parseInt(agentResult) || 0;
+
   const validation: TaskValidation = {
     taskId: parseInt(tid),
     taskName,
@@ -141,6 +148,7 @@ function validateTask(config: ServerConfig, taskId: number): TaskValidation {
     finishedChunks: parseInt(finished) || 0,
     maxCoverage: parseInt(maxCoverage) || 0,
     cracked: parseInt(cracked) || 0,
+    assignedAgents,
     isValid: true,
     issues: []
   };
@@ -173,6 +181,12 @@ function validateTask(config: ServerConfig, taskId: number): TaskValidation {
   if (validation.activeChunks > 0) {
     validation.isValid = false;
     validation.issues.push(`${validation.activeChunks} active/pending chunks still running`);
+  }
+
+  // CRITICAL: Don't archive if agents are assigned - trust the agent, not the stats
+  if (validation.assignedAgents > 0) {
+    validation.isValid = false;
+    validation.issues.push(`${validation.assignedAgents} agent(s) still assigned - wait for them to release`);
   }
 
   if (validation.abortedChunks > 0) {
@@ -249,8 +263,16 @@ async function archiveTask(config: ServerConfig, taskId: number, dryRun: boolean
   console.log(`  ✓ Safe to archive`);
 
   if (!dryRun) {
-    execSQL(config, `UPDATE Task SET isArchived=1, priority=0 WHERE taskId=${taskId}`);
-    console.log(`  ✓ Archived`);
+    // Archive BOTH Task AND TaskWrapper (UI uses TaskWrapper.isArchived for filtering)
+    execSQL(config, `
+      UPDATE Task t
+      JOIN TaskWrapper tw ON t.taskWrapperId = tw.taskWrapperId
+      SET t.isArchived = 1, t.priority = 0, tw.isArchived = 1
+      WHERE t.taskId = ${taskId}
+    `);
+    // CRITICAL: Clean up agent assignments to prevent idle workers
+    execSQL(config, `DELETE FROM Assignment WHERE taskId=${taskId}`);
+    console.log(`  ✓ Archived (Task + TaskWrapper + cleared assignments)`);
   } else {
     console.log(`  (dry-run - not archived)`);
   }
