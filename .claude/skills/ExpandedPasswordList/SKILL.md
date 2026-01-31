@@ -12,11 +12,21 @@ Automated pipeline to extract real breach passwords from HIBP Pwned Passwords th
 ```
 ROCKS       →  Full HIBP Pwned Passwords (~1B SHA-1 hashes)
 GRAVEL      →  ROCKS minus rockyou.txt matches (~985M hashes)
-SAND        →  GRAVEL minus rockyou+OneRule cracked (hard passwords)
-PEARLS      →  Cracked cleartext passwords (valuable output)
-GLASS       →  Base words extracted from PEARLS (future: optimized wordlist)
-UNOBTAINIUM →  Enhanced rule derived from PEARLS analysis (future: improved rule)
+                │
+                ├──► PEARLS   →  Stage 1 cracked (rockyou+OneRule)
+                │
+                └──► SAND     →  Stage 1 uncracked (hard passwords)
+                                  │
+                                  ├──► DIAMONDS  →  Stage 2+ cracked (escalating attacks)
+                                  │
+                                  └──► GLASS     →  Uncrackable (requires HIBP cleartext/rainbow)
+
+UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 ```
+
+**Per-batch invariants:**
+- `GRAVEL[N] = PEARLS[N] + SAND[N]`
+- `SAND[N] = DIAMONDS[N] + GLASS[N]`
 
 ## Value Proposition
 
@@ -126,8 +136,68 @@ bun Tools/PearlPrioritizer.ts --analyze     # Count distribution
 - GLASS (future): `data/wordlists/glass.txt`
 - UNOBTAINIUM (future): `data/rules/unobtainium.rule`
 
+## Generational Password Analysis
+
+### The Rockyou Time Capsule Problem
+
+Rockyou was leaked in **December 2009**, creating a 15+ year blind spot for modern passwords.
+
+| Generation | Birth Years | Password Creation | Rockyou Coverage |
+|------------|-------------|-------------------|------------------|
+| **Boomers** | 1946-1964 | 1990s-2000s | ✓ Good |
+| **GenX** | 1965-1980 | 1990s-2000s | ✓ Good |
+| **Millennials** | 1981-1996 | 2000s-2010s | ⚠ Partial |
+| **GenZ** | 1997-2012 | 2010s-2020s | ✗ **Critical Gap** |
+| **GenAlpha** | 2013+ | 2020s+ | ✗ None |
+
+### What's Missing from Rockyou
+
+| Category | Examples NOT in Rockyou |
+|----------|------------------------|
+| **Gaming (2010+)** | minecraft, fortnite, roblox, valorant, genshin, amongus |
+| **Streaming** | netflix, tiktok, twitch, discord, spotify |
+| **2010s Movies** | thanos, endgame, wakanda, mandalorian, grogu, squidgame |
+| **2010s Music** | billie eilish, bts, olivia rodrigo, doja cat |
+| **GenZ Slang** | yeet, bussin, slay, goated, nocap, frfr, deadass |
+| **Memes** | stonks, poggers, based, ratio, sheesh |
+| **Crypto/Tech** | bitcoin, ethereum, hodl, nft, metaverse |
+| **COVID Era** | quarantine, lockdown, zoom, vaccine |
+
+### Supplementary Attack Files
+
+| File | Purpose | Size |
+|------|---------|------|
+| `data/GenZ.rule` | Modern password patterns (year suffixes, emphasis, symbols) | ~150 rules |
+| `data/genz-wordlist.txt` | Cultural references missing from rockyou | ~1,400 words |
+
+### Recommended Attack Strategy for Recent Hashes
+
+```bash
+# Phase 1: Standard (existing)
+rockyou.txt + OneRuleToRuleThemAll.rule
+
+# Phase 2: New words, proven rules
+genz-wordlist.txt + OneRuleToRuleThemAll.rule
+
+# Phase 3: Old words, new patterns
+rockyou.txt + GenZ.rule
+
+# Phase 4: New words, new patterns
+genz-wordlist.txt + GenZ.rule
+```
+
+### Key GenZ Password Patterns
+
+1. **Modern year suffixes**: `2020`, `2021`, `2022`, `2023`, `2024`, `2025`
+2. **Birth years**: `1997`-`2012` (GenZ birth range)
+3. **Emphasis stretching**: `yesss`, `nooo`, `bruhhhh`
+4. **All lowercase + numbers**: `fortnite123`, `minecraft420`
+5. **Text emoticons**: `:)`, `<3`, `:3`, `uwu`, `owo`
+6. **Slang suffixes**: `-z` plurals (boyz), dropped `g` (vibin)
+
 ## Full Documentation
 
 - Architecture: `Architecture.md`
 - Cracking Pipeline: `Workflows/CrackingPipeline.md`
+- Generational Analysis: See above + `data/GenZ.rule` comments
 - Setup: `SETUP.md`
