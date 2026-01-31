@@ -6,10 +6,45 @@
 |------|------------|---------------|
 | **ROCKS** | Full HIBP Pwned Passwords | ~1B SHA-1 hashes |
 | **GRAVEL** | ROCKS minus rockyou.txt matches | ~985M hashes |
-| **SAND** | GRAVEL minus rockyou+OneRule cracked | ~700M hashes |
-| **PEARLS** | Cracked cleartext passwords | Valuable output |
-| **GLASS** | Base words extracted from PEARLS | Optimized wordlist |
-| **UNOBTAINIUM** | Enhanced rule derived from OneRule + PEARLS analysis | Improved rule file |
+| **PEARLS** | Cracked passwords (Stage 1: rockyou+OneRule) | ~150M passwords |
+| **SAND** | GRAVEL minus PEARLS (uncracked after Stage 1) | ~835M hashes |
+| **DIAMONDS** | Cracked passwords from SAND (Stage 2+: escalating attacks) | ~100M passwords |
+| **GLASS** | SAND minus DIAMONDS (uncrackable via rules) | ~735M hashes |
+| **UNOBTAINIUM** | Enhanced rule derived from PEARLS+DIAMONDS analysis | Improved rule file |
+
+### Material Flow
+
+```
+ROCKS (1B) ──filter──► GRAVEL (985M)
+                           │
+                           ▼ Stage 1: rockyou+OneRule
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+         PEARLS (150M)              SAND (835M)
+              │                         │
+              │                         ▼ Stage 2+: Escalating attacks
+              │                         │    (best64, dive, hybrid, mask,
+              │                         │     combinator, prince, markov)
+              │            ┌────────────┴────────────┐
+              │            ▼                         ▼
+              │       DIAMONDS (100M)           GLASS (735M)
+              │            │                         │
+              ▼            ▼                         ▼
+         ┌──────────────────────┐         ┌──────────────────────┐
+         │   CRACKED WORDLIST   │         │   AUDIT-WORTHY       │
+         │  PEARLS + DIAMONDS   │         │   Requires HIBP      │
+         │  → GitHub release    │         │   cleartext lookup   │
+         └──────────────────────┘         │   or rainbow tables  │
+                                          └──────────────────────┘
+```
+
+### Per-Batch Relationship
+
+For each batch N:
+- `GRAVEL[N] = PEARLS[N] + SAND[N]`
+- `SAND[N] = DIAMONDS[N] + GLASS[N]`
+- Every hash appears in exactly one output category
 
 ## HIBP Occurrence Counts
 
@@ -38,6 +73,63 @@ bun Tools/PearlPrioritizer.ts --analyze
 
 # Top 10K most common passwords
 bun Tools/PearlPrioritizer.ts --top 10000
+```
+
+## Per-Batch Data Model (CRITICAL)
+
+Each GRAVEL batch flows through multiple cracking stages:
+
+```
+candidates/batch-0001.txt (GRAVEL)
+        │
+        ▼ Stage 1: rockyou+OneRule
+        │
+        ├──► pearls/batch-0001.txt (cracked passwords)
+        │
+        └──► sand/batch-0001.txt (uncracked hashes)
+                  │
+                  ▼ Stage 2+: Escalating attacks
+                  │
+                  ├──► diamonds/batch-0001.txt (cracked passwords)
+                  │
+                  └──► glass/batch-0001.txt (uncrackable hashes)
+```
+
+**Invariants:** For any batch N:
+- `GRAVEL[N] = PEARLS[N] + SAND[N]`
+- `SAND[N] = DIAMONDS[N] + GLASS[N]`
+- Every hash appears in exactly one final category
+
+**Directory Structure:**
+```
+data/
+├── candidates/          # GRAVEL batches (Stage 1 input)
+│   ├── batch-0001.txt   # ~1M SHA-1 hashes per file
+│   ├── batch-0002.txt
+│   └── ...
+├── pearls/              # Stage 1 cracked (rockyou+OneRule)
+│   ├── batch-0001.txt   # HASH:PASSWORD pairs
+│   └── ...
+├── sand/                # Stage 1 uncracked (Stage 2 input)
+│   ├── batch-0001.txt   # SHA-1 hashes
+│   └── ...
+├── diamonds/            # Stage 2+ cracked (escalating attacks)
+│   ├── batch-0001.txt   # HASH:PASSWORD pairs
+│   └── ...
+├── glass/               # Uncrackable (requires HIBP cleartext/rainbow)
+│   ├── batch-0001.txt   # SHA-1 hashes
+│   └── ...
+└── results/             # Aggregated results
+    ├── cracked.txt      # All PEARLS combined
+    ├── diamonds.txt     # All DIAMONDS combined
+    ├── passwords.txt    # Unique passwords (PEARLS + DIAMONDS)
+    └── glass.txt        # All GLASS combined (audit-worthy)
+```
+
+**Tool: BatchSplitter.ts**
+After cracking, split combined results back into per-batch files:
+```bash
+bun Tools/BatchSplitter.ts   # Creates pearls/ and sand/ directories
 ```
 
 ## Data Flow
@@ -71,9 +163,15 @@ bun Tools/PearlPrioritizer.ts --top 10000
                     ▼                               ▼
        ┌─────────────────────┐         ┌─────────────────────┐
        │       PEARLS        │         │        SAND         │
-       │  Cracked passwords  │         │  Hard passwords     │
-       │  → custom wordlist  │         │  (~700M hashes)     │
+       │  Stage 1 cracked    │         │  Stage 1 uncracked  │
+       │  pearls/batch-*.txt │         │  sand/batch-*.txt   │
        └─────────────────────┘         └─────────────────────┘
+                    │                               │
+                    │                               ▼
+                    │              ┌─────────────────────────────────┐
+                    │              │      STAGE 2+ ESCALATING        │
+                    │              │     (all attacks on SAND)       │
+                    │              └─────────────────────────────────┘
                     │                               │
                     │         ┌─────────────────────┤
                     │         ▼                     ▼
@@ -100,17 +198,53 @@ bun Tools/PearlPrioritizer.ts --top 10000
                     │  │     1-8+ chars incremental         │
                     │  └─────────────────────────────────────┘
                     │                     │
-                    │◄────────────────────┘
-                    │        Feedback loop
-                    ▼
+                    │     ┌───────────────┴───────────────┐
+                    │     ▼                               ▼
+                    │  ┌─────────────┐         ┌─────────────────────┐
+                    │  │  DIAMONDS   │         │       GLASS         │
+                    │  │  Stage 2+   │         │  Uncrackable via    │
+                    │  │  cracked    │         │  rules - requires   │
+                    │  │  passwords  │         │  HIBP cleartext or  │
+                    │  │             │         │  rainbow tables     │
+                    │  └─────────────┘         └─────────────────────┘
+                    │         │                         │
+                    └─────────┤                         │
+                              ▼                         ▼
        ┌─────────────────────────────────────────────────────────────┐
        │                     FINAL OUTPUT                            │
        ├─────────────────────────────────────────────────────────────┤
-       │  pearls.txt        All cracked passwords (→ GitHub repo)   │
-       │  sand-remaining.txt  Uncracked hashes (audit-worthy)       │
-       │  markov-pearls.hcstat2  Trained Markov model               │
+       │  passwords.txt      PEARLS + DIAMONDS (→ GitHub release)   │
+       │  glass.txt          Audit-worthy hashes (survive all)      │
+       │  markov.hcstat2     Trained Markov model from passwords    │
        └─────────────────────────────────────────────────────────────┘
 ```
+
+## Escalating Attack Stages (Stage 2+)
+
+After Stage 1 (rockyou+OneRule), SAND contains hard passwords that require escalating attacks:
+
+| Stage | Attack | Description | Expected Yield |
+|-------|--------|-------------|----------------|
+| 2a | best64.rule | 64 most common transformations | ~2-5% |
+| 2b | dive.rule | Deep character substitutions | ~1-3% |
+| 2c | d3ad0ne.rule | L33t speak patterns | ~1-2% |
+| 3a | Hybrid dict+mask | rockyou + ?d?d?d?d | ~1-3% |
+| 3b | Hybrid mask+dict | ?d?d?d?d + rockyou | ~0.5-1% |
+| 4a | Combinator | word+word combinations | ~0.5-1% |
+| 4b | PRINCE | Multi-word combinations | ~0.5-1% |
+| 5 | Mask patterns | Common patterns (?u?l?l?l?l?d?d) | ~0.1-0.5% |
+| 6 | Markov | Statistical character prediction | ~0.1-0.5% |
+| 7 | Brute force | 1-8 char incremental | Very slow |
+
+**Attack Priority:** Higher expected yield first, constrained by GPU time.
+
+**Tool: SandCracker.ts**
+```bash
+bun Tools/SandCracker.ts --stage 2a   # Run best64 on all SAND batches
+bun Tools/SandCracker.ts --stage 2b   # Run dive on remaining SAND
+```
+
+Each stage produces DIAMONDS (cracked) and remaining SAND. After all stages, remaining SAND becomes GLASS.
 
 ## Memory Efficiency Strategy
 
