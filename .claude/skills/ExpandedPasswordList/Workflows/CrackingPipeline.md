@@ -2,14 +2,14 @@
 
 **Status:** Ready to Execute (after Filter completes)
 
-Complete workflow for cracking GRAVEL hashes using rockyou + OneRuleToRuleThemAll, producing PEARLS (cracked passwords) and SAND (uncracked hard hashes).
+Complete workflow for cracking GRAVEL hashes using rockyou + OneRuleToRuleThemStill, producing PEARLS (cracked passwords) and SAND (uncracked hard hashes).
 
 ## Prerequisites
 
 - Filter stage completed (`state.json` filter.status = "completed")
 - Hashcrack skill configured (HASHCRACK_SERVER_URL, HASHCRACK_API_KEY in .env)
 - Hashtopolis server accessible with available workers
-- rockyou.txt and OneRuleToRuleThemAll.rule uploaded to Hashtopolis
+- rockyou.txt and OneRuleToRuleThemStill.rule uploaded to Hashtopolis
 
 ## Nomenclature
 
@@ -19,7 +19,7 @@ ROCKS   = Full HIBP Pwned Passwords (~1B SHA-1 hashes)
            ▼ Remove rockyou.txt matches
 GRAVEL  = HIBP - rockyou (~985M hashes)
            │
-           ▼ Remove rockyou + OneRuleToRuleThemAll cracked
+           ▼ Remove rockyou + OneRuleToRuleThemStill cracked
 SAND    = Hard passwords that survived initial attack
            │
            ▼ Systematic escalating attacks
@@ -48,7 +48,7 @@ GRAVEL (candidates/batch-*.txt.gz)
          ▼
 ┌─────────────────────────────────────────────────────┐
 │              HASHCRACK EXECUTION                     │
-│  rockyou.txt + OneRuleToRuleThemAll.rule           │
+│  rockyou.txt + OneRuleToRuleThemStill.rule           │
 │  Hash type: SHA-1 (100)                             │
 │  Distributed across N workers                       │
 └─────────────────────────────────────────────────────┘
@@ -169,7 +169,7 @@ Based on typical HIBP statistics:
 # Check agent status
 bun .claude/skills/Hashcrack/tools/HashtopolisClient.ts agents
 
-# Workers need rockyou.txt and OneRuleToRuleThemAll.rule
+# Workers need rockyou.txt and OneRuleToRuleThemStill.rule
 # Verify files exist on server
 bun .claude/skills/Hashcrack/tools/HashtopolisClient.ts files
 ```
@@ -207,13 +207,13 @@ bun Tools/SetDifference.ts --batched --compress
 
 ## Stage 1: GRAVEL → SAND (Initial Crack)
 
-**Attack:** Dictionary + OneRuleToRuleThemAll
+**Attack:** Dictionary + OneRuleToRuleThemStill
 **Hashcat Mode:** `-a 0` (Straight) with rules
 **Expected Crack Rate:** 15-25%
 
 ```bash
 # Submit to Hashcrack
-hashcat -m 100 -a 0 gravel.txt rockyou.txt -r OneRuleToRuleThemAll.rule
+hashcat -m 100 -a 0 gravel.txt rockyou.txt -r OneRuleToRuleThemStill.rule
 ```
 
 **Output:**
@@ -398,7 +398,7 @@ sort -u custom-wordlist.txt -o custom-wordlist.txt
 cat all-pearls.txt | hcstat2gen.bin markov-pearls.hcstat2
 
 # 4. Use for next iteration
-hashcat -m 100 -a 0 remaining-sand.txt custom-wordlist.txt -r OneRuleToRuleThemAll.rule
+hashcat -m 100 -a 0 remaining-sand.txt custom-wordlist.txt -r OneRuleToRuleThemStill.rule
 ```
 
 ---

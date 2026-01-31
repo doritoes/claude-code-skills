@@ -68,7 +68,7 @@ for (const hashlistId of state.crack.hashlistIds) {
 
 Passwords that survive:
 1. Not in rockyou.txt (filtered in stage 2)
-2. Not cracked by rockyou + OneRuleToRuleThemAll
+2. Not cracked by rockyou + OneRuleToRuleThemStill
 
 These represent **strong breach passwords** - valuable for:
 - Security auditing

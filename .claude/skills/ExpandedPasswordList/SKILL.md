@@ -140,60 +140,119 @@ bun Tools/PearlPrioritizer.ts --analyze     # Count distribution
 
 ### The Rockyou Time Capsule Problem
 
-Rockyou was leaked in **December 2009**, creating a 15+ year blind spot for modern passwords.
+Rockyou was leaked in **December 2009** (MD5: `9076652d8ae75ce713e23ab09e10d9ee`, 14,344,391 lines).
 
-| Generation | Birth Years | Password Creation | Rockyou Coverage |
-|------------|-------------|-------------------|------------------|
-| **Boomers** | 1946-1964 | 1990s-2000s | ✓ Good |
-| **GenX** | 1965-1980 | 1990s-2000s | ✓ Good |
-| **Millennials** | 1981-1996 | 2000s-2010s | ⚠ Partial |
-| **GenZ** | 1997-2012 | 2010s-2020s | ✗ **Critical Gap** |
-| **GenAlpha** | 2013+ | 2020s+ | ✗ None |
+**Key Insight:** Rockyou's user base was predominantly **Millennials** (ages 13-28 in 2009), the prime demographic for a social gaming widget site. GenZ was literally too young to have accounts.
 
-### What's Missing from Rockyou
+### Evidence-Based Coverage Analysis
 
-| Category | Examples NOT in Rockyou |
-|----------|------------------------|
-| **Gaming (2010+)** | minecraft, fortnite, roblox, valorant, genshin, amongus |
-| **Streaming** | netflix, tiktok, twitch, discord, spotify |
-| **2010s Movies** | thanos, endgame, wakanda, mandalorian, grogu, squidgame |
-| **2010s Music** | billie eilish, bts, olivia rodrigo, doja cat |
-| **GenZ Slang** | yeet, bussin, slay, goated, nocap, frfr, deadass |
-| **Memes** | stonks, poggers, based, ratio, sheesh |
-| **Crypto/Tech** | bitcoin, ethereum, hodl, nft, metaverse |
-| **COVID Era** | quarantine, lockdown, zoom, vaccine |
+| Generation | Birth Years | Age in 2009 | Cultural Refs | Evidence | Rockyou Coverage |
+|------------|-------------|-------------|---------------|----------|------------------|
+| **Boomers** | 1946-1964 | 45-63 | elvis(1019), beatles(158), woodstock(75) | 49,821 birth year refs | ⚠ Moderate |
+| **GenX** | 1965-1980 | 29-44 | nirvana(442), metallica(356), nintendo(206) | 102,957 birth year refs | ✓ Good |
+| **Millennials** | 1981-1996 | 13-28 | eminem(1117), pokemon(745), myspace(1040) | 291,242 birth year refs | ✓ **Excellent** |
+| **GenZ** | 1997-2012 | 0-12 | minecraft(0), fortnite(0), instagram(0) | Too young for accounts | ✗ **Critical Gap** |
+| **GenAlpha** | 2013+ | N/A | N/A | Did not exist | ✗ None |
+
+### False Positives: Terms IN Rockyou with Pre-2009 Meanings
+
+Many "modern" terms exist in rockyou but with their **original meanings**:
+
+| Term | Rockyou Count | Pre-2009 Meaning | NOT About |
+|------|---------------|------------------|-----------|
+| `discord` | 22 | English word (disagreement) | Discord app (2015) |
+| `thanos` | 44 | Greek name (Θάνος) | MCU villain (2018) |
+| `tiktok` | 18 | Ke$ha song (Aug 2009), clock sound | TikTok app (2016) |
+| `zoom` | 679 | English verb (move fast) | Zoom app (2011) |
+| `netflix` | 15 | DVD rental service (1997) | Streaming era |
+| `wakanda` | 1 | Marvel comics (1966) | Black Panther movie (2018) |
+| `mandalorian` | 1 | Star Wars EU lore | Disney+ show (2019) |
+| `savage` | 1 | English word (fierce) | Modern slang |
+| `goat` | 1 | The animal | "Greatest Of All Time" slang |
+
+### What's ACTUALLY Missing from Rockyou
+
+| Category | Confirmed Missing (0 exact matches) |
+|----------|-------------------------------------|
+| **Gaming (2010+)** | minecraft, fortnite, valorant, genshin, overwatch, pubg, leagueoflegends |
+| **Platforms (2010+)** | instagram, snapchat, whatsapp, spotify (US) |
+| **Streaming/Content** | pewdiepie, mrbeast, twitch (as platform) |
+| **2010s+ Movies** | grogu, squidgame (wakanda/mandalorian existed in comics/EU) |
+| **GenZ Slang** | goated, nocap, frfr, sus, simp (as slang, not words) |
+| **Crypto** | bitcoin, ethereum, hodl, nft, metaverse |
+
+### Year Suffix Coverage Gap
+
+Rockyou has strong coverage for years 2005-2009 but drops off sharply after:
+
+| Year Suffix | Count | Coverage |
+|-------------|-------|----------|
+| 2007 | 26,181 | Excellent |
+| 2008 | 21,387 | Excellent |
+| 2009 | 10,176 | Good |
+| 2015 | 749 | **Low** |
+| 2020 | 2,173 | Moderate (mostly patterns like "202020") |
+| 2024 | 615 | **Low** |
+
+**GenZ.rule addresses this gap** by adding year suffix rules for 2015-2025.
 
 ### Supplementary Attack Files
 
 | File | Purpose | Size |
 |------|---------|------|
-| `data/GenZ.rule` | Modern password patterns (year suffixes, emphasis, symbols) | ~150 rules |
-| `data/genz-wordlist.txt` | Cultural references missing from rockyou | ~1,400 words |
+| `data/rizzyou.txt` | **Verified** GenZ roots (0 in rockyou, 1K+ in HIBP) | 203 words |
+| `data/GenZ.rule` | Modern password patterns (year suffixes 2015-2025) | ~150 rules |
+| `nocap.txt` | rockyou.txt + rizzyou.txt combined (output) | ~14.3M words |
+
+**Nomenclature:**
+- **rizzyou.txt** - GenZ supplement wordlist (rizz + rockyou)
+- **nocap.txt** - The updated rockyou replacement (no cap = truth)
+
+### Top 10 rizzyou.txt Terms by HIBP Breach Count
+
+| Rank | Term | Breaches | Category |
+|------|------|----------|----------|
+| 1 | minecraft | 1,799,404 | Gaming |
+| 2 | onedirection | 545,456 | Music |
+| 3 | fortnite | 529,408 | Gaming |
+| 4 | jungkook | 182,037 | K-pop |
+| 5 | harrystyles | 130,571 | Music |
+| 6 | pewdiepie | 129,445 | Streamers |
+| 7 | blackpink | 89,507 | K-pop |
+| 8 | skyrim | 79,995 | Gaming |
+| 9 | instagram | 79,288 | Social |
+| 10 | arianagrande | 59,088 | Music |
+
+**Key Insight:** Music (boy bands, pop artists) and K-pop dominate breach appearances, suggesting strong fandom-based password patterns.
 
 ### Recommended Attack Strategy for Recent Hashes
 
 ```bash
 # Phase 1: Standard (existing)
-rockyou.txt + OneRuleToRuleThemAll.rule
+rockyou.txt + OneRuleToRuleThemStill.rule
 
-# Phase 2: New words, proven rules
-genz-wordlist.txt + OneRuleToRuleThemAll.rule
+# Phase 2: New roots, proven rules
+rizzyou.txt + OneRuleToRuleThemStill.rule
 
 # Phase 3: Old words, new patterns
 rockyou.txt + GenZ.rule
 
-# Phase 4: New words, new patterns
-genz-wordlist.txt + GenZ.rule
+# Phase 4: New roots, new patterns
+rizzyou.txt + GenZ.rule
+
+# Phase 5: Combined list (nocap.txt = rockyou + rizzyou)
+cat rockyou.txt rizzyou.txt | sort -u > nocap.txt
+nocap.txt + OneRuleToRuleThemStill.rule
 ```
 
-### Key GenZ Password Patterns
+### Key GenZ Password Patterns (Validated)
 
-1. **Modern year suffixes**: `2020`, `2021`, `2022`, `2023`, `2024`, `2025`
-2. **Birth years**: `1997`-`2012` (GenZ birth range)
+1. **Modern year suffixes**: `2015`-`2025` (low coverage in rockyou)
+2. **Account creation years**: `2020`, `2021`, `2022`, `2023`, `2024` as suffixes
 3. **Emphasis stretching**: `yesss`, `nooo`, `bruhhhh`
 4. **All lowercase + numbers**: `fortnite123`, `minecraft420`
 5. **Text emoticons**: `:)`, `<3`, `:3`, `uwu`, `owo`
-6. **Slang suffixes**: `-z` plurals (boyz), dropped `g` (vibin)
+6. **Slang as password**: `goated`, `bussin`, `nocap`, `frfr` (zero matches in rockyou)
 
 ## Full Documentation
 

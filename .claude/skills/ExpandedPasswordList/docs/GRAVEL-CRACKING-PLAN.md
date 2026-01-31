@@ -1,7 +1,7 @@
 # GRAVEL → PEARLS + SAND Cracking Plan
 
 ## Objective
-Crack 1B+ GRAVEL hashes (HIBP minus rockyou matches) using rockyou+OneRuleToRuleThemAll, producing PEARLS (cracked passwords) and SAND (uncracked hard hashes).
+Crack 1B+ GRAVEL hashes (HIBP minus rockyou matches) using rockyou+OneRuleToRuleThemStill, producing PEARLS (cracked passwords) and SAND (uncracked hard hashes).
 
 ## Lessons Learned
 
@@ -34,7 +34,7 @@ ssh ubuntu@$SERVER_IP "sudo docker ps | grep hashtopolis"
 ```bash
 # Files in correct location (NOT /var/www/... - WRONG PATH!)
 ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/"
-# Expected: rockyou.txt (139MB), OneRuleToRuleThemAll.rule (403KB)
+# Expected: rockyou.txt (139MB), OneRuleToRuleThemStill.rule (403KB)
 
 # File download test
 TOKEN=$(ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'$DB_PASS' hashtopolis -sNe 'SELECT token FROM Agent LIMIT 1;'")
@@ -85,14 +85,14 @@ UPDATE File SET isSecret=1;
 ```bash
 # Upload to server
 scp rockyou.txt ubuntu@$SERVER_IP:/tmp/
-scp OneRuleToRuleThemAll.rule ubuntu@$SERVER_IP:/tmp/
+scp OneRuleToRuleThemStill.rule ubuntu@$SERVER_IP:/tmp/
 
 # Copy into container
 ssh ubuntu@$SERVER_IP "sudo docker cp /tmp/rockyou.txt hashtopolis-backend:/usr/local/share/hashtopolis/files/rockyou.txt"
-ssh ubuntu@$SERVER_IP "sudo docker cp /tmp/OneRuleToRuleThemAll.rule hashtopolis-backend:/usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule"
+ssh ubuntu@$SERVER_IP "sudo docker cp /tmp/OneRuleToRuleThemStill.rule hashtopolis-backend:/usr/local/share/hashtopolis/files/OneRuleToRuleThemStill.rule"
 
 # Fix ownership
-ssh ubuntu@$SERVER_IP "sudo docker exec --user root hashtopolis-backend chown www-data:www-data /usr/local/share/hashtopolis/files/rockyou.txt /usr/local/share/hashtopolis/files/OneRuleToRuleThemAll.rule"
+ssh ubuntu@$SERVER_IP "sudo docker exec --user root hashtopolis-backend chown www-data:www-data /usr/local/share/hashtopolis/files/rockyou.txt /usr/local/share/hashtopolis/files/OneRuleToRuleThemStill.rule"
 
 # Verify
 ssh ubuntu@$SERVER_IP "sudo docker exec hashtopolis-backend ls -la /usr/local/share/hashtopolis/files/"

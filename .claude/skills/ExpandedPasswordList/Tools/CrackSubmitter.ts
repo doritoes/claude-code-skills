@@ -31,7 +31,7 @@ const CANDIDATES_DIR = resolve(DATA_DIR, "candidates");
 // Cracking settings
 const HASH_TYPE_SHA1 = 100;
 // Note: hashcat syntax is: #HL# wordlist -r rulefile (wordlist BEFORE -r)
-const DEFAULT_ATTACK_CMD = "#HL# rockyou.txt -r OneRuleToRuleThemAll.rule";
+const DEFAULT_ATTACK_CMD = "#HL# rockyou.txt -r OneRuleToRuleThemStill.rule";
 const MAX_HASHES_PER_TASK = 1_000_000; // 1M hashes per hashlist
 
 // File IDs in Hashtopolis (must be uploaded first)
@@ -56,7 +56,7 @@ const ATTACK_FILES = [ROCKYOU_FILE_ID, ONERULE_FILE_ID];
 
 // File line counts (for reference only - NOT used for keyspace!)
 const ROCKYOU_LINES = 14_344_390;  // rockyou.txt
-const ONERULE_LINES = 52_014;      // OneRuleToRuleThemAll.rule
+const ONERULE_LINES = 48_439;      // OneRuleToRuleThemStill.rule
 
 // =============================================================================
 // SSH + Database Task Creation (API createTask is broken in Hashtopolis 0.14.x)
@@ -136,8 +136,8 @@ async function runPreFlightGates(config: { serverIp: string; dbPassword: string;
   console.log("GATE A: Checking files exist...");
   const fileCheckCmd = `ssh -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "sudo docker exec hashtopolis-backend ls /usr/local/share/hashtopolis/files/"`;
   const files = execSync(fileCheckCmd, { encoding: "utf-8", timeout: 30000 }).trim();
-  if (!files.includes("rockyou.txt") || !files.includes("OneRuleToRuleThemAll.rule")) {
-    throw new Error("GATE A FAILED: Files not found at /usr/local/share/hashtopolis/files/. Stage files first.");
+  if (!files.includes("rockyou.txt") || !files.includes("OneRuleToRuleThemStill.rule")) {
+    throw new Error("GATE A FAILED: Files not found at /usr/local/share/hashtopolis/files/. Stage OneRuleToRuleThemStill.rule first.");
   }
   console.log("  ✓ Files found");
 

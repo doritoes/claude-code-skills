@@ -443,7 +443,7 @@ Output files:
   crack-stats.json         Statistics by attack method
 
 Source types:
-  rockyou+onerule    Dictionary + OneRuleToRuleThemAll
+  rockyou+onerule    Dictionary + OneRuleToRuleThemStill
   rockyou-direct     Dictionary match (no rules)
   best64, dive, etc  Specific rule files
   combinator         Word + word (-a 1)

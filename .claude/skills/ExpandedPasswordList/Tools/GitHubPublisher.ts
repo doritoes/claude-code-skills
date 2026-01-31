@@ -60,7 +60,7 @@ Cleartext passwords derived from [HIBP Pwned Passwords](https://haveibeenpwned.c
 
 1. Download HIBP Pwned Passwords (SHA-1 hashes)
 2. Filter out hashes that match rockyou.txt
-3. Crack remaining hashes using rockyou.txt + OneRuleToRuleThemAll.rule
+3. Crack remaining hashes using rockyou.txt + OneRuleToRuleThemStill.rule
 4. Extract cleartext passwords
 
 ## Files
@@ -118,7 +118,7 @@ function generateStats(state: ReturnType<StateManager["load"]>): object {
       state.filter.candidates > 0
         ? (state.results.crackedPasswords / state.filter.candidates) * 100
         : 0,
-    methodology: "rockyou.txt + OneRuleToRuleThemAll.rule",
+    methodology: "rockyou.txt + OneRuleToRuleThemStill.rule",
   };
 }
 

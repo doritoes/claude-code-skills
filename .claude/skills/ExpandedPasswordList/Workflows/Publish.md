@@ -72,7 +72,7 @@ Updates `data/state.json`:
     "uncracked": 135655609
   },
   "crackRate": 86.2,
-  "methodology": "rockyou.txt + OneRuleToRuleThemAll.rule"
+  "methodology": "rockyou.txt + OneRuleToRuleThemStill.rule"
 }
 ```
 

@@ -8,7 +8,7 @@ Generate optimized wordlists (GLASS) and rules (UNOBTAINIUM) from cracked passwo
 
 - PEARLS collected from SAND cracking (`data/results/cracked.txt`)
 - Minimum ~100K cracked passwords for meaningful analysis
-- OneRuleToRuleThemAll.rule for baseline comparison
+- OneRuleToRuleThemStill.rule for baseline comparison
 
 ## GLASS Wordlist Generation
 
@@ -78,7 +78,7 @@ Create an enhanced rule file that improves on OneRule based on actual crack data
 
 ```bash
 # Analyze OneRule effectiveness against PEARLS
-bun Tools/RuleAnalyzer.ts --rule OneRuleToRuleThemAll.rule
+bun Tools/RuleAnalyzer.ts --rule OneRuleToRuleThemStill.rule
 
 # Generate UNOBTAINIUM
 bun Tools/UnobtainiumBuilder.ts
@@ -106,7 +106,7 @@ Measure improvement of enhanced wordlist + rules vs baseline.
 
 2. **Baseline Test**
    ```bash
-   hashcat -m 100 -a 0 -r OneRuleToRuleThemAll.rule \
+   hashcat -m 100 -a 0 -r OneRuleToRuleThemStill.rule \
      data/benchmark/sample-10m.txt rockyou.txt
    ```
 

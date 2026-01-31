@@ -39,7 +39,7 @@ Result: 10 workers running in parallel
 ```typescript
 {
   hashType: 100,  // SHA-1
-  attackCmd: "#HL# -r OneRuleToRuleThemAll.rule rockyou.txt",
+  attackCmd: "#HL# -r OneRuleToRuleThemStill.rule rockyou.txt",
   chunkTime: 600,
   priority: 10,
   maxAgents: 1    // Force distribution

@@ -490,7 +490,7 @@ Compare baseline vs enhanced on a GRAVEL sample.
 head -n 10000000 data/candidates/gravel.txt > data/benchmark/sample-10m.txt
 
 # Baseline: rockyou + OneRule
-hashcat -m 100 -a 0 -r OneRuleToRuleThemAll.rule sample-10m.txt rockyou.txt
+hashcat -m 100 -a 0 -r OneRuleToRuleThemStill.rule sample-10m.txt rockyou.txt
 
 # Enhanced: rockyou + GLASS + UNOBTAINIUM
 hashcat -m 100 -a 0 -r unobtainium.rule sample-10m.txt rockyou.txt glass.txt
