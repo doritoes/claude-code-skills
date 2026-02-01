@@ -646,3 +646,198 @@ JOIN TaskWrapper tw ON t.taskWrapperId=tw.taskWrapperId
 WHERE t.taskName LIKE '%batch-00XX%'
 ORDER BY t.taskName;
 ```
+
+---
+
+## Session 2026-02-01 Lessons
+
+### 29. Mark ALL Attack Files as Secret (isSecret=1)
+**What happened:** OneRuleToRuleThemStill.rule (fileId 3) was not marked as secret; agents couldn't download it.
+**Root cause:** CrackSubmitter GATE D only checked/fixed fileIds 1,2 but we switched to fileId 3 for the rule.
+**Impact:** Agents returned "Keyspace measure failed!" - couldn't benchmark or run attacks.
+**Fix applied:** Updated GATE D in CrackSubmitter.ts to mark fileIds 1,3 (not 1,2):
+```sql
+UPDATE File SET isSecret=1 WHERE fileId IN (1,3);
+```
+**Prevention:** When switching attack files, update ALL file ID references:
+1. `ATTACK_FILES` array
+2. GATE D secret file check
+3. Verify with: `SELECT fileId, filename, isSecret FROM File`
+
+### 30. StoredValue Changes May Not Persist Immediately
+**What happened:** Updated `directory_files` StoredValue via SQL but it reverted to old value.
+**Root cause:** Hashtopolis may cache StoredValues in memory; container restart alone insufficient.
+**Symptom:** `getFile.php` returns "ERR3 - file not present" despite files existing on disk.
+**Workaround:** Instead of updating StoredValue, copy files to the expected directory:
+```bash
+# StoredValue says: /usr/local/share/hashtopolis/files
+# Docker mounts files to: /var/www/hashtopolis/files
+# Solution: Copy files to expected location
+sudo docker exec hashtopolis-backend cp /var/www/hashtopolis/files/* /usr/local/share/hashtopolis/files/
+```
+**Prevention:** Before deploying, verify `directory_files` StoredValue matches actual file location.
+
+### 31. Symlinks Inside Directories Create Nested Paths (ANTIPATTERN)
+**What happened:** Created symlink `files -> /var/www/hashtopolis/files` inside `/usr/local/share/hashtopolis/files/`.
+**Result:** Files available at `/usr/local/share/hashtopolis/files/files/rockyou.txt` - wrong path!
+**Symptom:** Hashtopolis looks for `/usr/local/share/hashtopolis/files/rockyou.txt`, finds nothing.
+**WRONG approach:**
+```bash
+cd /usr/local/share/hashtopolis/files/
+ln -s /var/www/hashtopolis/files files  # Creates nested path!
+```
+**CORRECT approach:** Either:
+```bash
+# Option 1: Copy files directly
+cp /var/www/hashtopolis/files/* /usr/local/share/hashtopolis/files/
+
+# Option 2: Symlink the directory itself (not inside it)
+rmdir /usr/local/share/hashtopolis/files
+ln -s /var/www/hashtopolis/files /usr/local/share/hashtopolis/files
+```
+**Prevention:** Always verify file paths after symlink creation with `ls -la <expected_path>/filename`.
+
+### 32. Server IP Changes on EC2 Stop/Start (REMINDER)
+**What happened:** Hashcrack server IP changed from 16.147.88.9 to 54.188.7.212 after stop/start.
+**Impact:** Tools using old IP failed to connect; had to update terraform state.
+**Files affected:**
+- `.claude/skills/Hashcrack/terraform/aws/terraform.tfstate`
+- `.claude/.env` (HASHCRACK_SERVER_URL)
+**Prevention:**
+1. Always run `terraform output server_ip` after server restart
+2. Workers use private IP (stable within VPC), only management uses public IP
+3. Consider Elastic IP for production deployments
+
+### 33. Clear Agent Assignments to Trigger Fresh Benchmark
+**What happened:** Tasks had keyspace=0 despite files being available.
+**Root cause:** Agents had stale assignments that didn't trigger new benchmark.
+**Fix:**
+```sql
+DELETE FROM Assignment WHERE taskId >= <first_task_id>;
+```
+**Result:** Agents re-assigned, benchmarked successfully, keyspace populated, chunks created.
+**Prevention:** After fixing file issues, always clear assignments to force fresh agent pickup.
+
+### 34. NEVER Reboot Idle Agents - Only Stale/Critical
+**What happened:** AgentManager --fix rebooted 6 agents including idle ones that were just waiting for work.
+**Impact:** Wasted EC2 resources, disrupted healthy agents, no benefit.
+**Root cause:** Filter was `status !== "healthy"` which included idle agents.
+**Correct behavior:**
+- `healthy` = agent has active chunk, working normally
+- `idle` = agent online but no work assigned - THIS IS FINE, don't touch it
+- `stale` (>120s since check-in) = may need reboot
+- `critical` (>300s) = definitely needs reboot
+**Fix:** Changed filter to `status === "stale" || status === "critical"` only.
+**Lesson:** Idle ≠ Broken. Idle means waiting for work. Only remediate truly stale agents.
+
+### 35. "Stop Adding Batches" Means NEW Batches, Not In-Flight Ones
+**What happened:** User said "stop adding batches" - I stopped the submitter mid-batch 66, leaving only 5/8 parts.
+**Correct interpretation:** "New batches" = batch 67+. In-flight batches (batch 66 already started) should be COMPLETED.
+**Impact:** Batch 66 left incomplete (5 parts instead of 8), wasting potential PEARLS.
+**Lesson:** When told to stop adding work, always complete the CURRENT unit of work. In-flight work should finish. Only FUTURE work should stop.
+**Rule:** A batch is a unit of work. If any part of a batch exists, complete all 8 parts.
+
+### 36. Post-Power-On: Remove Stale lock.pid Before Agent Restart
+**What happened:** After GPU VMs powered on, agent 6 kept crashing with "There is already a hashtopolis agent running in this directory!"
+**Root cause:** Stale `lock.pid` file left over from before power-off. Agent thinks another instance is running.
+**Symptoms:**
+- VM is running (SSH works)
+- Agent shows as critical in Hashtopolis UI (http://SERVER:8080/agentStatus.php)
+- `systemctl status hashtopolis-agent` shows repeated restarts with exit code 255
+- Logs show: "Found existing lock.pid, checking if python process is running... There is already a hashtopolis agent running"
+**Fix:**
+```bash
+ssh ubuntu@WORKER_IP "cd /opt/hashtopolis-agent && sudo rm -f lock.pid && sudo systemctl restart hashtopolis-agent"
+```
+**Post-Power-On Checklist:**
+1. Check agent status in Hashtopolis UI or via AgentManager.ts
+2. For any agents showing critical/down:
+   - SSH to worker: `ssh ubuntu@WORKER_IP`
+   - Check service: `sudo systemctl status hashtopolis-agent`
+   - If "lock.pid" error: `sudo rm -f /opt/hashtopolis-agent/lock.pid`
+   - Restart: `sudo systemctl restart hashtopolis-agent`
+3. Verify all agents show idle/healthy in AgentManager.ts
+
+### 37. NEVER Dynamically Detect Benchmark Format (CRITICAL)
+**What happened:** CrackSubmitter GATE E detected benchmark format from Assignment table, but returned inconsistent results (sometimes OLD, sometimes NEW) causing 57 tasks created with wrong useNewBench setting.
+**Root cause:** The Assignment table contains benchmarks from different tasks/agents. Depending on which row is returned first, detection can flip between OLD and NEW format randomly.
+**Impact:**
+- Tasks created with useNewBench=0 when agents expect useNewBench=1
+- Tasks stuck at keyspace=0 forever (agents can't benchmark them)
+- GPU workers sit idle while tasks accumulate
+**Technical detail:**
+- OLD format: "time:speed" (e.g., "74240:5314.25") → useNewBench=0
+- NEW format: decimal (e.g., "0.17807257721285") → useNewBench=1
+- Our GPU workers use NEW format
+**Fix:** HARDCODE useNewBench=1 in CrackSubmitter.ts:
+```typescript
+// WRONG: Dynamic detection (UNRELIABLE!)
+const benchmark = execSQL(config, "SELECT benchmark FROM Assignment LIMIT 1");
+let useNewBench = benchmark.includes(":") ? 0 : 1;
+
+// RIGHT: Hardcode for known GPU worker configuration
+const useNewBench = 1; // GPU workers use NEW benchmark format
+```
+**Prevention:** Know your infrastructure. If all workers use the same benchmark format, hardcode it. Dynamic detection is only useful when you have MIXED worker types (CPU + GPU) - and even then it's unreliable.
+
+### 38. NEVER Hardcode Server IPs in Tools
+**What happened:** PipelineMonitor had hardcoded fallback IP that became stale after server reboot.
+**Root cause:** Hardcoded `serverIp: "16.147.88.9"` instead of reading from dynamic source.
+**Impact:** Tool fails to connect after any server restart, requiring code changes.
+**Fix:** Read server IP from `.claude/.env` file which is the source of truth:
+```typescript
+// WRONG: Hardcoded fallback
+return { serverIp: "54.188.7.212", ... };
+
+// RIGHT: Read from .env file
+const env = loadEnvFile();  // reads .claude/.env
+const urlMatch = env.HASHCRACK_SERVER_URL.match(/https?:\/\/([^:\/]+)/);
+return { serverIp: urlMatch[1], dbPassword: env.HASHCRACK_DB_PASSWORD, ... };
+```
+**Priority order:**
+1. `.claude/.env` file (source of truth, always up-to-date)
+2. Terraform outputs (may be stale if not refreshed)
+3. FAIL with clear error (never use hardcoded IP)
+
+**After server reboot:**
+```bash
+# Get new IP
+aws ec2 describe-instances --filters "Name=tag:Name,Values=hashtopolis-server" \
+  --query "Reservations[*].Instances[*].PublicIpAddress" --output text
+
+# Update .env
+HASHCRACK_SERVER_URL=http://<NEW_IP>:8080
+```
+
+### 39. Stuck Chunk Detection: Detect in 15min, Resolve in 5min
+**What happened:** Task 615 had chunk 1532 stuck for 75 minutes before manual detection.
+**Root cause:** No automated detection for chunks running long with no progress advancement.
+**Impact:** GPU compute wasted on stuck chunks; potential PEARLS lost.
+**Solution implemented in PipelineMonitor.ts:**
+
+1. **checkLongRunningChunks()** - New function that:
+   - Finds chunks dispatched >15 minutes
+   - Takes progress reading, waits 20s, takes second reading
+   - Chunks with no progress change AND >15min old = STUCK
+   - Returns SQL to auto-abort stuck chunks
+
+2. **Watch mode auto-abort**:
+   - Runs every 90 seconds
+   - Automatically aborts stuck chunks (>15min, no progress)
+   - Logs warning that agent may crash (per Lesson #13)
+
+3. **Detection criteria**:
+   - Dispatched > 15 minutes (TIMESTAMPDIFF from dispatchTime)
+   - Progress unchanged over 20s observation window
+   - Both conditions must be true (long-running AND no progress)
+
+**Usage:**
+```bash
+# One-time check with auto-fix
+bun Tools/PipelineMonitor.ts --fix
+
+# Continuous monitoring with auto-abort
+bun Tools/PipelineMonitor.ts --watch
+```
+
+**Key insight:** A chunk running >15min is NOT inherently stuck - it could be processing a large keyspace. The key is checking if progress is ADVANCING. Only abort chunks that are both long-running AND not progressing.

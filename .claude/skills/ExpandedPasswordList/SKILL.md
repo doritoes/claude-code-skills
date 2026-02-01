@@ -50,6 +50,7 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 | "collect PEARLS", "get cracked" | `Workflows/Collect.md` |
 | "publish passwords", "push to github" | `Workflows/Publish.md` |
 | "create GLASS", "build UNOBTAINIUM", "optimize rules" | `Workflows/Optimize.md` |
+| "power on", "workers started", "agents down" | `Workflows/PostPowerOn.md` |
 
 ## Quick Commands
 
@@ -260,3 +261,18 @@ nocap.txt + OneRuleToRuleThemStill.rule
 - Cracking Pipeline: `Workflows/CrackingPipeline.md`
 - Generational Analysis: See above + `data/GenZ.rule` comments
 - Setup: `SETUP.md`
+- Permissions: `docs/PERMISSIONS.md` (reduce manual approvals)
+- Lessons Learned: `docs/LESSONS-LEARNED.md` (critical operational knowledge)
+- Post-Power-On: `Workflows/PostPowerOn.md` (agent recovery after VM restart)
+
+## Reducing Manual Intervention
+
+Pre-approve these bash prompt patterns in Claude Code settings for autonomous operation:
+
+1. **"Run ExpandedPasswordList tools"** - CrackSubmitter, AgentManager, PipelineMonitor, SafeArchiver
+2. **"Check Hashtopolis server status"** - SSH read-only database queries
+3. **"Get terraform outputs"** - server_ip, db_password
+4. **"Check AWS EC2 instance status"** - describe-instances queries
+5. **"SSH to workers for agent management"** - systemctl, journalctl, lock.pid removal
+
+See `docs/PERMISSIONS.md` for full details and configuration examples.

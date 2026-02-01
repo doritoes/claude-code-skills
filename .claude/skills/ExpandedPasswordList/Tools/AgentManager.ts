@@ -293,14 +293,15 @@ async function fixStaleAgents(): Promise<void> {
   const config = getServerConfig();
   const agents = await getAllAgents(config);
 
-  const problemAgents = agents.filter((a) => a.status !== "healthy");
+  // Only remediate stale/critical agents - idle agents are fine (just waiting for work)
+  const problemAgents = agents.filter((a) => a.status === "stale" || a.status === "critical");
 
   if (problemAgents.length === 0) {
-    console.log("All agents are healthy. No action needed.");
+    console.log("All agents are healthy or idle. No remediation needed.");
     return;
   }
 
-  console.log(`Found ${problemAgents.length} agents needing remediation:`);
+  console.log(`Found ${problemAgents.length} stale/critical agents needing remediation:`);
 
   for (const agent of problemAgents) {
     await remediateAgent(config, agent);
