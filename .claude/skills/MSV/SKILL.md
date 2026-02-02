@@ -155,23 +155,22 @@ Sources: CISA KEV, NVD, EPSS
 **Example 1: Single Software Query**
 ```
 User: "What is the minimum safe version of Chrome?"
--> Invokes Query workflow
--> Queries CISA KEV, VulnCheck, EPSS for Chrome CVEs
+-> Queries CISA KEV, VulnCheck, NVD, EPSS for Chrome CVEs
+-> Calculates MSV from version data
 -> Returns MSV with Admiralty rating
 ```
 
 **Example 2: Batch Query**
 ```
 User: "Check MSV for Chrome, Edge, and Firefox"
--> Invokes Batch workflow
--> Queries all three in parallel
+-> Queries all three products in parallel
 -> Returns formatted table with ratings
 ```
 
 **Example 3: Windows Server**
 ```
 User: "What's the safe version for Windows Server 2022?"
--> Invokes Query workflow with MSRC data
+-> Queries MSRC for Windows Server security updates
 -> Returns KB-based minimum with patch details
 ```
 
@@ -223,17 +222,22 @@ MSV/
 │   ├── msv.test.ts       # Test suite (bun test)
 │   ├── CisaKevClient.ts  # CISA KEV API client
 │   ├── EpssClient.ts     # EPSS API client
-│   ├── NvdClient.ts      # NVD API client
-│   ├── VulnCheckClient.ts # VulnCheck API client
+│   ├── NvdClient.ts      # NVD API client (singleton rate limiter)
+│   ├── VulnCheckClient.ts # VulnCheck API client (free tier endpoints)
 │   ├── AppThreatClient.ts # Offline DB client
 │   ├── VendorAdvisory.ts  # Vendor advisory fetchers
 │   ├── VersionCompare.ts  # Version comparison utils
 │   ├── AdmiraltyScoring.ts # Rating calculation
+│   ├── CtiReportGenerator.ts  # CTI report engine
+│   ├── CtiFormatter.ts        # Report output formatters
+│   ├── CtiTypes.ts            # CTI type definitions
+│   ├── IntelligenceAggregator.ts # Multi-source intel aggregation
 │   └── ...
 ├── data/
 │   └── SoftwareCatalog.json  # Supported software definitions
 └── docs/
     ├── AddingSoftware.md     # How to add new software
+    ├── CTI-REPORT-REQUIREMENTS.md # CTI feature requirements
     └── FutureExpansion.md    # Roadmap & future plans
 ```
 
