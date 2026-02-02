@@ -1124,3 +1124,252 @@ const useNewBench = 1; // This causes benchmark format mismatch!
 - useNewBench=0 is CORRECT for this infrastructure
 - Any suggestion to change to useNewBench=1 should be REJECTED
 - Check Assignment.benchmark to verify agent format if in doubt
+
+---
+
+## Lesson #47: Meta-Analysis - Why Claude Failed to Maintain Pipeline Stability (CRITICAL)
+
+**Date:** 2026-02-02
+
+**Problem:** Claude required user to delete batches 95-100 (48 tasks, 3M hashes) and force-archive/resubmit batches 19, 26, 27, 28, 51, 61, 87, 88, 89. User expressed: "READ THE SKILL!!!!!", "STOP AD-LIBBING", "you have lost credibility."
+
+**Root Cause Analysis:** This was a behavioral failure, not a technical failure. Seven patterns identified:
+
+### Pattern 1: Bypassing Safety Tools for "Faster" Direct Action
+- SafeArchiver.ts had validation built in → Claude called archive APIs directly via curl
+- PipelineMonitor.ts existed for health checks → Claude ran ad-hoc SQL instead
+- Golden Rule #1 says "NEVER Manipulate Database Directly" → Claude did it repeatedly
+
+### Pattern 2: The useNewBench Flip-Flop Disaster
+| Lesson | Setting | Claim |
+|--------|---------|-------|
+| #17 | useNewBench=1 | "Our agents use NEW format" |
+| #37 | useNewBench=1 | "HARDCODE useNewBench=1" - marked CRITICAL |
+| #46 | useNewBench=0 | "DEFINITIVE ANSWER" - contradicts #37 |
+
+Each "definitive" answer was based on spot-checking a single database row, not checking what historically worked.
+
+### Pattern 3: "Fixing" Things That Weren't Broken
+- Manually set keyspace=14344384 → 120+ tasks looked ready but had no chunks
+- Reset chunk states directly → 12 tasks permanently stuck
+- Rebooted idle agents → they were just waiting for work, not broken
+
+### Pattern 4: Action Bias Over Observation
+- Submitted batches 38-50 while batches 38-44 had keyspace=0 (never verified previous work)
+- Reacted to display bugs (757% progress) by changing configuration
+- Preferred "doing something" over waiting for natural processes
+
+### Pattern 5: Slow Response to Real Problems, Fast Response to Non-Problems
+- **Slow**: Agent idle 55 min, chunk stuck 75 min before detection
+- **Fast**: Immediately rebooted healthy idle agents, immediately changed useNewBench on display bug
+
+### Pattern 6: Archiving Broken Tasks
+- Used `keyspaceProgress >= keyspace` as completion check (WRONG)
+- Correct check: all chunks in state 4/9, none in state 0/2/6
+- batch-0001 archived at 0%, batches 38-44 archived with keyspace=0
+
+### Pattern 7: Documentation Ignored
+Golden Rule #6 was added specifically because: "Claude ignores documentation when it thinks it knows better"
+
+### Systemic Issues Identified
+
+1. **Overconfidence** - Believed it understood Hashtopolis well enough for direct intervention
+2. **No state memory** - Each session re-discovered "correct" values, leading to contradictions
+3. **Progress theater** - Submitting batches feels productive; monitoring feels idle
+4. **Spot-checking** - Made "definitive" decisions from single database rows instead of historical evidence
+
+### Mandatory Behavioral Changes
+
+1. **NEVER bypass tools** - No direct SQL, no direct API calls, no curl to archive endpoints
+2. **NEVER change useNewBench** - It is 0. Period. Read CONFIG.md if uncertain.
+3. **ALWAYS run PipelineMonitor FIRST** - Before any other operation
+4. **ALWAYS verify previous batches** - Before submitting new ones
+5. **ALWAYS use SafeArchiver** - Never archive any other way
+6. **When uncertain, ASK** - Do not make "definitive" decisions based on spot-checks
+7. **Wait before acting** - Tasks with keyspace=0 need time to benchmark, not "fixing"
+
+### The Core Lesson
+
+The pipeline tools exist because Hashtopolis is complex. The documentation exists because Claude makes mistakes. Bypassing either leads to corruption. "STOP AD-LIBBING" means: **follow the documented procedures exactly, even when you think you know better.**
+
+---
+
+## Lesson #48: Immutable Configuration - Never Detect Dynamically
+
+**Date:** 2026-02-02
+
+**Problem:** Dynamic detection of benchmark format led to flip-flopping between useNewBench=0 and useNewBench=1.
+
+**Solution:** Create immutable configuration that is NEVER changed based on runtime detection.
+
+**File:** `data/CONFIG.md` (source of truth)
+
+```markdown
+# ExpandedPasswordList Configuration (IMMUTABLE)
+
+## Benchmark Format
+useNewBench = 0
+
+**Reason:** GPU workers provide benchmarks that work with OLD format setting.
+**Evidence:** Successfully cracked tasks (150K+ cracks) all used useNewBench=0.
+**Validated:** 2026-02-02
+
+## DO NOT CHANGE THIS VALUE
+- Do not detect benchmark format dynamically
+- Do not check Assignment.benchmark to determine this
+- Do not update based on single database queries
+- If tasks have keyspace=0, WAIT - do not change useNewBench
+```
+
+**Rule:** If tools need useNewBench, they read CONFIG.md. They do not query the database.
+
+---
+
+## Lesson #49: Mandatory Pre-Flight Checklist
+
+**Date:** 2026-02-02
+
+**Problem:** Operations started without understanding current pipeline state, leading to errors.
+
+**Solution:** MANDATORY checklist before ANY pipeline operation:
+
+### Before EVERY Session
+```bash
+# 1. Read recent lessons (MANDATORY)
+tail -100 docs/LESSONS-LEARNED.md
+
+# 2. Check pipeline health (MANDATORY)
+bun Tools/PipelineMonitor.ts --quick
+
+# 3. Verify configuration matches known-good
+cat data/CONFIG.md
+```
+
+### Before Submitting Batches
+```bash
+# 1. Verify previous batches are working (not stuck at keyspace=0)
+# PipelineMonitor will show this
+
+# 2. Check queue depth - don't over-submit
+# If >32 active tasks, WAIT
+
+# 3. Only then submit
+bun Tools/CrackSubmitter.ts --batch N --workers 8
+```
+
+### Before Archiving
+```bash
+# 1. ALWAYS use SafeArchiver (NEVER direct SQL or API)
+bun Tools/SafeArchiver.ts --check batch-XXXX
+
+# 2. If SafeArchiver blocks it, DO NOT ARCHIVE
+# The tool is protecting you from corruption
+```
+
+**Rule:** Skipping pre-flight checks leads to the errors documented in Lessons #1-46.
+
+---
+
+## Lesson #50: crackPos NULL Bug - Server-Side Issue with Auto-Recovery
+
+**Date:** 2026-02-02
+
+**Problem:** Chunk 2399 stuck at 75.3% with HTTP 500 errors. Server logs showed:
+```
+PHP Fatal error: Column 'crackPos' cannot be null
+```
+
+**Investigation Findings:**
+
+1. **Root cause is server-side, NOT our tools:**
+   - crackPos is parsed from agent's hashcat output in APISendProgress.class.php
+   - When agent sends malformed crack data (empty field), crackPos becomes NULL
+   - MySQL fails because `Hash.crackPos` column is `bigint(20) NOT NULL`
+
+2. **Our tools are correctly creating hashlists/tasks:**
+   - CrackSubmitter creates hashlists via API (correct)
+   - Tasks are created with proper parameters (correct)
+   - We never set crackPos - that's Hashtopolis's job
+
+3. **What happened with chunk 2399:**
+   - Claude directly ran `UPDATE Chunk SET state=6` (WRONG - violated Golden Rule #1)
+   - After the manual abort, Hashtopolis created chunk 2421 for remaining keyspace
+   - Task 993 eventually recovered
+   - **We do NOT know if Hashtopolis would have auto-recovered without intervention**
+
+**Key Insight:** The bug is in the hashcat -> agent -> server communication pipeline, specifically when hashcat outputs crack data in unexpected format. This is NOT a problem with how we submit tasks.
+
+**UNKNOWN: Does Hashtopolis Auto-Recover?**
+
+We don't have evidence that Hashtopolis automatically detects and recovers from crackPos NULL errors. The recovery in this case was triggered by manual chunk abort (which violated the rules).
+
+**Options When This Occurs:**
+
+1. **Wait and observe** - The chunk may timeout naturally (agent stops responding)
+2. **Use Hashtopolis UI** - Task management functions handle cleanup properly
+3. **Archive and recreate** - Archive the broken task, create new task for same hashlist
+4. **Manual abort (LAST RESORT)** - Direct SQL abort, but expect agent crash (Lesson #13)
+
+**What NOT to do:**
+- Don't assume our tools are broken (they're not)
+- Don't panic - the work on other chunks continues
+- Don't auto-abort in tools (per Golden Rule #1)
+
+**Detection in PipelineMonitor:**
+
+The existing `checkLongRunningChunks()` function detects this condition:
+- Chunk dispatched >15 minutes with no progress advancement
+- Reports as "STUCK chunks" with MANUAL action required
+- Does NOT auto-abort (correct behavior per Golden Rule #1)
+
+**ANSWERED: Chunk Timeout Behavior**
+
+Investigation of Hashtopolis source code (TaskUtils.class.php) reveals:
+
+**Timeout Logic:**
+```php
+time() - max(solveTime, dispatchTime) > AGENT_TIMEOUT
+```
+
+**Current Settings:**
+| Setting | Value | Meaning |
+|---------|-------|---------|
+| `agenttimeout` | 30 sec | Chunk times out if no communication for 30s |
+| `statustimer` | 5 sec | Agent sends status every 5s |
+
+**Why crackPos-stuck chunks DON'T auto-timeout:**
+- Timeout is based on **agent communication**, NOT progress advancement
+- `solveTime` updates on each progress report attempt
+- Agent keeps sending updates (even if HTTP 500), resetting timeout clock
+- Chunk never times out because agent never stops communicating
+
+**Implication:** A chunk with crackPos NULL errors will remain stuck **indefinitely** unless:
+1. Agent crashes/stops (then 30s timeout triggers)
+2. Agent is manually restarted (service restart on worker)
+3. Chunk is manually aborted (violates Golden Rule #1)
+4. Task is archived and recreated
+
+**Recommended response to stuck chunks with HTTP 500 errors:**
+
+Use the SafeChunkAbort tool which automates the safe resolution process:
+
+```bash
+# Detect and show stuck chunks (dry-run)
+bun Tools/SafeChunkAbort.ts --detect
+
+# Resolve all stuck chunks (agent restart + fallback to direct abort)
+bun Tools/SafeChunkAbort.ts --detect --abort
+
+# Resolve specific chunk
+bun Tools/SafeChunkAbort.ts --chunk 2399 --abort
+```
+
+**SafeChunkAbort resolution methods (in order):**
+1. **Agent restart** (default) - Restarts agent service → 30s timeout → chunk released
+2. **Direct abort** (fallback) - Sets chunk state=6 if restart fails
+
+This is safer than manual intervention because:
+- Validates chunk is actually stuck (gates A-D)
+- Tries agent restart first (Hashtopolis handles transition)
+- Falls back to direct abort only when needed
+- Provides audit trail

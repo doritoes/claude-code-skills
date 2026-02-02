@@ -7,6 +7,58 @@ description: Generate expanded password wordlists from HIBP Pwned Passwords. USE
 
 Automated pipeline to extract real breach passwords from HIBP Pwned Passwords that supplement rockyou.txt.
 
+## ⛔ MANDATORY RULES (Read First - Non-Negotiable)
+
+**These rules exist because Claude has repeatedly caused pipeline corruption by ignoring them.**
+
+### 1. NEVER Bypass Tools
+- **NO** direct SQL queries to modify data (SELECT is OK, UPDATE/DELETE is NOT)
+- **NO** direct API calls (use SafeArchiver, not curl to archive endpoint)
+- **NO** manual database manipulation of chunks, tasks, or assignments
+- **IF A TOOL BLOCKS YOU**: The tool is right. You are wrong. Stop.
+
+### 2. NEVER Change Configuration
+- `useNewBench = 0` - This is IMMUTABLE. Do not detect dynamically. Do not change.
+- If tasks have keyspace=0, WAIT for benchmark - do not "fix" by changing useNewBench
+- See `data/CONFIG.md` for configuration source of truth
+
+### 3. ALWAYS Run Pre-Flight Checks
+```bash
+# MANDATORY before ANY operation:
+bun Tools/PipelineMonitor.ts --quick
+```
+- Do NOT submit batches if previous batches are stuck (keyspace=0)
+- Do NOT archive without SafeArchiver validation
+- Do NOT proceed if PipelineMonitor shows errors
+
+### 4. ALWAYS Use Tools, Not Ad-Hoc Commands
+| Action | CORRECT | WRONG |
+|--------|---------|-------|
+| Check health | `bun Tools/PipelineMonitor.ts` | Ad-hoc SQL queries |
+| Archive batch | `bun Tools/SafeArchiver.ts --batch X` | Direct SQL UPDATE |
+| Submit batch | `bun Tools/CrackSubmitter.ts --batch X` | Manual hashlist creation |
+| Fix agents | `bun Tools/AgentManager.ts --fix` | Manual SSH/reboot |
+| Unstick chunks | `bun Tools/SafeChunkAbort.ts --detect` | Direct SQL UPDATE Chunk |
+
+### 5. When Uncertain, ASK - Do Not Guess
+- If evidence is contradictory, ask the user
+- If a tool blocks an action, ask the user
+- Do NOT make "definitive" decisions based on spot-checking single database rows
+- "STOP AD-LIBBING" means follow procedures exactly
+
+### 6. Task Completion Criteria (CORRECT Definition)
+- **WRONG**: `keyspaceProgress >= keyspace` (task can show 100% with running chunks)
+- **RIGHT**: All chunks in state 4 (FINISHED) or 9 (TRIMMED), none in state 0/2/6
+
+### 7. Historical Failures to Avoid
+- Lesson #1: Archived batch-0001 at 0% progress
+- Lesson #16: Manually set keyspace, broke 120+ tasks
+- Lesson #21: Direct chunk manipulation, 12 tasks permanently stuck
+- Lesson #37/46: Flip-flopped useNewBench, corrupted batches 95-100
+- **Read `docs/LESSONS-LEARNED.md` before operating the pipeline**
+
+---
+
 ## Nomenclature
 
 ```
@@ -38,8 +90,11 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 
 ## Workflow Routing
 
+**⚠️ ALWAYS run `bun Tools/PipelineMonitor.ts --quick` FIRST before any other operation.**
+
 | Trigger | Workflow |
 |---------|----------|
+| **START OF SESSION** | `bun Tools/PipelineMonitor.ts --quick` (MANDATORY) |
 | "monitor pipeline", "check health", "pipeline status" | `bun Tools/PipelineMonitor.ts` |
 | "archive batch", "archive task", "safe archive" | `bun Tools/SafeArchiver.ts --check` |
 | "submit batch", "start cracking" | `bun Tools/CrackSubmitter.ts --batch N` |
@@ -56,20 +111,34 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 
 ```bash
 # ============================================================================
+# ⛔ MANDATORY PRE-FLIGHT (Run this FIRST - EVERY session, EVERY time)
+# ============================================================================
+
+bun Tools/PipelineMonitor.ts --quick      # Check pipeline state before ANY operation
+# If this shows errors: STOP and fix them before proceeding
+# If tasks have keyspace=0: WAIT - do not "fix" them
+
+# ============================================================================
 # MONITORING & OPERATIONS (Use these FIRST for ongoing batches)
 # ============================================================================
 
 # Comprehensive pipeline health check (PREFERRED - reduces manual SQL)
 bun Tools/PipelineMonitor.ts              # Full health checks (20s wait for chunk check)
 bun Tools/PipelineMonitor.ts --quick      # Quick status only
-bun Tools/PipelineMonitor.ts --fix        # Auto-fix simple issues
-bun Tools/PipelineMonitor.ts --watch      # Continuous monitoring (60s interval)
+bun Tools/PipelineMonitor.ts --fix        # Auto-fix simple issues (ONLY priority alignment)
+bun Tools/PipelineMonitor.ts --watch      # Continuous monitoring (30s interval)
 
 # Safe task archiving with full validation
 bun Tools/SafeArchiver.ts --check batch-0020     # Check batch before archiving
 bun Tools/SafeArchiver.ts --batch batch-0020 --dry-run  # Preview archive
 bun Tools/SafeArchiver.ts --batch batch-0020     # Archive batch
 bun Tools/SafeArchiver.ts --task 150             # Archive single task
+
+# Safe chunk abort (for stuck chunks with crackPos errors)
+bun Tools/SafeChunkAbort.ts --detect             # Find stuck chunks (dry-run)
+bun Tools/SafeChunkAbort.ts --detect --abort     # Resolve stuck chunks (agent restart + fallback)
+bun Tools/SafeChunkAbort.ts --chunk 2399 --abort # Resolve specific chunk
+bun Tools/SafeChunkAbort.ts --chunk 2399 --abort --direct  # Direct abort (skip agent restart)
 
 # ============================================================================
 # BATCH SUBMISSION
@@ -126,6 +195,7 @@ bun Tools/PearlPrioritizer.ts --analyze     # Count distribution
 
 ## Key Files
 
+- **CONFIG (IMMUTABLE)**: `data/CONFIG.md` - useNewBench and other settings (NEVER CHANGE)
 - State: `data/state.json`
 - SAND state: `data/sand-state.json`
 - rockyou SHA-1: `data/rockyou-sha1.bin`
@@ -257,12 +327,13 @@ nocap.txt + OneRuleToRuleThemStill.rule
 
 ## Full Documentation
 
+- **Configuration (READ FIRST)**: `data/CONFIG.md` - Immutable settings (useNewBench=0)
+- **Lessons Learned (READ SECOND)**: `docs/LESSONS-LEARNED.md` - 49 critical lessons from failures
 - Architecture: `Architecture.md`
 - Cracking Pipeline: `Workflows/CrackingPipeline.md`
 - Generational Analysis: See above + `data/GenZ.rule` comments
 - Setup: `SETUP.md`
 - Permissions: `docs/PERMISSIONS.md` (reduce manual approvals)
-- Lessons Learned: `docs/LESSONS-LEARNED.md` (critical operational knowledge)
 - Post-Power-On: `Workflows/PostPowerOn.md` (agent recovery after VM restart)
 
 ## Reducing Manual Intervention

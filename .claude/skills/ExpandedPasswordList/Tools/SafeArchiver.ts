@@ -281,9 +281,15 @@ async function archiveTask(config: ServerConfig, taskId: number, dryRun: boolean
 }
 
 async function archiveBatch(config: ServerConfig, batchPattern: string, dryRun: boolean, force: boolean): Promise<void> {
-  console.log(`\n╭─────────────────────────────────────────────────────────────╮`);
-  console.log(`│        SAFE ARCHIVER - Batch: ${batchPattern.padEnd(28)}│`);
-  console.log(`╰─────────────────────────────────────────────────────────────╯`);
+  const title = `SAFE ARCHIVER - Batch: ${batchPattern}`;
+  const boxWidth = 61;
+  const padding = Math.max(0, boxWidth - title.length);
+  const leftPad = Math.floor(padding / 2);
+  const rightPad = padding - leftPad;
+
+  console.log(`\n╭${"─".repeat(boxWidth)}╮`);
+  console.log(`│${" ".repeat(leftPad)}${title}${" ".repeat(rightPad)}│`);
+  console.log(`╰${"─".repeat(boxWidth)}╯`);
 
   const validations = validateBatch(config, batchPattern);
 
