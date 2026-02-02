@@ -1127,9 +1127,14 @@ async function queryMSV(
     }
   }
 
-  // 3.5. If no CVEs found yet, query NVD directly by CPE (free API)
-  if (exploitedCves.length === 0 && software.cpe23) {
-    logger.debug("Querying NVD by CPE (no CVEs from other sources)...");
+  // 3.5. Query NVD by CPE if: no CVEs found yet, OR CVEs found but no version data
+  const hasVersionData = exploitedCves.some(cve => cve.fixedVersion);
+  const shouldQueryNvd = (exploitedCves.length === 0 || !hasVersionData) && software.cpe23;
+  if (shouldQueryNvd) {
+    const reason = exploitedCves.length === 0
+      ? "no CVEs from other sources"
+      : `${exploitedCves.length} CVEs found but missing version data`;
+    logger.debug(`Querying NVD by CPE (${reason})...`);
     try {
       const nvdClient = new NvdClient(config.dataDir);
       const nvdCpeResults = await nvdClient.searchByCpe(software.cpe23, {

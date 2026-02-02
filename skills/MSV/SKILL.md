@@ -155,23 +155,22 @@ Sources: CISA KEV, NVD, EPSS
 **Example 1: Single Software Query**
 ```
 User: "What is the minimum safe version of Chrome?"
--> Invokes Query workflow
--> Queries CISA KEV, VulnCheck, EPSS for Chrome CVEs
+-> Queries CISA KEV, VulnCheck, NVD, EPSS for Chrome CVEs
+-> Calculates MSV from version data
 -> Returns MSV with Admiralty rating
 ```
 
 **Example 2: Batch Query**
 ```
 User: "Check MSV for Chrome, Edge, and Firefox"
--> Invokes Batch workflow
--> Queries all three in parallel
+-> Queries all three products in parallel
 -> Returns formatted table with ratings
 ```
 
 **Example 3: Windows Server**
 ```
 User: "What's the safe version for Windows Server 2022?"
--> Invokes Query workflow with MSRC data
+-> Queries MSRC for Windows Server security updates
 -> Returns KB-based minimum with patch details
 ```
 

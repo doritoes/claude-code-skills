@@ -115,6 +115,13 @@ const VENDOR_SECURITY_PAGES: Record<string, string> = {
   mongodb: "https://www.mongodb.com/alerts",
   redis: "https://redis.io/docs/management/security/",
 
+  // Text editors
+  notepadplusplus: "https://notepad-plus-plus.org/news/",
+  "notepad-plus-plus": "https://notepad-plus-plus.org/news/",
+  sublime: "https://www.sublimetext.com/blog/",
+  vim: "https://github.com/vim/vim/security/advisories",
+  vscode: "https://github.com/microsoft/vscode/security/advisories",
+
   // Default fallback
   default: "https://nvd.nist.gov/",
 };
@@ -280,20 +287,26 @@ export function generateAction(input: ActionInput): ActionGuidance {
 
     // Has CVE data but couldn't determine MSV
     const vendorUrl = getVendorSecurityPage(vendor);
+    const isDefaultUrl = vendorUrl === VENDOR_SECURITY_PAGES.default;
     return {
       action: "INVESTIGATE",
       symbol: "?",
       color: COLORS.YELLOW,
-      headline: "REVIEW REQUIRED",
-      message: `Found ${cveCount} CVEs but could not determine safe version.`,
+      headline: "VERSION DATA INCOMPLETE",
+      message: `Found ${cveCount} CVEs but version ranges unavailable in data sources.`,
       urgency: "medium",
       guidance: {
         vendorSecurityPage: vendorUrl,
-        steps: [
-          "Review CVE details to identify affected versions",
-          "Check vendor advisory for fixed version information",
-          "Cross-reference with NVD CPE version ranges",
-          "Update MSV catalog with verified fixed versions",
+        steps: isDefaultUrl ? [
+          `Search NVD: https://nvd.nist.gov/vuln/search?query=${encodeURIComponent(vendor || "product")}`,
+          "Click CVE IDs above to view affected version ranges",
+          "Check vendor website for security advisories or changelog",
+          "Upgrade to latest version as precaution until MSV is determined",
+        ] : [
+          `Check vendor advisories: ${vendorUrl}`,
+          "Click CVE IDs above to view affected version ranges on NVD",
+          "Look for 'Fixed in version' or 'Patched in' in advisories",
+          "Upgrade to latest version as precaution until MSV is determined",
         ],
       },
     };
