@@ -780,7 +780,57 @@ const useNewBench = 1; // GPU workers use NEW benchmark format
 ```
 **Prevention:** Know your infrastructure. If all workers use the same benchmark format, hardcode it. Dynamic detection is only useful when you have MIXED worker types (CPU + GPU) - and even then it's unreliable.
 
-### 38. NEVER Hardcode Server IPs in Tools
+### 38. Submit New Batches BEFORE Archiving (CRITICAL)
+**What happened:** Spent time archiving completed batches while GPU workers sat idle with no work.
+**Root cause:** Prioritized cleanup over keeping workers fed.
+**Impact:** Expensive GPU VMs idle = wasted money.
+**Rule:** ALWAYS ensure queue has work before doing housekeeping:
+1. Check if active tasks exist with work remaining
+2. If queue is empty → submit new batches IMMEDIATELY
+3. THEN archive completed batches (in background if possible)
+4. Archiving can wait; idle GPUs cannot
+
+**Workflow:**
+```bash
+# 1. FIRST: Check if workers have work
+SELECT COUNT(*) FROM Task WHERE isArchived=0 AND keyspace>0 AND keyspaceProgress<keyspace;
+
+# 2. If 0: Submit batches immediately
+bun Tools/CrackSubmitter.ts --batch N --workers 8
+
+# 3. THEN: Archive completed batches (lower priority)
+bun Tools/SafeArchiver.ts --batch batch-XXXX
+```
+
+### 39. Watch Mode Does NOT Add Batches - Monitor Queue Depth (CRITICAL)
+**What happened:** Started watch mode and walked away, assuming it would keep workers fed.
+**Root cause:** Watch mode only monitors HEALTH (agents, chunks, stuck detection). It does NOT submit new batches.
+**Impact:** Workers can go idle while watch mode happily reports "all healthy."
+**Rule:** Queue management is SEPARATE from health monitoring:
+
+**Watch mode does:**
+- ✓ Monitor agent health (alive/stale/critical)
+- ✓ Detect stuck chunks (>15min no progress)
+- ✓ Auto-abort stuck chunks
+- ✓ Fix keyspace=0 tasks (when useNewBench=0)
+
+**Watch mode does NOT do:**
+- ✗ Check queue depth
+- ✗ Submit new batches
+- ✗ Ensure workers have future work
+
+**Queue management rule:**
+```bash
+# Check queue depth regularly
+SELECT COUNT(*) FROM Task WHERE isArchived=0 AND keyspace>0 AND keyspaceProgress<keyspace;
+
+# If < 16 tasks (2 batches worth), submit more immediately
+bun Tools/CrackSubmitter.ts --batch N --workers 8
+```
+
+**Target queue depth:** 24-32 tasks (3-4 batches) to ensure workers never go idle.
+
+### 40. NEVER Hardcode Server IPs in Tools
 **What happened:** PipelineMonitor had hardcoded fallback IP that became stale after server reboot.
 **Root cause:** Hardcoded `serverIp: "16.147.88.9"` instead of reading from dynamic source.
 **Impact:** Tool fails to connect after any server restart, requiring code changes.
@@ -841,3 +891,236 @@ bun Tools/PipelineMonitor.ts --watch
 ```
 
 **Key insight:** A chunk running >15min is NOT inherently stuck - it could be processing a large keyspace. The key is checking if progress is ADVANCING. Only abort chunks that are both long-running AND not progressing.
+
+---
+
+## Lesson #41: Use TaskWrapper.cracked, NOT Hash table aggregates
+
+**Date:** 2026-02-01
+
+**Problem:** PipelineMonitor watch mode showing "0/8 agents" and "0 PEARLS" despite data existing. SQL queries were timing out.
+
+**Root Cause:** The `getQuickStatus()` function was using:
+```sql
+SELECT COALESCE(SUM(isCracked), 0) FROM Hash
+```
+
+The Hash table has **millions of rows** (one per submitted hash). Scanning this for SUM operations causes 60+ second query times, hitting the SSH timeout.
+
+**Solution:** Use `TaskWrapper.cracked` which already has aggregated crack counts per task:
+```sql
+SELECT COALESCE(SUM(cracked), 0) FROM TaskWrapper
+```
+
+The TaskWrapper table has only ~700 rows (one per task). This query completes in milliseconds.
+
+**Lesson:** Hashtopolis already maintains aggregated statistics in TaskWrapper. Use these aggregated fields:
+- `TaskWrapper.cracked` - total cracked hashes for this task
+- `TaskWrapper.searched` - total keyspace searched
+
+**NEVER** aggregate directly from the Hash table - it's too large for real-time queries.
+
+---
+
+## Lesson #42: Query Failures Must Return ERROR, Not Zero
+
+**Date:** 2026-02-01
+
+**Problem:** PipelineMonitor showed "0/8 agents" and "0 PEARLS" for hours without alerting that queries were failing.
+
+**Root Cause:** When SQL queries timeout or fail, `execSQL()` returns empty string, which gets parsed as 0:
+```typescript
+const [agents, chunks, pearls] = result.split("\t");
+return {
+  agents: parseInt(agents) || 0,  // "" becomes 0
+  chunks: parseInt(chunks) || 0,  // Silent failure!
+```
+
+**Impact:**
+1. Watch mode showed "0/8 agents" but didn't realize queries were failing
+2. Health checks were skipped (no chunks to check when chunks=0)
+3. Stuck chunk running 53 minutes was never detected
+4. User saw misleading "8 agents down" when they were actually fine
+
+**Solution:** Add explicit query failure detection:
+```typescript
+if (!result || !result.includes("\t")) {
+  return { agents: -1, chunks: -1, pearls: -1, queryFailed: true };
+}
+```
+
+**Lesson:** Never silently convert failures to zeros. Query failures should:
+1. Return a distinct error state (not valid data)
+2. Display clear error message to user
+3. Skip dependent health checks
+4. Suggest diagnostic commands
+
+---
+
+## Lesson #43: Watch Mode Monitoring Interval is 30 Seconds
+
+**Date:** 2026-02-01
+
+**Problem:** Watch mode was checking every 90 seconds, violating Golden Rule #5.
+
+**Documentation says:**
+> Golden Rule #5: Monitor frequently (30s intervals), not infrequently
+> SKILL.md: Check PEARLS count every 30 seconds
+
+**Fix:** Changed `setInterval(runWatchCycle, 90000)` to `setInterval(runWatchCycle, 30000)`
+
+**Lesson:** Read and follow the skill documentation. The 30-second interval exists because:
+1. Stuck chunks need detection within 15 minutes
+2. Queue depth changes rapidly
+3. Agent health can degrade quickly
+
+---
+
+## Lesson #44: Progress is Centipercent - Display Bug Caused False Alarms
+
+**Date:** 2026-02-01
+
+**Problem:** PipelineMonitor showed chunk progress like "757%" causing panic about benchmark format mismatches.
+
+**Root cause:** Hashtopolis stores progress as **centipercent** (0-10000 = 0-100%).
+- progress=10000 means 100% complete
+- progress=757 means 7.57% complete, NOT 757%
+
+**What happened:**
+1. PipelineMonitor displayed raw progress value as percentage
+2. progress=757 was shown as "757%"
+3. This was misinterpreted as benchmark format error
+4. Led to incorrectly changing useNewBench from 1 to 0
+5. Had to revert after verifying that working tasks used useNewBench=1
+
+**Evidence that useNewBench=1 is correct:**
+```sql
+-- Completed tasks (batch-0081, 0082) all used useNewBench=1
+SELECT taskId, taskName, useNewBench, cracked FROM Task t
+JOIN TaskWrapper tw ON t.taskWrapperId = tw.taskWrapperId
+WHERE t.isArchived=1 AND tw.cracked > 10000;
+-- All show useNewBench=1 with 18K+ cracks each
+```
+
+**Fix applied:**
+```typescript
+// PipelineMonitor.ts line 348 - divide by 100 for display
+const stuckDetails = stuckChunks.map(c =>
+  `chunk ${c.chunkId} on ${c.agentName} (${c.minutes}min, ${(c.progress/100).toFixed(1)}%)`
+).join(", ");
+```
+
+**Key insight:** Verify before changing. The >100% display was a rendering bug, not a benchmark format issue. The working process (useNewBench=1) was correct all along.
+
+---
+
+## Lesson #45: PHP Memory Exhaustion with Large Hashlists (CRITICAL)
+
+**Date:** 2026-02-01
+
+**Problem:** Server repeatedly became unresponsive requiring multiple reboots.
+
+**Root cause:** Backend PHP logs showed:
+```
+PHP Fatal error: Allowed memory size of 268435456 bytes exhausted (tried to allocate 20480 bytes)
+```
+And:
+```
+SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock
+```
+
+**What's happening:**
+1. 8 GPU workers sending progress updates simultaneously
+2. Each hashlist has 500K hashes
+3. Progress updates query/update the massive Hash table
+4. 256MB PHP memory limit is exhausted
+5. Database deadlocks occur when multiple transactions compete
+
+**Impact:**
+- Server stops responding to SSH
+- Progress updates fail silently
+- Chunks appear stuck at same progress for 50+ minutes
+- PEARLS stop incrementing
+- Work IS being done but not reported
+
+**Short-term fix:**
+```bash
+# Reduce workers to 4 to decrease concurrent database load
+aws ec2 stop-instances --instance-ids <workers 2,3,5,7>
+```
+
+**Long-term fix (TODO):**
+1. Increase PHP memory_limit to 1GB+ in docker-compose
+2. Increase MySQL innodb_lock_wait_timeout
+3. Consider smaller hashlists (250K instead of 500K)
+4. Add retry logic in Hashtopolis for deadlock errors
+
+**Detection:**
+```bash
+# Check backend logs for memory/deadlock errors
+ssh ubuntu@SERVER "docker logs hashtopolis-backend --tail 100 2>&1 | grep -i 'memory\|deadlock\|lock wait'"
+```
+
+**Key insight:** With large-scale operations (900M+ hashes, 8 concurrent workers), infrastructure limits become critical. Monitor PHP memory usage and database lock statistics.
+
+---
+
+## Lesson #46: useNewBench MUST BE 0 (OLD Format) - CRITICAL DEFINITIVE ANSWER
+
+**Date:** 2026-02-01
+
+**Problem:** Tasks repeatedly stuck at keyspace=0 despite agents being assigned. Multiple flip-flops between useNewBench=0 and useNewBench=1 caused hours of wasted GPU compute.
+
+**Root Cause:** Benchmark format mismatch between tasks and agents.
+
+**Definitive Evidence:**
+```sql
+-- Agents provide OLD format benchmarks
+SELECT benchmark FROM Assignment;
+-- Result: "74240:5460.54" (time:speed format = OLD)
+
+-- Successfully cracked tasks (140K+ cracks) ALL used useNewBench=0
+SELECT taskId, taskName, useNewBench, tw.cracked FROM Task t
+JOIN TaskWrapper tw ON t.taskWrapperId=tw.taskWrapperId
+WHERE tw.cracked > 100000;
+-- All show useNewBench=0
+```
+
+**Technical Detail:**
+- **OLD format:** "time:speed" (e.g., "74240:5460.54") → useNewBench=0
+- **NEW format:** decimal (e.g., "0.17302763622033") → useNewBench=1
+- Our GPU workers provide OLD format benchmarks
+- Tasks MUST have useNewBench=0 to match
+
+**Code Fixes Applied:**
+1. `CrackSubmitter.ts` line 192: Changed hardcoded value to `useNewBench = 0`
+2. `CrackSubmitter.ts` line 214: Changed default to `params.useNewBench ?? 0`
+3. `PipelineMonitor.ts`: Changed auto-fix logic to set useNewBench=0 (not 1)
+4. `AgentManager.ts`: Removed suggestion to set useNewBench=1
+
+**The Rule (NEVER VIOLATE):**
+```typescript
+// CrackSubmitter.ts - CORRECT
+const useNewBench = 0; // OLD format - matches GPU worker benchmarks
+
+// WRONG - DO NOT USE
+const useNewBench = 1; // This causes benchmark format mismatch!
+```
+
+**Why Previous "Fixes" Failed:**
+1. Lesson #37 incorrectly stated "Our GPU workers use NEW benchmark format"
+2. CrackSubmitter was hardcoded to useNewBench=1
+3. PipelineMonitor watch mode auto-"fixed" tasks by setting useNewBench=1
+4. Each "fix" undid the previous correct setting
+
+**Verification After Fix:**
+- All 8 tasks benchmarked successfully (keyspace=14344384)
+- 7-8 active chunks running
+- Progress advancing normally
+- PEARLS incrementing
+
+**Guard Against Future Regression:**
+- This lesson is the DEFINITIVE ANSWER
+- useNewBench=0 is CORRECT for this infrastructure
+- Any suggestion to change to useNewBench=1 should be REJECTED
+- Check Assignment.benchmark to verify agent format if in doubt

@@ -184,14 +184,13 @@ async function runPreFlightGates(config: { serverIp: string; dbPassword: string;
   }
   console.log("  ✓ Files marked as secret");
 
-  // GATE E: Benchmark format - ALWAYS use NEW format (useNewBench=1)
-  // LESSON 37: Dynamic detection from Assignment table is UNRELIABLE.
-  // Our GPU workers use NEW benchmark format (decimal speed values).
-  // Detecting from Assignment can return stale/inconsistent results.
-  // HARDCODE useNewBench=1 for consistent task creation.
+  // GATE E: Benchmark format - ALWAYS use OLD format (useNewBench=0)
+  // LESSON 46: Verified agents provide OLD format benchmarks like "74240:5460.54" (time:speed)
+  // NOT decimal values. useNewBench MUST match what agents actually provide.
+  // Evidence: SELECT benchmark FROM Assignment shows "74240:5460.54" format.
   console.log("GATE E: Benchmark format...");
-  const useNewBench = 1; // ALWAYS use new format for GPU workers
-  console.log(`  ✓ Using NEW benchmark format (useNewBench=1) - hardcoded for GPU workers`);
+  const useNewBench = 0; // OLD format - matches what GPU workers actually provide
+  console.log(`  ✓ Using OLD benchmark format (useNewBench=0) - matches agent benchmark format`);
 
   console.log("\n=== ALL GATES PASSED ===\n");
   return { useNewBench };
@@ -212,7 +211,9 @@ async function createTaskViaDB(
     useNewBench?: number;
   }
 ): Promise<{ wrapperId: number; taskId: number }> {
-  const useNewBench = params.useNewBench ?? 1;
+  // CRITICAL: Default to OLD format (useNewBench=0) per Lesson #46
+  // Agents provide "74240:5460.54" format (OLD, not decimal)
+  const useNewBench = params.useNewBench ?? 0;
 
   // 1. Create TaskWrapper (links hashlist to task)
   const wrapperSQL = `INSERT INTO TaskWrapper (priority, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked, maxAgents) VALUES (${params.priority}, 0, ${params.hashlistId}, 1, '${params.name}', 0, 0, ${params.maxAgents})`;

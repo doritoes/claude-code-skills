@@ -354,7 +354,7 @@ async function watchLoop(): Promise<void> {
       // Check for uninitialized tasks that might explain idle agents
       const uninitCount = execSQL(config, "SELECT COUNT(*) FROM Task WHERE keyspace=0 AND isArchived=0");
       if (uninitCount && parseInt(uninitCount) > 0) {
-        console.log(`  → ${uninitCount} tasks with keyspace=0 - run: UPDATE Task SET useNewBench=1 WHERE keyspace=0 AND isArchived=0`);
+        console.log(`  → ${uninitCount} tasks with keyspace=0 - check agents are alive and files accessible`);
       }
     } else {
       console.log(statusLine);

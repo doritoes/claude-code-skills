@@ -242,12 +242,13 @@ async function checkChunkProgressAdvancing(config: ServerConfig): Promise<Health
   if (stuck.length === 0) {
     return { name: "Chunk Advancement", status: "OK", message: "All chunks progressing" };
   } else {
+    // Per Golden Rule #1 and Lesson #21: Do NOT auto-abort chunks
     return {
       name: "Chunk Advancement",
       status: "CRITICAL",
       message: `Stuck chunks: ${stuck.join(", ")}`,
-      action: "Abort stuck chunks: UPDATE Chunk SET state=6, agentId=NULL WHERE chunkId IN (" + stuck.join(",") + ")",
-      sql: `UPDATE Chunk SET state=6, agentId=NULL WHERE chunkId IN (${stuck.join(",")})`
+      action: "MANUAL: Archive task + recreate, OR use Hashtopolis UI, OR wait for agent timeout"
+      // NO sql field - per Golden Rule #1: "NEVER Manipulate Database Directly"
     };
   }
 }
@@ -343,18 +344,19 @@ async function checkLongRunningChunks(config: ServerConfig): Promise<HealthCheck
   }
 
   // Build detailed message about stuck chunks
+  // NOTE: Hashtopolis progress is centipercent (0-10000 = 0-100%), divide by 100 for display
   const stuckDetails = stuckChunks.map(c =>
-    `chunk ${c.chunkId} on ${c.agentName} (${c.minutes}min, ${c.progress.toFixed(1)}%)`
+    `chunk ${c.chunkId} on ${c.agentName} (${c.minutes}min, ${(c.progress/100).toFixed(1)}%)`
   ).join(", ");
 
-  const chunkIds = stuckChunks.map(c => c.chunkId);
-
+  // Per Golden Rule #1 and Lesson #21: Do NOT auto-abort chunks
+  // Direct chunk manipulation causes stuck tasks and data corruption
   return {
     name: "Long-Running Chunks (>15min)",
     status: "CRITICAL",
     message: `${stuckChunks.length} STUCK chunks (>15min, no progress): ${stuckDetails}`,
-    action: `AUTO-ABORT: UPDATE Chunk SET state=6, agentId=NULL WHERE chunkId IN (${chunkIds.join(",")})`,
-    sql: `UPDATE Chunk SET state=6, agentId=NULL WHERE chunkId IN (${chunkIds.join(",")})`
+    action: "MANUAL: Archive task + recreate, OR use Hashtopolis UI, OR wait for agent timeout"
+    // NO sql field - per Golden Rule #1: "NEVER Manipulate Database Directly"
   };
 }
 
@@ -461,9 +463,10 @@ async function checkUninitializedTasks(config: ServerConfig): Promise<HealthChec
   // CRITICAL: Tasks with keyspace=0 cannot be assigned to workers
   // This causes GPU workers to sit idle - expensive waste of compute!
   //
-  // Per Lesson #16: Tasks are created with keyspace=0, useNewBench=1
-  // Agents benchmark on pickup → determines keyspace → creates chunks
-  // ONLY set useNewBench=1 on tasks where useNewBench=0 (prevents benchmark)
+  // Per Lesson #46: Agents use OLD benchmark format ("74240:5460.54")
+  // Tasks MUST have useNewBench=0 to match agent format
+  // If keyspace=0 and useNewBench=0, agents should benchmark normally
+  // If keyspace=0 and useNewBench=1, there's a FORMAT MISMATCH - fix to 0
 
   // First, count ALL keyspace=0 tasks
   const allUninitialized = execSQL(config, `
@@ -475,35 +478,34 @@ async function checkUninitializedTasks(config: ServerConfig): Promise<HealthChec
     return { name: "Task Initialization", status: "OK", message: "All tasks have valid keyspace" };
   }
 
-  // Per Lesson #16: Only tasks with useNewBench=0 can be fixed by setting useNewBench=1
-  const fixableResult = execSQL(config, `
+  // Check for tasks with WRONG benchmark format (useNewBench=1 should be 0)
+  const wrongFormatResult = execSQL(config, `
     SELECT taskId, taskName
     FROM Task
-    WHERE keyspace = 0 AND useNewBench = 0 AND isArchived = 0
+    WHERE keyspace = 0 AND useNewBench = 1 AND isArchived = 0
   `);
 
-  const fixableTasks = fixableResult ? fixableResult.split("\n").filter(Boolean) : [];
-  const fixableCount = fixableTasks.length;
+  const wrongFormatTasks = wrongFormatResult ? wrongFormatResult.split("\n").filter(Boolean) : [];
+  const wrongFormatCount = wrongFormatTasks.length;
 
-  if (fixableCount > 0) {
-    // There ARE tasks we can fix by setting useNewBench=1
+  if (wrongFormatCount > 0) {
+    // Tasks have wrong benchmark format - fix to useNewBench=0
     return {
       name: "Task Initialization",
       status: "CRITICAL",
-      message: `${totalCount} tasks with keyspace=0 (${fixableCount} fixable with useNewBench=1)`,
-      action: `Auto-fix: Set useNewBench=1 on ${fixableCount} tasks to trigger benchmark`,
-      sql: "UPDATE Task SET useNewBench = 1 WHERE keyspace = 0 AND useNewBench = 0 AND isArchived = 0"
+      message: `${wrongFormatCount} tasks with keyspace=0 AND wrong format (useNewBench=1, should be 0)`,
+      action: `Auto-fix: Set useNewBench=0 to match agent benchmark format`,
+      sql: "UPDATE Task SET useNewBench = 0 WHERE keyspace = 0 AND useNewBench = 1 AND isArchived = 0"
     };
   } else {
-    // Tasks already have useNewBench=1 but still stuck - different problem!
-    // Per Lesson #16: If useNewBench=1 but keyspace=0, agents aren't picking up tasks
-    // Possible causes: no agents, files not accessible (isSecret), priority too low
+    // Tasks have correct format (useNewBench=0) but still keyspace=0
+    // This means agents aren't benchmarking - check agents, files, assignments
     return {
       name: "Task Initialization",
       status: "WARNING",
-      message: `${totalCount} tasks with keyspace=0 but useNewBench=1 (agents not benchmarking - check files/priority/agents)`,
-      action: "Investigate: Are files accessible (isSecret=1)? Are agents idle? Is priority > 0?"
-      // No SQL fix - this requires investigation, not blind UPDATE
+      message: `${totalCount} tasks with keyspace=0 (correct format but not benchmarked)`,
+      action: "Investigate: Are agents alive? Files accessible (isSecret=1)? Assignments exist?"
+      // No SQL fix - this requires investigation
     };
   }
 }
@@ -537,19 +539,36 @@ async function checkIdleAgents(config: ServerConfig): Promise<HealthCheck> {
   };
 }
 
-async function getQuickStatus(config: ServerConfig): Promise<{ agents: number; chunks: number; pearls: number }> {
+interface QuickStatus {
+  agents: number;
+  chunks: number;
+  pearls: number;
+  queryFailed: boolean;  // True if SQL query failed/timed out
+}
+
+async function getQuickStatus(config: ServerConfig): Promise<QuickStatus> {
+  // IMPORTANT: Use TaskWrapper.cracked instead of SUM(isCracked) FROM Hash
+  // The Hash table has millions of rows - scanning it causes timeouts
+  // TaskWrapper already has aggregated crack counts per task (Lesson #41)
   const result = execSQL(config, `
     SELECT
       (SELECT COUNT(*) FROM Agent WHERE UNIX_TIMESTAMP() - lastTime < 60),
       (SELECT COUNT(*) FROM Chunk WHERE state=2),
-      (SELECT COALESCE(SUM(isCracked), 0) FROM Hash)
+      (SELECT COALESCE(SUM(cracked), 0) FROM TaskWrapper)
   `);
+
+  // CRITICAL: Detect query failures (Lesson #42)
+  // Empty result means query failed - don't silently return 0s
+  if (!result || !result.includes("\t")) {
+    return { agents: -1, chunks: -1, pearls: -1, queryFailed: true };
+  }
 
   const [agents, chunks, pearls] = result.split("\t");
   return {
     agents: parseInt(agents) || 0,
     chunks: parseInt(chunks) || 0,
-    pearls: parseInt(pearls) || 0
+    pearls: parseInt(pearls) || 0,
+    queryFailed: false
   };
 }
 
@@ -570,9 +589,21 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
   // Quick status
   const status = await getQuickStatus(config);
   console.log("┌─ QUICK STATUS ─────────────────────────────────────────────┐");
-  console.log(`│ Agents: ${status.agents}/8    Chunks: ${status.chunks}    PEARLS: ${status.pearls.toLocaleString()}`);
+  if (status.queryFailed) {
+    console.log("│ \x1b[31m⚠ QUERY FAILED - Cannot get status (check server connection)\x1b[0m");
+    console.log("│ SSH or MySQL may be unresponsive. Check server health.");
+  } else {
+    console.log(`│ Agents: ${status.agents}/8    Chunks: ${status.chunks}    PEARLS: ${status.pearls.toLocaleString()}`);
+  }
   console.log("└────────────────────────────────────────────────────────────┘");
   console.log("");
+
+  // Abort early if queries are failing
+  if (status.queryFailed && !options.watch) {
+    console.log("\x1b[31mCannot run health checks - server queries failing.\x1b[0m");
+    console.log("Try: ssh ubuntu@" + config.serverIp + " 'sudo docker ps'");
+    return;
+  }
 
   if (options.quick) {
     return;
@@ -634,51 +665,80 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
     }
   }
 
-  // Watch mode - AGGRESSIVE monitoring with auto-fix
+  // Watch mode - Health monitoring per Golden Rule #5 (30s intervals)
+  // NOTE: Watch mode does NOT auto-abort chunks (per Golden Rule #1, Lesson #21)
+  // NOTE: Watch mode does NOT add batches (per Lesson #39) - monitor queue separately
   if (options.watch) {
     console.log("");
-    console.log("┌─ AUTONOMOUS WATCH MODE ────────────────────────────────────┐");
-    console.log("│ Checking every 90 seconds with AUTO-FIX enabled           │");
-    console.log("│ Will alert on: idle agents, keyspace=0, stuck chunks      │");
+    console.log("┌─ WATCH MODE (30s interval per Golden Rule #5) ────────────┐");
+    console.log("│ Monitors: agents, chunks, queue depth, stuck detection    │");
+    console.log("│ Auto-fixes: useNewBench=0 for format-mismatch tasks ONLY  │");
+    console.log("│ NO auto-abort: Per Golden Rule #1, Lesson #21             │");
+    console.log("│ NO batch submission: Per Lesson #39 (monitor queue only)  │");
     console.log("└────────────────────────────────────────────────────────────┘");
     console.log("Watching... (Ctrl+C to stop)\n");
+
+    let lastQueueWarning = 0;
 
     const runWatchCycle = async () => {
       const timestamp = new Date().toLocaleTimeString();
       const s = await getQuickStatus(config);
+
+      // Handle query failures gracefully
+      if (s.queryFailed) {
+        console.log(`[${timestamp}] \x1b[31m⚠ QUERY FAILED - server unresponsive\x1b[0m`);
+        return;
+      }
+
+      // Check queue depth (tasks with remaining work)
+      const queueResult = execSQL(config, `
+        SELECT COUNT(*) FROM Task
+        WHERE isArchived=0 AND keyspace>0 AND keyspaceProgress<keyspace
+      `);
+      const queueDepth = parseInt(queueResult) || 0;
 
       // Check for idle agents (CRITICAL - expensive waste)
       const idleCheck = await checkIdleAgents(config);
       const uninitCheck = await checkUninitializedTasks(config);
 
       // Build status line
-      let statusLine = `[${timestamp}] Agents: ${s.agents}/8 | Chunks: ${s.chunks} | PEARLS: ${s.pearls.toLocaleString()}`;
+      let statusLine = `[${timestamp}] Agents: ${s.agents}/8 | Chunks: ${s.chunks} | Queue: ${queueDepth} | PEARLS: ${s.pearls.toLocaleString()}`;
 
-      // Alert on issues with ESCALATION PATH
+      // Queue depth warning (every 5 minutes max)
+      const now = Date.now();
+      if (queueDepth < 8 && (now - lastQueueWarning) > 300000) {
+        console.log(`\x1b[33m⚠️  LOW QUEUE: Only ${queueDepth} tasks with work remaining!\x1b[0m`);
+        console.log(`   Submit more batches: bun Tools/CrackSubmitter.ts --batch N`);
+        lastQueueWarning = now;
+      }
+
+      // Alert on idle agents with ESCALATION PATH
       if (idleCheck.status !== "OK") {
         console.log(`\x1b[31m⚠️  ALERT: ${idleCheck.message}\x1b[0m`);
         console.log(`   ESCALATION PATH:`);
-        console.log(`   1. Free stuck chunks: UPDATE Chunk SET state=6, agentId=NULL WHERE agentId=X AND state=2`);
-        console.log(`   2. Restart agent service on worker VM`);
-        console.log(`   3. Reboot worker EC2 instance`);
-        console.log(`   4. Rebuild worker (terraform destroy/apply)`);
+        console.log(`   1. Check queue depth (are there tasks with work?)`);
+        console.log(`   2. Check if tasks need benchmark (keyspace=0)`);
+        console.log(`   3. If agent truly stale: reboot worker EC2 instance`);
+
+        // AUTO-REBOOT: Workers stale >15 min with tasks available (Lesson #46)
+        await autoRebootStaleWorkers(config, queueDepth);
       }
 
-      // Auto-fix keyspace=0 issues immediately
-      if (uninitCheck.status !== "OK" && uninitCheck.sql) {
+      // Auto-fix format mismatch (set useNewBench=0 per Lesson #46)
+      if (uninitCheck.status === "CRITICAL" && uninitCheck.sql) {
         console.log(`\x1b[33m⚡ AUTO-FIX: ${uninitCheck.message}\x1b[0m`);
         execSQL(config, uninitCheck.sql);
-        console.log(`   ✓ Fixed uninitialized tasks`);
+        console.log(`   ✓ Set useNewBench=0 to match agent format`);
       }
 
-      // Check for long-running stuck chunks and AUTO-ABORT (per user requirement)
+      // Check for stuck chunks - WARN ONLY, do NOT auto-abort (Golden Rule #1)
       if (s.chunks > 0) {
         const longRunningCheck = await checkLongRunningChunks(config);
-        if (longRunningCheck.status === "CRITICAL" && longRunningCheck.sql) {
-          console.log(`\x1b[31m🔥 STUCK CHUNKS DETECTED: ${longRunningCheck.message}\x1b[0m`);
-          console.log(`   ⚡ AUTO-ABORTING stuck chunks...`);
-          execSQL(config, longRunningCheck.sql);
-          console.log(`   ✓ Aborted stuck chunks (agents may crash - per Lesson #13)`);
+        if (longRunningCheck.status === "CRITICAL") {
+          console.log(`\x1b[31m🔥 STUCK CHUNKS: ${longRunningCheck.message}\x1b[0m`);
+          console.log(`   Per Golden Rule #1: Manual intervention required`);
+          console.log(`   Options: (1) Wait for timeout (2) Archive task + recreate (3) Use Hashtopolis UI`);
+          // NO auto-abort per Lesson #21: "NEVER Manipulate Chunk State Directly"
         }
       }
 
@@ -690,9 +750,9 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
       console.log(statusLine);
     };
 
-    // Run immediately, then every 90 seconds
+    // Run immediately, then every 30 seconds (per Golden Rule #5)
     await runWatchCycle();
-    setInterval(runWatchCycle, 90000);
+    setInterval(runWatchCycle, 30000);
   }
 }
 
@@ -710,23 +770,33 @@ PipelineMonitor - Comprehensive pipeline health monitoring
 Usage:
   bun PipelineMonitor.ts              Run all health checks
   bun PipelineMonitor.ts --quick      Quick status only
-  bun PipelineMonitor.ts --fix        Auto-fix issues (keyspace=0, stuck chunks)
-  bun PipelineMonitor.ts --watch      Continuous monitoring (90s interval) with AUTO-FIX
+  bun PipelineMonitor.ts --fix        Auto-fix keyspace=0 (useNewBench only)
+  bun PipelineMonitor.ts --watch      Continuous monitoring (30s interval)
 
 Health Checks:
   - Agent health (alive/stale workers)
-  - Task initialization (keyspace=0 detection - auto-fixable)
+  - Task initialization (keyspace=0 detection)
   - Idle agents (workers with no work assigned)
-  - Long-running chunks (>15min detection - auto-abortable)
+  - Queue depth (tasks with remaining work)
+  - Long-running chunks (>15min detection)
   - Chunk advancement (detect stuck chunks - 20s wait)
   - Priority alignment (Task vs TaskWrapper)
   - Archive readiness (safe archiving validation)
   - Crack distribution (detect incomplete batches)
 
-Stuck Chunk Detection (per user requirement):
+Auto-Fix (--fix and --watch):
+  - Sets useNewBench=0 on tasks with format mismatch (useNewBench=1 should be 0)
+  - Does NOT auto-abort chunks (per Golden Rule #1, Lesson #21)
+  - Does NOT add batches (per Lesson #39)
+
+Stuck Chunk Resolution (MANUAL per Golden Rule #1):
   - Detect chunks running >15 minutes with no progress
-  - Auto-abort stuck chunks in --fix and --watch modes
-  - Resolution within 5 minutes of detection
+  - Options: Wait for timeout, Archive+recreate task, Use Hashtopolis UI
+  - DO NOT directly manipulate Chunk state (causes stuck tasks)
+
+Queue Management (per Lesson #39):
+  - Watch mode monitors queue depth but does NOT add batches
+  - Submit batches manually: bun Tools/CrackSubmitter.ts --batch N
 `);
     process.exit(0);
   }
