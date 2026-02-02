@@ -4,11 +4,11 @@ A collection of skills for [Claude Code](https://claude.ai/claude-code), Anthrop
 
 ## Available Skills
 
-| Skill | Description | Status |
-|-------|-------------|--------|
-| [MSV](skills/MSV/) | Minimum Safe Version calculator - determines the lowest software version free of known-exploited vulnerabilities | Stable |
-| [Hashcrack](skills/Hashcrack/) | Distributed password hash cracking using Hashtopolis across 6 cloud/hypervisor providers | Stable |
-| [FoldingAtCloud](skills/FoldingAtCloud/) | Deploy Folding@Home workers on spare cloud credits - GPU/CPU folding on AWS, Azure, GCP, OCI | Stable |
+| Skill | Description | Version | Status |
+|-------|-------------|---------|--------|
+| [MSV](skills/MSV/) | Minimum Safe Version calculator + CTI Report Generator - determines the lowest software version free of known-exploited vulnerabilities and generates threat intelligence reports | v1.4.0 | Stable |
+| [Hashcrack](skills/Hashcrack/) | Distributed password hash cracking using Hashtopolis across 6 cloud/hypervisor providers | - | Stable |
+| [FoldingAtCloud](skills/FoldingAtCloud/) | Deploy Folding@Home workers on spare cloud credits - GPU/CPU folding on AWS, Azure, GCP, OCI | - | Stable |
 
 ## Quick Installation
 

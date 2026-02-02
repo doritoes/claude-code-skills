@@ -260,30 +260,43 @@ export class VulnCheckClient {
 
   /**
    * Query CVEs by CPE (Common Platform Enumeration)
+   * Uses free /index/nist-nvd2 endpoint instead of paid /cpe endpoint
    */
   async queryCpe(cpe: string): Promise<VulnCheckCve[]> {
     const cacheKey = `vulncheck-cpe-${cpe.replace(/[^a-zA-Z0-9-]/g, "_")}`;
-    const result = await this.request<{ data: VulnCheckApiCve[] }>(
-      `/cpe?cpe=${encodeURIComponent(cpe)}`,
-      cacheKey
-    );
-    // Map all API CVEs to internal format
-    return (result.data || []).map(mapApiCveToInternal);
+    try {
+      // Use free index endpoint with CPE filter
+      const result = await this.request<{ data: VulnCheckApiCve[] }>(
+        `/index/nist-nvd2?cpe=${encodeURIComponent(cpe)}`,
+        cacheKey
+      );
+      // Map all API CVEs to internal format
+      return (result.data || []).map(mapApiCveToInternal);
+    } catch (error) {
+      // If index endpoint fails, return empty (don't break the flow)
+      if ((error as Error).message.includes("subscription")) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   /**
    * Check VulnCheck's KEV index for a CVE
+   * Uses free /index/vulncheck-kev endpoint instead of paid /kev endpoint
    */
   async checkKev(cveId: string): Promise<VulnCheckKevEntry | null> {
     try {
       const cacheKey = `vulncheck-kev-${cveId.replace(/[^a-zA-Z0-9-]/g, "_")}`;
+      // Use free index endpoint with CVE filter
       const result = await this.request<{ data: VulnCheckKevEntry[] }>(
-        `/kev?cve=${encodeURIComponent(cveId)}`,
+        `/index/vulncheck-kev?cve=${encodeURIComponent(cveId)}`,
         cacheKey
       );
       return result.data?.[0] || null;
     } catch (error) {
-      if ((error as Error).message.includes("404")) {
+      if ((error as Error).message.includes("404") ||
+          (error as Error).message.includes("subscription")) {
         return null;
       }
       throw error;

@@ -111,6 +111,9 @@ import type {
   VariantInfo,
   VariantMsv,
 } from "./types";
+import { CtiReportGenerator } from "./CtiReportGenerator";
+import { formatCtiReport } from "./CtiFormatter";
+import type { CTIReportOptions, CTIUserProfile, ReportPeriod, CTIOutputFormat } from "./CtiTypes";
 
 // =============================================================================
 // Module Logger
@@ -171,13 +174,21 @@ function getConfig(): Config {
     mkdirSync(dataDir, { recursive: true });
   }
 
-  // Load environment variables
+  // Load environment variables from .env file
   let vulncheckApiKey: string | undefined;
   if (existsSync(envPath)) {
     const envContent = readFileSync(envPath, "utf-8");
-    const match = envContent.match(/VULNCHECK_API_KEY=(.+)/);
-    if (match) {
-      vulncheckApiKey = match[1].trim();
+
+    // Load VULNCHECK_API_KEY
+    const vulncheckMatch = envContent.match(/VULNCHECK_API_KEY=(.+)/);
+    if (vulncheckMatch) {
+      vulncheckApiKey = vulncheckMatch[1].trim();
+    }
+
+    // Load NVD_API_KEY into process.env for NvdClient
+    const nvdMatch = envContent.match(/NVD_API_KEY=(.+)/);
+    if (nvdMatch && !process.env.NVD_API_KEY) {
+      process.env.NVD_API_KEY = nvdMatch[1].trim();
     }
   }
 
@@ -1626,10 +1637,11 @@ async function cmdBatch(
   }
 }
 
-async function cmdRefresh(): Promise<void> {
+async function cmdRefresh(clearNvd: boolean = false): Promise<void> {
   const config = getConfig();
-  console.log("Refreshing CISA KEV cache...");
 
+  // Refresh KEV
+  console.log("Refreshing CISA KEV cache...");
   const kevClient = new CisaKevClient(config.dataDir);
   const catalog = await kevClient.fetchCatalog(true);
   const stats = await kevClient.getStats();
@@ -1637,6 +1649,20 @@ async function cmdRefresh(): Promise<void> {
   console.log(`KEV catalog refreshed: ${stats.totalCount} vulnerabilities`);
   console.log(`  Last updated: ${stats.lastUpdated}`);
   console.log(`  Ransomware-related: ${stats.ransomwareCount}`);
+
+  // Clear NVD/MSV cache if requested
+  if (clearNvd) {
+    const msvCachePath = resolve(config.dataDir, "msv-cache.json");
+    if (existsSync(msvCachePath)) {
+      const { unlinkSync } = await import("node:fs");
+      unlinkSync(msvCachePath);
+      console.log("\nMSV/NVD cache cleared.");
+      console.log("  Next queries will fetch fresh data from NVD.");
+      console.log("  Tip: Run 'msv warm' to pre-populate cache for critical software.");
+    } else {
+      console.log("\nNo MSV/NVD cache to clear.");
+    }
+  }
 }
 
 // =============================================================================
@@ -2501,6 +2527,8 @@ COMMANDS:
   scan                 Detect installed software versions via winget/chocolatey
   sbom <file>          Parse SBOM (CycloneDX/SPDX) and check component MSVs
   ghsa <ecosystem> [package]  Query GitHub Advisory Database (npm, pip, maven, etc.)
+  router <subcommand>  Query router firmware MSVs (query, vendors, models, stats)
+  cti report           Generate Cyber Threat Intelligence report (use 'msv cti help')
   stats                Show catalog statistics
   refresh              Force refresh all caches
   list                 List supported software
@@ -3335,6 +3363,161 @@ async function cmdRouter(
 }
 
 // =============================================================================
+// CTI Report Command
+// =============================================================================
+
+interface CtiOptions {
+  format: CTIOutputFormat;
+  verbose: boolean;
+  period: ReportPeriod;
+  profile?: CTIUserProfile;
+  profilePath?: string;
+  company?: string;
+  industry?: string;
+  inventory?: string;
+  size?: string;
+  region?: string;
+  output?: string;
+  forceRefresh?: boolean;
+}
+
+/**
+ * Generate CTI (Cyber Threat Intelligence) report
+ */
+async function cmdCti(
+  subcommand: string,
+  options: CtiOptions
+): Promise<void> {
+  const config = getConfig();
+  const generator = new CtiReportGenerator(config.dataDir);
+
+  switch (subcommand) {
+    case "report": {
+      // Auto-refresh stale data (>24 hours) before generating report
+      const kevClient = new CisaKevClient(config.dataDir);
+      const kevCachePath = resolve(config.dataDir, "kev-cache.json");
+
+      if (existsSync(kevCachePath)) {
+        try {
+          const cache = JSON.parse(readFileSync(kevCachePath, "utf-8"));
+          const cacheAge = (Date.now() - new Date(cache.lastUpdated).getTime()) / (1000 * 60 * 60);
+
+          if (cacheAge > 24 || options.forceRefresh) {
+            console.log(`\x1b[2mKEV data is ${Math.round(cacheAge)} hours old, refreshing...\x1b[0m`);
+            await kevClient.fetchCatalog(true);
+            console.log(`\x1b[32mKEV data refreshed.\x1b[0m\n`);
+          }
+        } catch {
+          // Cache corrupted, will be refreshed during report generation
+        }
+      } else {
+        // No cache, fetch fresh
+        console.log(`\x1b[2mFetching KEV data...\x1b[0m`);
+        await kevClient.fetchCatalog(true);
+        console.log(`\x1b[32mKEV data fetched.\x1b[0m\n`);
+      }
+
+      // Load or create profile
+      let profile: CTIUserProfile | undefined;
+
+      if (options.profilePath) {
+        profile = generator.loadProfile(options.profilePath) || undefined;
+        if (!profile) {
+          throw new Error(`Could not load profile from ${options.profilePath}`);
+        }
+      } else if (options.company || options.industry || options.inventory) {
+        profile = generator.createProfileFromOptions({
+          company: options.company,
+          industry: options.industry,
+          inventory: options.inventory,
+          size: options.size,
+          region: options.region,
+        });
+      }
+
+      // Generate report
+      const reportOptions: CTIReportOptions = {
+        period: options.period || "week",
+        format: options.format || "text",
+        profile,
+        forceRefresh: options.forceRefresh,
+        verbose: options.verbose,
+      };
+
+      const report = await generator.generateReport(reportOptions);
+
+      // Format and output
+      const formatted = formatCtiReport(report, options.format || "text");
+
+      if (options.output) {
+        writeFileSync(options.output, formatted);
+        console.log(`Report saved to ${options.output}`);
+      } else {
+        console.log(formatted);
+      }
+      break;
+    }
+
+    case "help":
+    default:
+      console.log(`
+CTI Report - Cyber Threat Intelligence Report Generator
+
+USAGE:
+  msv cti report [options]          Generate CTI report
+
+OPTIONS:
+  --period <day|week|month>         Report period (default: week)
+  --format <text|markdown|json>     Output format (default: text)
+  --output <file>                   Save report to file
+
+CUSTOMIZATION OPTIONS:
+  --profile <file.json>             Load organization profile from file
+  --company <name>                  Company name (sets TLP to GREEN/AMBER)
+  --industry <sector>               Industry sector for relevant threats
+  --inventory <list>                Comma-separated software IDs to track
+  --size <number>                   Employee count
+  --region <region>                 Geographic region
+
+TLP (Traffic Light Protocol):
+  TLP:WHITE   General landscape report, no customization
+  TLP:GREEN   Customized for organization, no specific threats
+  TLP:AMBER   Customized with specific threats to organization
+
+EXAMPLES:
+  # General threat landscape (TLP:WHITE)
+  msv cti report
+
+  # Weekly report in markdown
+  msv cti report --period week --format markdown
+
+  # Customized report for organization (TLP:GREEN or TLP:AMBER)
+  msv cti report --company "ACME Corp" --industry "Financial Services"
+
+  # Track specific software inventory
+  msv cti report --company "ACME Corp" --inventory "chrome,edge,putty,winrar"
+
+  # Load full profile from file
+  msv cti report --profile company-profile.json
+
+  # Save report to file
+  msv cti report --format markdown --output cti-report.md
+
+PROFILE FILE FORMAT (company-profile.json):
+  {
+    "companyName": "ACME Corp",
+    "industry": "Financial Services",
+    "employeeCount": 5000,
+    "region": "North America",
+    "softwareInventory": ["chrome", "edge", "putty", "winrar"],
+    "focusAreas": ["endpoint", "network"],
+    "complianceFrameworks": ["PCI-DSS", "SOC2"]
+  }
+`);
+  }
+}
+
+// =============================================================================
 // Main Entry Point
 // =============================================================================
 
@@ -3363,6 +3546,16 @@ async function main(): Promise<void> {
   let concurrency = 5;  // Default concurrency
   let hwVersion: string | undefined;  // Router hardware version
   let firmware: string | undefined;   // Router firmware version
+  // CTI options
+  let ctiPeriod: ReportPeriod = "week";
+  let ctiProfilePath: string | undefined;
+  let ctiCompany: string | undefined;
+  let ctiIndustry: string | undefined;
+  let ctiInventory: string | undefined;
+  let ctiSize: string | undefined;
+  let ctiRegion: string | undefined;
+  let ctiOutput: string | undefined;
+  let clearNvdCache = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -3397,6 +3590,23 @@ async function main(): Promise<void> {
       hwVersion = args[++i];
     } else if (arg === "--firmware" && args[i + 1]) {
       firmware = args[++i];
+    // CTI options
+    } else if (arg === "--period" && args[i + 1]) {
+      ctiPeriod = args[++i] as ReportPeriod;
+    } else if (arg === "--profile" && args[i + 1]) {
+      ctiProfilePath = args[++i];
+    } else if (arg === "--company" && args[i + 1]) {
+      ctiCompany = args[++i];
+    } else if (arg === "--industry" && args[i + 1]) {
+      ctiIndustry = args[++i];
+    } else if (arg === "--inventory" && args[i + 1]) {
+      ctiInventory = args[++i];
+    } else if (arg === "--size" && args[i + 1]) {
+      ctiSize = args[++i];
+    } else if (arg === "--region" && args[i + 1]) {
+      ctiRegion = args[++i];
+    } else if (arg === "--output" && args[i + 1]) {
+      ctiOutput = args[++i];
     } else if (!arg.startsWith("-")) {
       positionalArgs.push(arg);
     }
@@ -3536,6 +3746,22 @@ async function main(): Promise<void> {
           verbose: options.verbose,
           hwVersion,
           firmware,
+        });
+        break;
+
+      case "cti":
+        await cmdCti(positionalArgs[1] || "report", {
+          format: options.format as CTIOutputFormat,
+          verbose: options.verbose,
+          period: ctiPeriod,
+          profilePath: ctiProfilePath,
+          company: ctiCompany,
+          industry: ctiIndustry,
+          inventory: ctiInventory,
+          size: ctiSize,
+          region: ctiRegion,
+          output: ctiOutput,
+          forceRefresh: options.forceRefresh,
         });
         break;
 
