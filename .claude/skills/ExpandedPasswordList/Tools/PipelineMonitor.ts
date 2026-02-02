@@ -153,11 +153,23 @@ function execSQL(config: ServerConfig, sql: string): string {
 // =============================================================================
 
 async function checkAgentHealth(config: ServerConfig): Promise<HealthCheck> {
+  // Use 120-second threshold (2 min) to account for timing variations
+  // Agents check in every 5 seconds, but network/processing can cause gaps
+  // EXCEPTION: Agents downloading hashlists (lastAct='getHashlist') may take longer
+  // as large hashlist downloads can take several minutes - use 10 min threshold for those
   const result = execSQL(config, `
     SELECT
       COUNT(*) as total,
-      SUM(CASE WHEN (UNIX_TIMESTAMP() - lastTime) < 60 THEN 1 ELSE 0 END) as alive,
-      GROUP_CONCAT(CASE WHEN (UNIX_TIMESTAMP() - lastTime) >= 60 THEN agentName ELSE NULL END) as stale
+      SUM(CASE
+        WHEN lastAct = 'getHashlist' AND (UNIX_TIMESTAMP() - lastTime) < 600 THEN 1
+        WHEN lastAct != 'getHashlist' AND (UNIX_TIMESTAMP() - lastTime) < 120 THEN 1
+        ELSE 0
+      END) as alive,
+      GROUP_CONCAT(CASE
+        WHEN lastAct = 'getHashlist' AND (UNIX_TIMESTAMP() - lastTime) >= 600 THEN CONCAT(agentName, ' (downloading)')
+        WHEN lastAct != 'getHashlist' AND (UNIX_TIMESTAMP() - lastTime) >= 120 THEN agentName
+        ELSE NULL
+      END) as stale
     FROM Agent
   `);
 
@@ -165,8 +177,21 @@ async function checkAgentHealth(config: ServerConfig): Promise<HealthCheck> {
   const aliveCount = parseInt(alive) || 0;
   const totalCount = parseInt(total) || 0;
 
+  // Also get count of agents currently downloading
+  const downloadingResult = execSQL(config, `
+    SELECT COUNT(*), GROUP_CONCAT(agentName)
+    FROM Agent
+    WHERE lastAct = 'getHashlist' AND (UNIX_TIMESTAMP() - lastTime) < 600
+  `);
+  const [downloadingCount, downloadingNames] = downloadingResult.split("\t");
+  const downloading = parseInt(downloadingCount) || 0;
+
   if (aliveCount === totalCount && totalCount > 0) {
-    return { name: "Agent Health", status: "OK", message: `${aliveCount}/${totalCount} agents alive` };
+    let msg = `${aliveCount}/${totalCount} agents alive`;
+    if (downloading > 0) {
+      msg += ` (${downloading} downloading hashlists)`;
+    }
+    return { name: "Agent Health", status: "OK", message: msg };
   } else if (aliveCount > 0) {
     return {
       name: "Agent Health",
@@ -513,12 +538,16 @@ async function checkUninitializedTasks(config: ServerConfig): Promise<HealthChec
 async function checkIdleAgents(config: ServerConfig): Promise<HealthCheck> {
   // Check for agents that are active but have no dispatched chunks
   // This indicates either all work is done, or tasks aren't initialized
+  // EXCEPTION: Agents downloading hashlists (lastAct='getHashlist') are not idle -
+  // they're actively downloading work, which can take several minutes for large files
   const result = execSQL(config, `
     SELECT a.agentId, a.agentName,
-      TIMESTAMPDIFF(MINUTE, FROM_UNIXTIME(a.lastTime), NOW()) as minutes_idle
+      TIMESTAMPDIFF(MINUTE, FROM_UNIXTIME(a.lastTime), NOW()) as minutes_idle,
+      a.lastAct
     FROM Agent a
     WHERE a.isActive = 1
       AND (UNIX_TIMESTAMP() - a.lastTime) > 120
+      AND a.lastAct != 'getHashlist'
       AND a.agentId NOT IN (SELECT DISTINCT agentId FROM Chunk WHERE state = 2 AND agentId IS NOT NULL)
   `);
 
@@ -527,8 +556,8 @@ async function checkIdleAgents(config: ServerConfig): Promise<HealthCheck> {
   }
 
   const idleAgents = result.split("\n").filter(Boolean).map(line => {
-    const [id, name, minutes] = line.split("\t");
-    return `${name} (${minutes}min)`;
+    const [id, name, minutes, lastAct] = line.split("\t");
+    return `${name} (${minutes}min, ${lastAct})`;
   });
 
   return {
@@ -550,9 +579,10 @@ async function getQuickStatus(config: ServerConfig): Promise<QuickStatus> {
   // IMPORTANT: Use TaskWrapper.cracked instead of SUM(isCracked) FROM Hash
   // The Hash table has millions of rows - scanning it causes timeouts
   // TaskWrapper already has aggregated crack counts per task (Lesson #41)
+  // Use 120-second threshold (2 min) to match checkAgentHealth
   const result = execSQL(config, `
     SELECT
-      (SELECT COUNT(*) FROM Agent WHERE UNIX_TIMESTAMP() - lastTime < 60),
+      (SELECT COUNT(*) FROM Agent WHERE UNIX_TIMESTAMP() - lastTime < 120),
       (SELECT COUNT(*) FROM Chunk WHERE state=2),
       (SELECT COALESCE(SUM(cracked), 0) FROM TaskWrapper)
   `);
@@ -573,6 +603,146 @@ async function getQuickStatus(config: ServerConfig): Promise<QuickStatus> {
 }
 
 // =============================================================================
+// Server Health Check (Docker, Memory, Disk)
+// =============================================================================
+
+interface ServerHealth {
+  docker: { running: number; total: number; containers: string[] };
+  memory: { used: string; total: string; percent: number };
+  disk: { used: string; total: string; percent: number };
+  uptime: string;
+  healthy: boolean;
+  issues: string[];
+}
+
+async function checkServerHealth(config: ServerConfig): Promise<ServerHealth> {
+  const health: ServerHealth = {
+    docker: { running: 0, total: 0, containers: [] },
+    memory: { used: "0", total: "0", percent: 0 },
+    disk: { used: "0", total: "0", percent: 0 },
+    uptime: "unknown",
+    healthy: true,
+    issues: []
+  };
+
+  try {
+    // Run all checks in one SSH command for efficiency
+    // Use unique markers that won't appear in output data
+    // IMPORTANT: Keep command on single line to avoid shell escaping issues
+    const remoteCmd = "echo '###DOCKER###' && sudo docker ps --format '{{.Names}}:{{.Status}}' 2>/dev/null && echo '###MEMORY###' && free -h | grep Mem && echo '###DISK###' && df -h / | tail -1 && echo '###UPTIME###' && (uptime -p 2>/dev/null || uptime) && echo '###END###'";
+    const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "${remoteCmd}"`;
+
+    const result = execSync(cmd, { encoding: "utf-8", timeout: 30000 }).trim();
+
+    // Parse using regex to extract sections between markers
+    const dockerMatch = result.match(/###DOCKER###\n([\s\S]*?)###MEMORY###/);
+    const memoryMatch = result.match(/###MEMORY###\n([\s\S]*?)###DISK###/);
+    const diskMatch = result.match(/###DISK###\n([\s\S]*?)###UPTIME###/);
+    const uptimeMatch = result.match(/###UPTIME###\n([\s\S]*?)###END###/);
+
+    // Parse Docker
+    if (dockerMatch && dockerMatch[1]) {
+      const containers = dockerMatch[1].trim().split("\n").filter(l => l.includes(":"));
+      health.docker.total = containers.length;
+      health.docker.running = containers.filter(c => c.toLowerCase().includes("up")).length;
+      health.docker.containers = containers.map(c => {
+        const colonIdx = c.indexOf(":");
+        const name = c.substring(0, colonIdx);
+        const status = c.substring(colonIdx + 1);
+        return `${name} (${status.toLowerCase().includes("up") ? "✓" : "✗"})`;
+      });
+      if (health.docker.running < health.docker.total) {
+        health.issues.push(`${health.docker.total - health.docker.running} container(s) not running`);
+      }
+    }
+
+    // Parse Memory: "Mem:           7.6Gi       1.7Gi       5.3Gi..."
+    if (memoryMatch && memoryMatch[1]) {
+      const memLine = memoryMatch[1].trim();
+      const parts = memLine.split(/\s+/);
+      // parts[0] = "Mem:", parts[1] = total, parts[2] = used, parts[3] = free...
+      health.memory.total = parts[1] || "0";
+      health.memory.used = parts[2] || "0";
+      // Calculate percent from used/total (handle Gi/Mi suffixes)
+      const parseSize = (s: string): number => {
+        const num = parseFloat(s);
+        if (s.includes("Gi")) return num * 1024;
+        if (s.includes("Mi")) return num;
+        return num;
+      };
+      const usedMi = parseSize(health.memory.used);
+      const totalMi = parseSize(health.memory.total);
+      if (totalMi > 0) {
+        health.memory.percent = Math.round((usedMi / totalMi) * 100);
+      }
+      if (health.memory.percent > 85) {
+        health.issues.push(`Memory usage high: ${health.memory.percent}%`);
+      }
+    }
+
+    // Parse Disk: "/dev/root        48G   23G   26G  47% /"
+    if (diskMatch && diskMatch[1]) {
+      const diskLine = diskMatch[1].trim();
+      const parts = diskLine.split(/\s+/);
+      // parts[0] = device, parts[1] = size, parts[2] = used, parts[3] = avail, parts[4] = use%
+      health.disk.total = parts[1] || "0";
+      health.disk.used = parts[2] || "0";
+      const percentStr = parts[4] || "0%";
+      health.disk.percent = parseInt(percentStr.replace("%", "")) || 0;
+      if (health.disk.percent > 80) {
+        health.issues.push(`Disk usage high: ${health.disk.percent}%`);
+      }
+    }
+
+    // Parse Uptime
+    if (uptimeMatch && uptimeMatch[1]) {
+      health.uptime = uptimeMatch[1].trim();
+    }
+
+    health.healthy = health.issues.length === 0;
+  } catch (e) {
+    health.healthy = false;
+    health.issues.push(`SSH failed: ${(e as Error).message.substring(0, 50)}`);
+  }
+
+  return health;
+}
+
+function displayServerHealth(health: ServerHealth): void {
+  console.log("┌─ SERVER HEALTH ─────────────────────────────────────────────┐");
+
+  // Docker
+  const dockerStatus = health.docker.running === health.docker.total && health.docker.total > 0
+    ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
+  console.log(`│ ${dockerStatus} Docker: ${health.docker.running}/${health.docker.total} containers running`);
+  for (const container of health.docker.containers) {
+    console.log(`│   ${container}`);
+  }
+
+  // Memory
+  const memStatus = health.memory.percent <= 85 ? "\x1b[32m✓\x1b[0m" : "\x1b[33m⚠\x1b[0m";
+  console.log(`│ ${memStatus} Memory: ${health.memory.used}/${health.memory.total} (${health.memory.percent}%)`);
+
+  // Disk
+  const diskStatus = health.disk.percent <= 80 ? "\x1b[32m✓\x1b[0m" : "\x1b[33m⚠\x1b[0m";
+  console.log(`│ ${diskStatus} Disk: ${health.disk.used}/${health.disk.total} (${health.disk.percent}%)`);
+
+  // Uptime
+  console.log(`│ ○ Uptime: ${health.uptime}`);
+
+  // Issues
+  if (health.issues.length > 0) {
+    console.log(`│`);
+    console.log(`│ \x1b[33mIssues:\x1b[0m`);
+    for (const issue of health.issues) {
+      console.log(`│   → ${issue}`);
+    }
+  }
+
+  console.log("└────────────────────────────────────────────────────────────┘");
+}
+
+// =============================================================================
 // Main Monitor Function
 // =============================================================================
 
@@ -584,6 +754,11 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
 
   const config = getServerConfig();
   console.log(`Server: ${config.serverIp}`);
+  console.log("");
+
+  // Server health check (docker, memory, disk)
+  const serverHealth = await checkServerHealth(config);
+  displayServerHealth(serverHealth);
   console.log("");
 
   // Quick status
