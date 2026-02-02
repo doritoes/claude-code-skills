@@ -1,7 +1,7 @@
 ---
 name: MSV
-version: 1.3.0
-description: Minimum Safe Version calculator for Windows software. USE WHEN user needs safe software versions OR user asks about vulnerability-free versions OR user mentions patching decisions OR user wants minimum version to upgrade to OR user asks about KEV vulnerabilities for specific software. Queries CISA KEV, VulnCheck, AppThreat, EPSS to determine lowest version free of known-exploited vulnerabilities.
+version: 1.4.0
+description: Minimum Safe Version calculator and CTI report generator for Windows software. USE WHEN user needs safe software versions OR user asks about vulnerability-free versions OR user mentions patching decisions OR user wants minimum version to upgrade to OR user asks about KEV vulnerabilities for specific software OR user wants threat intelligence reports. Queries CISA KEV, VulnCheck, AppThreat, EPSS to determine lowest version free of known-exploited vulnerabilities and generate actionable CTI briefings.
 ---
 
 # MSV (Minimum Safe Version)
@@ -113,6 +113,15 @@ msv db update              # Download/update database
 msv refresh                # Refresh API caches
 msv list                   # List supported software
 msv stats                  # Show catalog statistics
+
+# CTI Reports (Cyber Threat Intelligence)
+msv cti report                          # General threat landscape (TLP:WHITE)
+msv cti report --format markdown        # Markdown output for sharing
+msv cti report --period day             # Daily tactical report
+msv cti report --company "ACME Corp"    # Customized report (TLP:GREEN)
+msv cti report --industry "Financial Services"  # Industry-specific threats
+msv cti report --inventory "chrome,edge,putty"  # Track specific software
+msv cti help                            # Show all CTI options
 ```
 
 ## Output Format
@@ -164,6 +173,18 @@ User: "Check MSV for Chrome, Edge, and Firefox"
 User: "What's the safe version for Windows Server 2022?"
 -> Invokes Query workflow with MSRC data
 -> Returns KB-based minimum with patch details
+```
+
+**Example 4: CTI Report**
+```
+User: "Generate a weekly CTI report for my financial services company"
+-> Invokes: msv cti report --company "ACME Corp" --industry "Financial Services"
+-> Returns 1-pager with:
+   - BLUF (Bottom Line Up Front) executive summary
+   - TLP:GREEN marking (customized, no specific threats)
+   - Critical zero-days from CISA KEV
+   - Industry-relevant threats
+   - Data validation timestamps
 ```
 
 ## Adding New Software

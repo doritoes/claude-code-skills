@@ -5,6 +5,28 @@ All notable changes to the MSV (Minimum Safe Version) skill are documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-02
+
+### Added
+- **CTI Report Generator** - Cyber Threat Intelligence reports from vulnerability data
+  - `msv cti report` - Generate operational threat intelligence reports
+  - `msv cti report --company "ACME" --industry "Financial"` - Customized reports
+  - `msv cti report --period day|week` - Daily tactical or weekly strategic reports
+  - `msv cti report --inventory "chrome,edge,putty"` - Track specific software
+  - `msv cti help` - Show all CTI options
+  - TLP marking: WHITE (general), GREEN (customized), AMBER (specific threats)
+  - BLUF (Bottom Line Up Front) executive summary format
+  - Data validation footer with source timestamps
+- New CTI components:
+  - `CtiReportGenerator.ts` - Main report generation logic
+  - `CtiFormatter.ts` - Report formatting (text, markdown, json)
+  - `CtiTypes.ts` - TypeScript interfaces for CTI
+  - `IntelligenceAggregator.ts` - Data collection and analysis
+- `docs/CTI-REPORT-REQUIREMENTS.md` - Feature specification
+
+### Changed
+- Version bumped to 1.4.0
+
 ## [Unreleased]
 
 ### Added
@@ -203,6 +225,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.4.0 | 2026-02-02 | **CTI Report Generator** - Threat intelligence reports |
 | 1.3.0 | 2026-01-21 | MSRC client, Logger, test fixes |
 | 1.2.0 | 2026-01-19 | Risk scoring, vendor fetchers, data quality |
 | 1.1.0 | 2026-01-14 | Vendor advisories, multi-branch support |

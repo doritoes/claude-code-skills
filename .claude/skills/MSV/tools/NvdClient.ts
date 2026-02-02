@@ -118,7 +118,7 @@ const MAX_BACKOFF_MS = 60000; // Max 60 second delay
 const BACKOFF_MULTIPLIER = 2;
 
 // =============================================================================
-// Rate Limiter (Token Bucket)
+// Rate Limiter (Token Bucket) - SINGLETON for all NvdClient instances
 // =============================================================================
 
 class TokenBucketRateLimiter {
@@ -161,6 +161,39 @@ class TokenBucketRateLimiter {
     this.refill();
     return Math.floor(this.tokens);
   }
+
+  /** Reconfigure rate limiter (e.g., when API key detected later) */
+  reconfigure(maxTokens: number, windowMs: number): void {
+    this.maxTokens = maxTokens;
+    this.refillRate = maxTokens / windowMs;
+    // Don't reset tokens - keep current state
+    this.tokens = Math.min(this.tokens, maxTokens);
+  }
+
+  getMaxTokens(): number {
+    return this.maxTokens;
+  }
+}
+
+// Singleton rate limiter - shared across ALL NvdClient instances
+// This is critical for proper rate limiting with concurrent requests
+let sharedRateLimiter: TokenBucketRateLimiter | null = null;
+let rateLimiterApiKeyState: boolean | null = null;
+
+function getSharedRateLimiter(hasApiKey: boolean): TokenBucketRateLimiter {
+  const targetLimit = hasApiKey ? RATE_LIMIT_WITH_KEY : RATE_LIMIT_NO_KEY;
+
+  if (!sharedRateLimiter) {
+    // First initialization
+    sharedRateLimiter = new TokenBucketRateLimiter(targetLimit, RATE_LIMIT_WINDOW_MS);
+    rateLimiterApiKeyState = hasApiKey;
+  } else if (rateLimiterApiKeyState !== hasApiKey && hasApiKey) {
+    // API key was added after initial setup - upgrade limit
+    sharedRateLimiter.reconfigure(targetLimit, RATE_LIMIT_WINDOW_MS);
+    rateLimiterApiKeyState = hasApiKey;
+  }
+
+  return sharedRateLimiter;
 }
 
 // =============================================================================
@@ -180,12 +213,12 @@ export class NvdClient {
     // Check for API key in environment
     this.apiKey = process.env.NVD_API_KEY || null;
 
-    // Configure rate limiter based on API key presence
-    const rateLimit = this.apiKey ? RATE_LIMIT_WITH_KEY : RATE_LIMIT_NO_KEY;
-    this.rateLimiter = new TokenBucketRateLimiter(rateLimit, RATE_LIMIT_WINDOW_MS);
+    // Use SHARED rate limiter (singleton) across all NvdClient instances
+    // This ensures concurrent requests from warm/batch operations coordinate properly
+    this.rateLimiter = getSharedRateLimiter(!!this.apiKey);
 
     if (this.verbose && this.apiKey) {
-      console.log("NVD API key detected - using higher rate limit (50 req/30s)");
+      console.log(`NVD API key detected - using higher rate limit (${this.rateLimiter.getMaxTokens()} req/30s)`);
     }
 
     if (!existsSync(cacheDir)) {
