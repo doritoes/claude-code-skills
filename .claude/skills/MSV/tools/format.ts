@@ -148,10 +148,12 @@ export function formatText(result: MSVResult): string {
   }
   lines.push("");
 
-  // Branch information if available
-  if (result.branches.length > 0) {
+  // Branch information if available (filter out "default" placeholder branch)
+  // Only show real version branches (e.g., "5", "6", "7" for 5.x, 6.x, 7.x trains)
+  const realBranches = result.branches.filter(b => b.branch !== "default");
+  if (realBranches.length > 0) {
     lines.push(`${BOLD}Version Branches:${RESET_COLOR}`);
-    for (const branch of result.branches) {
+    for (const branch of realBranches) {
       if (branch.noSafeVersion) {
         // Critical warning: MSV > latest means no safe version exists in this branch
         lines.push(`  ${RED}${branch.branch}.x: NO SAFE VERSION - MSV ${branch.msv} > latest ${branch.latest}${RESET_COLOR}`);
@@ -259,14 +261,15 @@ export function formatMarkdown(result: MSVResult): string {
     result.riskScore ? `**Risk Recommendation:** ${result.riskScore.recommendation}` : "",
   ].filter(Boolean);
 
-  // Show branch information
-  if (result.branches.length > 0) {
+  // Show branch information (filter out "default" placeholder branch)
+  const mdBranches = result.branches.filter(b => b.branch !== "default");
+  if (mdBranches.length > 0) {
     lines.push("");
     lines.push("### Version Branches");
     lines.push("");
     lines.push("| Branch | MSV | Latest |");
     lines.push("|--------|-----|--------|");
-    for (const branch of result.branches) {
+    for (const branch of mdBranches) {
       lines.push(`| ${branch.branch}.x | ${branch.msv} | ${branch.latest} |`);
     }
   }

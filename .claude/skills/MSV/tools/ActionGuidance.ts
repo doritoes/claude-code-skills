@@ -238,14 +238,21 @@ export function generateAction(input: ActionInput): ActionGuidance {
   }
 
   // Case 3: MSV determined but no current version provided
+  // This is a SUCCESS - we determined the MSV, user just needs to check their version
   if (minimumSafeVersion && !currentVersion) {
     return {
-      action: "INVESTIGATE",
-      symbol: "?",
-      color: COLORS.MAGENTA,
-      headline: "VERSION CHECK NEEDED",
-      message: `MSV is ${minimumSafeVersion}. Verify your installed version meets this requirement.`,
-      urgency: "medium",
+      action: "NO_ACTION",
+      symbol: "✓",
+      color: COLORS.GREEN,
+      headline: "MSV DETERMINED",
+      message: `Minimum safe version is ${minimumSafeVersion}. Ensure your installed version meets or exceeds this.`,
+      urgency: "info",
+      guidance: {
+        steps: [
+          `Verify your installed version is ${minimumSafeVersion} or later`,
+          `To check compliance: msv query <software> --version YOUR_VERSION`,
+        ],
+      },
     };
   }
 
