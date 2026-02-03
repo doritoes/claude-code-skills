@@ -615,6 +615,16 @@ interface ServerHealth {
   issues: string[];
 }
 
+interface DatabaseHealth {
+  hashTableMb: number;
+  hashTableRows: number;
+  totalDbMb: number;
+  activeHashlists: number;
+  archivableHashlists: number;
+  estimatedReclaimMb: number;
+  needsCleanup: boolean;
+}
+
 async function checkServerHealth(config: ServerConfig): Promise<ServerHealth> {
   const health: ServerHealth = {
     docker: { running: 0, total: 0, containers: [] },
@@ -708,6 +718,97 @@ async function checkServerHealth(config: ServerConfig): Promise<ServerHealth> {
   return health;
 }
 
+async function checkDatabaseHealth(config: ServerConfig): Promise<DatabaseHealth> {
+  const health: DatabaseHealth = {
+    hashTableMb: 0,
+    hashTableRows: 0,
+    totalDbMb: 0,
+    activeHashlists: 0,
+    archivableHashlists: 0,
+    estimatedReclaimMb: 0,
+    needsCleanup: false
+  };
+
+  // Get Hash table size
+  const hashSize = execSQL(config, `
+    SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2)
+    FROM information_schema.tables
+    WHERE table_schema = 'hashtopolis' AND table_name = 'Hash'
+  `);
+  health.hashTableMb = parseFloat(hashSize) || 0;
+
+  // Get Hash row count
+  const hashRows = execSQL(config, `SELECT COUNT(*) FROM Hash`);
+  health.hashTableRows = parseInt(hashRows) || 0;
+
+  // Get total DB size
+  const totalDb = execSQL(config, `
+    SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2)
+    FROM information_schema.tables
+    WHERE table_schema = 'hashtopolis'
+  `);
+  health.totalDbMb = parseFloat(totalDb) || 0;
+
+  // Get active (non-archived) hashlists count
+  const activeHashlists = execSQL(config, `SELECT COUNT(*) FROM Hashlist WHERE isArchived = 0`);
+  health.activeHashlists = parseInt(activeHashlists) || 0;
+
+  // Get archivable hashlists (all tasks archived but hashlist not)
+  const archivable = execSQL(config, `
+    SELECT COUNT(DISTINCT hl.hashlistId)
+    FROM Hashlist hl
+    WHERE hl.isArchived = 0
+    AND NOT EXISTS (
+      SELECT 1 FROM Task t
+      JOIN TaskWrapper tw ON t.taskWrapperId = tw.taskWrapperId
+      WHERE tw.hashlistId = hl.hashlistId AND t.isArchived = 0
+    )
+  `);
+  health.archivableHashlists = parseInt(archivable) || 0;
+
+  // Estimate reclaimable space (archivable hashlists × avg 62500 rows × 230 bytes)
+  if (health.archivableHashlists > 0) {
+    health.estimatedReclaimMb = Math.round(health.archivableHashlists * 62500 * 230 / 1024 / 1024);
+  }
+
+  // Determine if cleanup is needed (Hash table > 5GB or disk > 70%)
+  health.needsCleanup = health.hashTableMb > 5000 || health.archivableHashlists > 50;
+
+  return health;
+}
+
+function displayDatabaseHealth(db: DatabaseHealth, diskPercent: number): void {
+  console.log("┌─ DATABASE HEALTH ───────────────────────────────────────────┐");
+
+  // Hash table size
+  const hashStatus = db.hashTableMb < 5000 ? "\x1b[32m✓\x1b[0m" :
+                     db.hashTableMb < 10000 ? "\x1b[33m⚠\x1b[0m" : "\x1b[31m✗\x1b[0m";
+  console.log(`│ ${hashStatus} Hash Table: ${db.hashTableMb.toLocaleString()} MB (${db.hashTableRows.toLocaleString()} rows)`);
+
+  // Total DB size
+  console.log(`│ ○ Total Database: ${db.totalDbMb.toLocaleString()} MB`);
+
+  // Active vs archivable hashlists
+  console.log(`│ ○ Active Hashlists: ${db.activeHashlists.toLocaleString()}`);
+
+  if (db.archivableHashlists > 0) {
+    console.log(`│ \x1b[33m⚠\x1b[0m Archivable Hashlists: ${db.archivableHashlists} (can reclaim ~${db.estimatedReclaimMb} MB)`);
+  }
+
+  // Cleanup recommendation
+  if (db.needsCleanup || diskPercent > 70) {
+    console.log(`│`);
+    console.log(`│ \x1b[33m→ CLEANUP RECOMMENDED:\x1b[0m`);
+    console.log(`│   1. Export passwords: bun Tools/PasswordExporter.ts export`);
+    console.log(`│   2. Archive hashlists: bun Tools/HashlistArchiver.ts`);
+    if (db.hashTableMb > 10000) {
+      console.log(`│   3. Optimize table: OPTIMIZE TABLE Hash (after archiving)`);
+    }
+  }
+
+  console.log("└────────────────────────────────────────────────────────────┘");
+}
+
 function displayServerHealth(health: ServerHealth): void {
   console.log("┌─ SERVER HEALTH ─────────────────────────────────────────────┐");
 
@@ -761,14 +862,20 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
   displayServerHealth(serverHealth);
   console.log("");
 
+  // Database health check (Hash table size, archivable hashlists)
+  const dbHealth = await checkDatabaseHealth(config);
+  displayDatabaseHealth(dbHealth, serverHealth.disk.percent);
+  console.log("");
+
   // Quick status
   const status = await getQuickStatus(config);
   console.log("┌─ QUICK STATUS ─────────────────────────────────────────────┐");
   if (status.queryFailed) {
-    console.log("│ \x1b[31m⚠ QUERY FAILED - Cannot get status (check server connection)\x1b[0m");
-    console.log("│ SSH or MySQL may be unresponsive. Check server health.");
+    console.log("│ \x1b[31m⚠ QUERY FAILED - Cannot get status (check server connection)\x1b[0m │");
+    console.log("│ SSH or MySQL may be unresponsive. Check server health.    │");
   } else {
-    console.log(`│ Agents: ${status.agents}/8    Chunks: ${status.chunks}    PEARLS: ${status.pearls.toLocaleString()}`);
+    const line = `Agents: ${status.agents}/8    Chunks: ${status.chunks}    PEARLS: ${status.pearls.toLocaleString()}`;
+    console.log(`│ ${line.padEnd(58)} │`);
   }
   console.log("└────────────────────────────────────────────────────────────┘");
   console.log("");
@@ -944,11 +1051,15 @@ PipelineMonitor - Comprehensive pipeline health monitoring
 
 Usage:
   bun PipelineMonitor.ts              Run all health checks
-  bun PipelineMonitor.ts --quick      Quick status only
+  bun PipelineMonitor.ts --quick      Quick status only (server + DB summary)
+  bun PipelineMonitor.ts --health     Full health checks (default)
   bun PipelineMonitor.ts --fix        Auto-fix keyspace=0 (useNewBench only)
   bun PipelineMonitor.ts --watch      Continuous monitoring (30s interval)
+  bun PipelineMonitor.ts --cleanup    Run HashlistArchiver to reclaim disk
 
 Health Checks:
+  - Server health (Docker, Memory, Disk usage)
+  - Database health (Hash table size, archivable hashlists)
   - Agent health (alive/stale workers)
   - Task initialization (keyspace=0 detection)
   - Idle agents (workers with no work assigned)
@@ -958,6 +1069,12 @@ Health Checks:
   - Priority alignment (Task vs TaskWrapper)
   - Archive readiness (safe archiving validation)
   - Crack distribution (detect incomplete batches)
+
+Database Cleanup (--cleanup):
+  - Exports cracked passwords before deleting (safeguards PEARLS)
+  - Archives hashlists where all tasks are complete
+  - Deletes Hash table rows to reclaim disk space
+  - Run OPTIMIZE TABLE Hash after large cleanups
 
 Auto-Fix (--fix and --watch):
   - Sets useNewBench=0 on tasks with format mismatch (useNewBench=1 should be 0)
@@ -979,13 +1096,75 @@ Queue Management (per Lesson #39):
   const options = {
     quick: args.includes("--quick"),
     fix: args.includes("--fix"),
-    watch: args.includes("--watch")
+    watch: args.includes("--watch"),
+    cleanup: args.includes("--cleanup"),
+    health: args.includes("--health") || (!args.includes("--quick") && !args.includes("--cleanup"))
   };
 
   try {
-    await runMonitor(options);
+    if (options.cleanup) {
+      await runCleanup();
+    } else {
+      await runMonitor(options);
+    }
   } catch (e) {
     console.error(`Error: ${(e as Error).message}`);
     process.exit(1);
+  }
+}
+
+async function runCleanup(): Promise<void> {
+  console.log("╭─────────────────────────────────────────────────────────────╮");
+  console.log("│        DATABASE CLEANUP                                     │");
+  console.log("╰─────────────────────────────────────────────────────────────╯");
+  console.log("");
+
+  const config = getServerConfig();
+
+  // Check current state
+  const dbHealth = await checkDatabaseHealth(config);
+
+  console.log(`Current State:`);
+  console.log(`  Hash Table: ${dbHealth.hashTableMb.toLocaleString()} MB (${dbHealth.hashTableRows.toLocaleString()} rows)`);
+  console.log(`  Archivable Hashlists: ${dbHealth.archivableHashlists}`);
+  console.log(`  Estimated Reclaim: ~${dbHealth.estimatedReclaimMb} MB`);
+  console.log("");
+
+  if (dbHealth.archivableHashlists === 0) {
+    console.log("✓ No hashlists ready for cleanup. All clean!");
+    return;
+  }
+
+  console.log("Running HashlistArchiver...");
+  console.log("");
+
+  // Run HashlistArchiver
+  try {
+    const { execSync } = await import("child_process");
+    const archiverPath = resolve(SKILL_DIR, "Tools", "HashlistArchiver.ts");
+    execSync(`bun run "${archiverPath}"`, {
+      encoding: "utf-8",
+      stdio: "inherit",
+      timeout: 600000
+    });
+  } catch (e) {
+    console.error("HashlistArchiver failed:", (e as Error).message);
+  }
+
+  // Check final state
+  console.log("");
+  console.log("Checking final state...");
+  const finalHealth = await checkDatabaseHealth(config);
+
+  console.log("");
+  console.log("┌─ CLEANUP RESULTS ───────────────────────────────────────────┐");
+  console.log(`│ Hash Table: ${dbHealth.hashTableMb.toLocaleString()} MB → ${finalHealth.hashTableMb.toLocaleString()} MB`);
+  console.log(`│ Reclaimed: ~${Math.max(0, dbHealth.hashTableMb - finalHealth.hashTableMb).toLocaleString()} MB`);
+  console.log("└────────────────────────────────────────────────────────────┘");
+
+  if (finalHealth.hashTableMb > 5000) {
+    console.log("");
+    console.log("\x1b[33mNote: Hash table still large. Run OPTIMIZE TABLE Hash on server:\x1b[0m");
+    console.log(`  ssh ubuntu@${config.serverIp} "sudo docker exec hashtopolis-db mysql -uroot -p'<password>' hashtopolis -e 'OPTIMIZE TABLE Hash'"`);
   }
 }

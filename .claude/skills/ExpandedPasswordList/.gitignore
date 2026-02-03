@@ -1,0 +1,20 @@
+# Data files - never commit
+data/
+*.txt
+*.hash
+*.pot
+*.potfile
+
+# Exports - sensitive cracked passwords
+exports/
+cracked-*.txt
+
+# Logs
+*.log
+
+# Node modules
+node_modules/
+
+# Environment
+.env
+.env.local
