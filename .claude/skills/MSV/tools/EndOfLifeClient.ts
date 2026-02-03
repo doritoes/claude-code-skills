@@ -12,7 +12,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Logger, LogLevel } from "./Logger";
+import { Logger, type LogLevel } from "./Logger";
 
 // =============================================================================
 // Types
@@ -187,7 +187,7 @@ export class EndOfLifeClient {
   constructor(cacheDir?: string, cacheTtlHours = 24) {
     this.cacheDir = cacheDir || join(process.cwd(), ".msv-cache", "eol");
     this.cacheTtlMs = cacheTtlHours * 60 * 60 * 1000;
-    this.logger = new Logger("EndOfLifeClient", LogLevel.INFO);
+    this.logger = new Logger({ prefix: "EndOfLifeClient", level: "info" });
 
     if (!existsSync(this.cacheDir)) {
       mkdirSync(this.cacheDir, { recursive: true });
