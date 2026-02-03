@@ -162,6 +162,72 @@ if (branchMap.size === 0) {
 
 ---
 
+---
+
+## Future Tasks (Backlog)
+
+### Task 1: Evaluate Fallback Version Accuracy
+**Priority:** HIGH
+**Trigger:** `use the algorithm to evaluate fallback fetchers`
+
+Fetchers using fallback/hardcoded version data need validation:
+- Fortinet: Hardcoded FortiOS 7.6.4, 7.4.8, 7.2.10, 7.0.17, 6.4.16
+- Cisco ASA: Hardcoded 9.22.1, 9.21.2, 9.20.3, etc.
+- Palo Alto: Hardcoded 11.2.6, 11.1.6, 11.0.7, etc.
+
+**Analysis needed:**
+1. Compare hardcoded versions against actual vendor release pages
+2. Determine staleness of fallback data
+3. Consider lowering Admiralty confidence rating when using fallbacks
+4. Implement automatic version freshness checking
+
+**Impact on Admiralty Rating:**
+- Currently: Fallback data gets same confidence as API data
+- Proposed: Reduce confidence by 1 level when using fallbacks
+  - B2 → C3 (Reliable → Probably True)
+  - Mark as "inferred from known branches"
+
+### Task 2: Improve Test Coverage
+**Priority:** MEDIUM
+**Trigger:** `improve MSV test coverage`
+
+Current gaps:
+1. Unit tests for individual fetcher parsing functions
+2. Integration tests for VendorAdvisory.ts wrapper classes
+3. Mock API responses for offline testing
+4. Cache invalidation testing
+5. Branch calculation edge cases
+6. Version comparison edge cases
+
+**Proposed test structure:**
+```
+tools/tests/
+  ├── test-all-fetchers.ts      # ✅ Integration (exists)
+  ├── unit/
+  │   ├── fortinet.test.ts      # Parsing tests
+  │   ├── paloalto.test.ts
+  │   ├── cisco.test.ts
+  │   └── version-compare.test.ts
+  ├── mocks/
+  │   ├── fortinet-rss.xml
+  │   ├── paloalto-api.json
+  │   └── cisco-cvrf.xml
+  └── fixtures/
+      └── sample-advisories.json
+```
+
+### Task 3: Add New Vendor Fetchers
+**Priority:** MEDIUM
+**Trigger:** `add more vendor fetchers to MSV`
+
+Network security vendors (aligned with Seth's firewall expertise):
+1. **Juniper Networks** - JunOS Security Advisories
+2. **F5 Networks** - BIG-IP, NGINX
+3. **Check Point** - sk articles, CloudGuard
+4. **Ivanti** - Connect Secure, Policy Secure (critical KEV targets)
+
+---
+
 ## Implementation Notes
 
 ### Wrapper Pattern
