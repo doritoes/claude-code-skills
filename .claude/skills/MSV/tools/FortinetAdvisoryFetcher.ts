@@ -325,6 +325,14 @@ export class FortinetAdvisoryFetcher {
       }
     }
 
+    // Fallback: If no version data extracted from advisories, use known FortiOS branches
+    // This ensures we always return branch data for the most common FortiOS versions
+    if (branchMap.size === 0 && (!product || product.toLowerCase().includes("forti"))) {
+      for (const [branch, latest] of Object.entries(knownLatest)) {
+        branchMap.set(branch, { msv: latest, latest });
+      }
+    }
+
     return Array.from(branchMap.entries())
       .map(([branch, info]) => ({
         branch,

@@ -132,14 +132,16 @@ export class CiscoAdvisoryFetcher {
     if (cached) return cached;
 
     if (!this.hasCredentials()) {
-      // Return empty result with guidance
+      // Return fallback branch data when no API credentials
+      // This still provides useful version guidance without API access
+      const fallbackBranches = this.calculateBranchMsv([], product);
       return {
         vendor: "Cisco",
         product: product || "All Products",
         advisories: [],
-        branches: [],
+        branches: fallbackBranches,
         fetchedAt: new Date().toISOString(),
-        source: `${CISCO_API_BASE} (API credentials not configured - set CISCO_CLIENT_ID and CISCO_CLIENT_SECRET)`,
+        source: `${CISCO_API_BASE} (using fallback data - set CISCO_CLIENT_ID and CISCO_CLIENT_SECRET for live advisories)`,
       };
     }
 
