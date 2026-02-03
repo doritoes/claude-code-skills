@@ -372,7 +372,7 @@ export function formatActionBox(guidance: ActionGuidance): string {
     // Add next steps
     if (steps && steps.length > 0) {
       lines.push(`│${" ".repeat(boxWidth)}│`);
-      lines.push(`│${BOLD}  Next Steps:${RESET}${" ".repeat(boxWidth - 14)}│`);
+      lines.push(`│${BOLD}  Next Steps:${RESET}${" ".repeat(boxWidth - 13)}│`);
       for (let i = 0; i < steps.length; i++) {
         const stepLine = `${i + 1}. ${steps[i]}`;
         const wrappedStep = wrapText(stepLine, boxWidth - 5);
