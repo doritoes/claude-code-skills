@@ -2,7 +2,7 @@
   "_metadata": {
     "version": "1.1.0",
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
-    "lastUpdated": "2026-01-22T03:30:38.371Z",
+    "lastUpdated": "2026-02-03",
     "lastChecked": "2026-01-21T00:00:00Z",
     "totalEntries": 189,
     "sources": [
@@ -30,7 +30,7 @@
         "server"
       ],
       "notes": "67 CVEs in CISA KEV. Most used browser worldwide.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
       "excludePatterns": [
         "\\bchromium\\b",
@@ -40,7 +40,8 @@
         "\\bchrome\\s*driver\\b",
         "\\bheadless\\b"
       ],
-      "eolProductId": "chrome"
+      "eolProductId": "chrome",
+      "latestVersion": "145.0.7632.26"
     },
     {
       "id": "edge",
@@ -59,7 +60,7 @@
         "server"
       ],
       "notes": "Chromium-based browser, shares vulnerabilities with Chrome.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
       "excludePatterns": [
         "\\bedge\\s*legacy\\b",
@@ -69,7 +70,8 @@
         "\\bdev\\s*channel\\b",
         "\\bbeta\\s*channel\\b"
       ],
-      "eolProductId": "microsoft-edge"
+      "eolProductId": "microsoft-edge",
+      "latestVersion": "144.0.3719.104"
     },
     {
       "id": "firefox",
@@ -88,7 +90,7 @@
         "server"
       ],
       "notes": "Independent browser engine, separate vulnerability profile.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\besr\\b",
         "\\bfirefox\\s*esr\\b",
@@ -97,7 +99,8 @@
         "\\bfirefox\\s*extension\\b",
         "\\bfirefox\\s*android\\b"
       ],
-      "eolProductId": "firefox"
+      "eolProductId": "firefox",
+      "latestVersion": "147.0.2"
     },
     {
       "id": "brave",
@@ -115,7 +118,8 @@
         "windows"
       ],
       "notes": "Chromium-based, privacy-focused browser.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.87.181-beta"
     },
     {
       "id": "opera",
@@ -133,7 +137,8 @@
         "windows"
       ],
       "notes": "Chromium-based browser.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "127.0.5778.14"
     },
     {
       "id": "7zip",
@@ -153,7 +158,8 @@
         "server"
       ],
       "notes": "1 CVE in KEV (CVE-2025-0411). MotW bypass vulnerability.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.1.0"
     },
     {
       "id": "winrar",
@@ -173,7 +179,7 @@
         "server"
       ],
       "notes": "4 CVEs in KEV. Known ransomware exploitation.",
-      "lastChecked": "2026-01-13",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^[567]\\.",
       "excludePatterns": [
         "\\bunrar\\b",
@@ -182,7 +188,8 @@
         "\\b7-?zip\\b",
         "\\bpeazip\\b",
         "\\brar\\s*library\\b"
-      ]
+      ],
+      "latestVersion": "7.13.0"
     },
     {
       "id": "peazip",
@@ -199,7 +206,8 @@
         "windows"
       ],
       "notes": "Open-source archive manager.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "10.8.0"
     },
     {
       "id": "acrobat",
@@ -219,7 +227,7 @@
         "server"
       ],
       "notes": "76 Adobe CVEs in KEV. Use specific variant (Reader DC, Reader 2020, Reader 2024) for accurate MSV.",
-      "lastChecked": "2026-01-19",
+      "lastChecked": "2026-02-03",
       "variants": [
         "acrobat_reader_dc",
         "acrobat_reader_2020",
@@ -233,7 +241,8 @@
         "\\bnitro\\s*pdf\\b",
         "\\bsumatra\\b",
         "\\bpdf-?xchange\\b"
-      ]
+      ],
+      "latestVersion": "25.001.20432"
     },
     {
       "id": "acrobat_pro",
@@ -252,7 +261,8 @@
         "server"
       ],
       "notes": "Full Acrobat suite. Used in enterprise PDF automation.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.001.20432"
     },
     {
       "id": "foxit",
@@ -270,7 +280,8 @@
         "windows"
       ],
       "notes": "Alternative PDF reader.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2025.3.0.35737"
     },
     {
       "id": "putty",
@@ -290,7 +301,8 @@
         "server"
       ],
       "notes": "SSH/Telnet client. CVE-2024-31497 ECDSA key compromise. Part of PuTTY suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83.0"
     },
     {
       "id": "putty_installer",
@@ -310,7 +322,8 @@
         "server"
       ],
       "notes": "Full PuTTY suite installer. Includes PuTTY, PSCP, PSFTP, Plink, Pageant, PuTTYgen.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83"
     },
     {
       "id": "pscp",
@@ -330,7 +343,8 @@
         "server"
       ],
       "notes": "Command-line SCP client. Portable executable. Part of PuTTY suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83"
     },
     {
       "id": "psftp",
@@ -350,7 +364,8 @@
         "server"
       ],
       "notes": "Command-line SFTP client. Portable executable. Part of PuTTY suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83"
     },
     {
       "id": "plink",
@@ -370,7 +385,8 @@
         "server"
       ],
       "notes": "Command-line SSH connection tool. Used for automation/scripting. Part of PuTTY suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83"
     },
     {
       "id": "pageant",
@@ -391,7 +407,8 @@
         "server"
       ],
       "notes": "SSH authentication agent. Holds private keys in memory. Part of PuTTY suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83"
     },
     {
       "id": "puttygen",
@@ -412,7 +429,8 @@
         "server"
       ],
       "notes": "SSH key generation utility. Converts between key formats. Part of PuTTY suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83"
     },
     {
       "id": "puttytel",
@@ -432,7 +450,8 @@
         "server"
       ],
       "notes": "Telnet-only client (no SSH). Smaller binary. Part of PuTTY suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "0.83"
     },
     {
       "id": "winscp",
@@ -451,7 +470,8 @@
         "server"
       ],
       "notes": "SFTP/SCP client. Common in enterprise file transfer.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "6.5.5"
     },
     {
       "id": "teamviewer",
@@ -469,7 +489,7 @@
         "server"
       ],
       "notes": "Remote desktop tool. High-value target for attackers.",
-      "lastChecked": "2026-01-13",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^\\d+\\.",
       "excludePatterns": [
         "\\bquick\\s*support\\b",
@@ -479,7 +499,8 @@
         "\\bteamviewer\\s*remote\\b",
         "\\banydesk\\b",
         "\\blogmein\\b"
-      ]
+      ],
+      "latestVersion": "15.74.4"
     },
     {
       "id": "anydesk",
@@ -497,7 +518,8 @@
         "server"
       ],
       "notes": "Remote desktop alternative to TeamViewer.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "9.6.9"
     },
     {
       "id": "notepadpp",
@@ -517,7 +539,8 @@
         "server"
       ],
       "notes": "Popular text editor for developers and admins.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "8.7.10"
     },
     {
       "id": "vscode",
@@ -536,7 +559,8 @@
         "server"
       ],
       "notes": "Popular IDE/editor. Extension ecosystem is attack surface.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.108.2"
     },
     {
       "id": "sublimetext",
@@ -554,7 +578,8 @@
         "windows"
       ],
       "notes": "Commercial text editor.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4206"
     },
     {
       "id": "wireshark",
@@ -573,7 +598,8 @@
         "server"
       ],
       "notes": "Network protocol analyzer. Used by security teams.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.6.3"
     },
     {
       "id": "nmap",
@@ -591,7 +617,8 @@
         "server"
       ],
       "notes": "Network scanner. Common security tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.95"
     },
     {
       "id": "zoom",
@@ -609,14 +636,15 @@
         "windows"
       ],
       "notes": "Video conferencing. Frequently patched.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bzoom\\s*rooms\\b",
         "\\bzoom\\s*phone\\b",
         "\\bzoom\\s*sdk\\b",
         "\\bzoom\\s*plugin\\b",
         "\\bzoom\\s*outlook\\b"
-      ]
+      ],
+      "latestVersion": "6.6.11.23272"
     },
     {
       "id": "slack",
@@ -633,7 +661,8 @@
         "windows"
       ],
       "notes": "Team messaging platform.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.48.86"
     },
     {
       "id": "teams",
@@ -651,7 +680,8 @@
         "windows"
       ],
       "notes": "Enterprise collaboration. Part of M365.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25002.305.3418.741"
     },
     {
       "id": "discord",
@@ -668,7 +698,8 @@
         "windows"
       ],
       "notes": "Voice/text chat. Growing enterprise adoption.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.0.9222"
     },
     {
       "id": "vlc",
@@ -688,7 +719,8 @@
         "server"
       ],
       "notes": "Open-source media player. Codec vulnerabilities.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "3.0.23"
     },
     {
       "id": "itunes",
@@ -706,7 +738,8 @@
         "windows"
       ],
       "notes": "Apple media manager for Windows.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.13.5"
     },
     {
       "id": "java",
@@ -727,7 +760,7 @@
         "server"
       ],
       "notes": "Java Runtime Environment. Historical attack target.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bopenjdk\\b",
         "\\bazul\\b",
@@ -737,7 +770,8 @@
         "\\bcorretto\\b",
         "\\bliberica\\b",
         "\\bsapMachine\\b"
-      ]
+      ],
+      "latestVersion": "25.0.2"
     },
     {
       "id": "jdk",
@@ -757,7 +791,8 @@
         "server"
       ],
       "notes": "Java Development Kit.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.0.2"
     },
     {
       "id": "nodejs",
@@ -776,7 +811,8 @@
         "server"
       ],
       "notes": "JavaScript runtime. Multiple LTS branches.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.6.0"
     },
     {
       "id": "python",
@@ -855,7 +891,8 @@
         "server"
       ],
       "notes": "FTP/SFTP client.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "3.69.5"
     },
     {
       "id": "dropbox",
@@ -872,7 +909,8 @@
         "windows"
       ],
       "notes": "Cloud sync client.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "217.4.5654"
     },
     {
       "id": "onedrive",
@@ -890,7 +928,8 @@
         "windows"
       ],
       "notes": "Microsoft cloud sync. Built into Windows but updatable.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.015.0127"
     },
     {
       "id": "googledrive",
@@ -908,7 +947,8 @@
         "windows"
       ],
       "notes": "Google cloud sync client.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "103.0.5"
     },
     {
       "id": "flash",
@@ -926,9 +966,10 @@
       "platforms": [
         "windows"
       ],
-      "notes": "END OF LIFE (Dec 2020). 33 CVEs in KEV. Remove immediately if found.",
-      "lastChecked": "2026-01-19",
-      "eol": true
+      "notes": "End of Life - December 2020",
+      "lastChecked": "2026-02-03",
+      "eol": true,
+      "latestVersion": "EOL"
     },
     {
       "id": "silverlight",
@@ -944,9 +985,10 @@
       "platforms": [
         "windows"
       ],
-      "notes": "END OF LIFE (Oct 2021). Remove immediately if found.",
-      "lastChecked": "2026-01-19",
-      "eol": true
+      "notes": "End of Life - October 2021",
+      "lastChecked": "2026-02-03",
+      "eol": true,
+      "latestVersion": "EOL"
     },
     {
       "id": "citrix_workspace",
@@ -965,7 +1007,7 @@
         "server"
       ],
       "notes": "Citrix client. High-value enterprise target.",
-      "lastChecked": "2026-01-13",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bnetscaler\\b",
         "\\badc\\b",
@@ -974,7 +1016,8 @@
         "\\bxendesktop\\b",
         "\\bsharefile\\b",
         "\\bvirtual\\s*apps\\b"
-      ]
+      ],
+      "latestVersion": "2411"
     },
     {
       "id": "vmware_tools",
@@ -993,7 +1036,8 @@
         "server"
       ],
       "notes": "VM guest tools. Critical for virtualized environments.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.5.1"
     },
     {
       "id": "vmware_horizon",
@@ -1011,7 +1055,8 @@
         "windows"
       ],
       "notes": "VDI client.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2412"
     },
     {
       "id": "splunk_forwarder",
@@ -1030,7 +1075,8 @@
         "server"
       ],
       "notes": "Log forwarding agent.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "9.4.1"
     },
     {
       "id": "ibm_mq",
@@ -1051,7 +1097,8 @@
         "server"
       ],
       "notes": "Enterprise messaging middleware. 192+ CVEs tracked. Legacy name: WebSphere MQ.",
-      "lastChecked": "2026-01-14"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "9.4.2"
     },
     {
       "id": "crowdstrike",
@@ -1071,7 +1118,8 @@
         "server"
       ],
       "notes": "EDR agent. Critical security component.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.23"
     },
     {
       "id": "sentinelone",
@@ -1090,7 +1138,8 @@
         "server"
       ],
       "notes": "EDR agent.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "24.4"
     },
     {
       "id": "malwarebytes",
@@ -1108,7 +1157,8 @@
         "windows"
       ],
       "notes": "Anti-malware tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "5.4.7.138"
     },
     {
       "id": "office365",
@@ -1127,7 +1177,8 @@
         "windows"
       ],
       "notes": "Office suite. Multiple CVEs in KEV.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2501"
     },
     {
       "id": "libreoffice",
@@ -1146,7 +1197,8 @@
         "server"
       ],
       "notes": "Open-source office suite.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.2.0"
     },
     {
       "id": "ccleaner",
@@ -1164,7 +1216,8 @@
         "windows"
       ],
       "notes": "System cleaner. Was compromised in supply chain attack.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "6.39.11548"
     },
     {
       "id": "everything",
@@ -1182,7 +1235,8 @@
         "windows"
       ],
       "notes": "Fast file search utility.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.5.0.1404a"
     },
     {
       "id": "rufus",
@@ -1199,7 +1253,8 @@
         "windows"
       ],
       "notes": "Bootable USB creation tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.7"
     },
     {
       "id": "greenshot",
@@ -1216,7 +1271,8 @@
         "windows"
       ],
       "notes": "Screenshot tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.3.285"
     },
     {
       "id": "irfanview",
@@ -1233,7 +1289,8 @@
         "windows"
       ],
       "notes": "Image viewer.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.73.0"
     },
     {
       "id": "keepass",
@@ -1250,7 +1307,8 @@
         "windows"
       ],
       "notes": "Password manager. Critical security tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2.60.0"
     },
     {
       "id": "bitwarden",
@@ -1267,7 +1325,8 @@
         "windows"
       ],
       "notes": "Password manager.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2025.12.1"
     },
     {
       "id": "1password",
@@ -1284,7 +1343,8 @@
         "windows"
       ],
       "notes": "Password manager.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "8.11.0"
     },
     {
       "id": "lastpass",
@@ -1301,7 +1361,8 @@
         "windows"
       ],
       "notes": "Password manager. Had breaches.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.146.0"
     },
     {
       "id": "veracrypt",
@@ -1319,7 +1380,8 @@
         "windows"
       ],
       "notes": "Disk encryption. TrueCrypt successor.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.26.24"
     },
     {
       "id": "7zip_zstd",
@@ -1337,7 +1399,8 @@
         "windows"
       ],
       "notes": "7-Zip fork with additional compression.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.1.0"
     },
     {
       "id": "curl",
@@ -1356,13 +1419,14 @@
         "server"
       ],
       "notes": "Command-line HTTP client. Built into Windows 10+.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bpycurl\\b",
         "\\bcurl-cffi\\b",
         "\\bcurlpp\\b",
         "\\bphp.*curl\\b"
-      ]
+      ],
+      "latestVersion": "8.18.0"
     },
     {
       "id": "openssl",
@@ -1409,7 +1473,8 @@
         "server"
       ],
       "notes": "Open-source database.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "18.1.0"
     },
     {
       "id": "mysql",
@@ -1427,7 +1492,8 @@
         "server"
       ],
       "notes": "Oracle MySQL database.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "9.6.0"
     },
     {
       "id": "mariadb",
@@ -1445,7 +1511,8 @@
         "server"
       ],
       "notes": "MySQL fork.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.1.2"
     },
     {
       "id": "mongodb",
@@ -1463,7 +1530,8 @@
         "server"
       ],
       "notes": "NoSQL database.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "8.2.4"
     },
     {
       "id": "redis",
@@ -1481,7 +1549,8 @@
         "server"
       ],
       "notes": "In-memory data store.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "3.1.0"
     },
     {
       "id": "nginx",
@@ -1499,14 +1568,15 @@
         "server"
       ],
       "notes": "Web server/reverse proxy.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bnginx\\s*plus\\b",
         "\\bopenresty\\b",
         "\\btengine\\b",
         "\\bnginx\\s*unit\\b",
         "\\bnginx\\s*ingress\\b"
-      ]
+      ],
+      "latestVersion": "1.29.4"
     },
     {
       "id": "apache",
@@ -1526,7 +1596,7 @@
         "server"
       ],
       "notes": "Web server. Multiple KEV entries.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\btomcat\\b",
         "\\bstruts\\b",
@@ -1534,7 +1604,8 @@
         "\\bspark\\b",
         "\\blog4j\\b",
         "\\bsolr\\b"
-      ]
+      ],
+      "latestVersion": "2.4.68"
     },
     {
       "id": "tomcat",
@@ -1553,7 +1624,7 @@
         "server"
       ],
       "notes": "Java web server. KEV entries.",
-      "lastChecked": "2026-01-13",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^[789]\\.|^10\\.|^11\\.",
       "excludePatterns": [
         "\\btomee\\b",
@@ -1564,7 +1635,8 @@
         "\\bweblogic\\b",
         "\\bspring\\s*boot\\b"
       ],
-      "eolProductId": "tomcat"
+      "eolProductId": "tomcat",
+      "latestVersion": "11.0.18"
     },
     {
       "id": "iis",
@@ -1582,7 +1654,8 @@
         "server"
       ],
       "notes": "Windows web server. Part of Windows Server.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "10.0.26100"
     },
     {
       "id": "docker",
@@ -1627,7 +1700,8 @@
         "windows"
       ],
       "notes": "Desktop virtualization.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.2.6"
     },
     {
       "id": "vagrant",
@@ -1644,7 +1718,8 @@
         "windows"
       ],
       "notes": "VM management tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2.4.3"
     },
     {
       "id": "terraform",
@@ -1663,7 +1738,8 @@
         "server"
       ],
       "notes": "Infrastructure as Code.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.15.0-alpha20251203"
     },
     {
       "id": "ansible",
@@ -1682,7 +1758,8 @@
         "server"
       ],
       "notes": "Configuration management.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "11.5.0"
     },
     {
       "id": "powershell",
@@ -1701,12 +1778,13 @@
         "server"
       ],
       "notes": "Use specific variant: 'windows powershell' for 5.1 (OS-built-in), 'powershell 6' (EOL), or 'powershell 7' for current standalone.",
-      "lastChecked": "2026-01-19",
+      "lastChecked": "2026-02-03",
       "variants": [
         "windows_powershell",
         "powershell6",
         "powershell7"
-      ]
+      ],
+      "latestVersion": "7.5.4"
     },
     {
       "id": "windows_powershell",
@@ -1727,8 +1805,9 @@
         "server"
       ],
       "notes": "OS COMPONENT: Updated via Windows Update only. Cannot track independent MSV - keep Windows patched. CVE-2025-54100 (Invoke-WebRequest) patched in Dec 2025 cumulative update.",
-      "lastChecked": "2026-01-19",
-      "osComponent": true
+      "lastChecked": "2026-02-03",
+      "osComponent": true,
+      "latestVersion": "5.1.26100.2161"
     },
     {
       "id": "powershell6",
@@ -1747,10 +1826,11 @@
         "windows",
         "server"
       ],
-      "notes": "END OF LIFE (Sep 2020). First cross-platform PowerShell. Upgrade to PowerShell 7 immediately - no security patches available.",
-      "lastChecked": "2026-01-19",
+      "notes": "End of Life - September 2020, use PowerShell 7",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^6\\.",
-      "eol": true
+      "eol": true,
+      "latestVersion": "EOL"
     },
     {
       "id": "powershell7",
@@ -1771,8 +1851,9 @@
         "server"
       ],
       "notes": "Standalone cross-platform PowerShell. LTS: 7.4.x (EOL Nov 2026), Current: 7.5.x (EOL May 2026). Separate from Windows PowerShell 5.1.",
-      "lastChecked": "2026-01-19",
-      "versionPattern": "^7\\."
+      "lastChecked": "2026-02-03",
+      "versionPattern": "^7\\.",
+      "latestVersion": "7.5.4"
     },
     {
       "id": "openssh",
@@ -1791,7 +1872,7 @@
         "server"
       ],
       "notes": "SSH server/client. Built into Windows.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bdropbear\\b",
         "\\bputty\\b",
@@ -1799,7 +1880,8 @@
         "\\blibssh\\b",
         "\\bssh2\\b",
         "\\bbitvise\\b"
-      ]
+      ],
+      "latestVersion": "9.9p2"
     },
     {
       "id": "telegraf",
@@ -1817,7 +1899,8 @@
         "server"
       ],
       "notes": "Metrics collection agent.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.35.0"
     },
     {
       "id": "grafana",
@@ -1835,7 +1918,8 @@
         "server"
       ],
       "notes": "Visualization platform. KEV entries.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "11.6.0"
     },
     {
       "id": "prometheus",
@@ -1853,7 +1937,8 @@
         "server"
       ],
       "notes": "Monitoring system.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "3.3.1"
     },
     {
       "id": "zabbix",
@@ -1872,7 +1957,8 @@
         "server"
       ],
       "notes": "Enterprise monitoring agent.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.2.5"
     },
     {
       "id": "nagios",
@@ -1890,7 +1976,8 @@
         "server"
       ],
       "notes": "IT monitoring.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.5.12"
     },
     {
       "id": "obs",
@@ -1908,7 +1995,8 @@
         "windows"
       ],
       "notes": "Streaming/recording software.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "32.0.4"
     },
     {
       "id": "handbrake",
@@ -1925,7 +2013,8 @@
         "windows"
       ],
       "notes": "Video transcoder.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.10.2"
     },
     {
       "id": "gimp",
@@ -1942,7 +2031,8 @@
         "windows"
       ],
       "notes": "Image editor.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "3.0.0"
     },
     {
       "id": "audacity",
@@ -1959,7 +2049,8 @@
         "windows"
       ],
       "notes": "Audio editor.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "3.7.7"
     },
     {
       "id": "blender",
@@ -1976,7 +2067,8 @@
         "windows"
       ],
       "notes": "3D modeling software.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.4.0"
     },
     {
       "id": "spotify",
@@ -1993,7 +2085,8 @@
         "windows"
       ],
       "notes": "Music streaming.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "1.2.60"
     },
     {
       "id": "steam",
@@ -2011,7 +2104,8 @@
         "windows"
       ],
       "notes": "Gaming platform. Privilege escalation vulns.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "3.10.91.91241028"
     },
     {
       "id": "nvidia_driver",
@@ -2049,7 +2143,8 @@
         "windows"
       ],
       "notes": "GPU driver.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.10.1"
     },
     {
       "id": "intel_driver",
@@ -2068,7 +2163,8 @@
         "server"
       ],
       "notes": "Intel GPU driver.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "32.0.101.6647"
     },
     {
       "id": "realtek_audio",
@@ -2086,7 +2182,8 @@
         "windows"
       ],
       "notes": "Audio driver.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "6.0.9722.1"
     },
     {
       "id": "skype",
@@ -2104,7 +2201,8 @@
         "windows"
       ],
       "notes": "Legacy communication. Being replaced by Teams.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "8.140.0.407"
     },
     {
       "id": "signal",
@@ -2122,7 +2220,8 @@
         "windows"
       ],
       "notes": "Encrypted messaging.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.53.0"
     },
     {
       "id": "telegram",
@@ -2140,7 +2239,8 @@
         "windows"
       ],
       "notes": "Messaging platform.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "5.14.0"
     },
     {
       "id": "whatsapp",
@@ -2158,7 +2258,8 @@
         "windows"
       ],
       "notes": "Messaging platform.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2.2520.2"
     },
     {
       "id": "solarwinds_orion",
@@ -2168,6 +2269,7 @@
       "cpe23": "cpe:2.3:a:solarwinds:orion_platform:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "critical",
+      "latestVersion": "2025.2",
       "aliases": [
         "solarwinds orion",
         "orion platform",
@@ -2178,8 +2280,8 @@
         "windows",
         "server"
       ],
-      "notes": "SUNBURST supply chain attack (2020). Multiple KEV entries. Critical enterprise monitoring.",
-      "lastChecked": "2026-01-13"
+      "notes": "SUNBURST supply chain attack (2020). Multiple KEV entries. Critical enterprise monitoring. Now called SolarWinds Platform.",
+      "lastChecked": "2026-02-03"
     },
     {
       "id": "solarwinds_npm",
@@ -2199,7 +2301,8 @@
         "server"
       ],
       "notes": "Orion module. Network monitoring and alerting.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_sam",
@@ -2219,7 +2322,8 @@
         "server"
       ],
       "notes": "Orion module. Server and application monitoring.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_ncm",
@@ -2239,7 +2343,8 @@
         "server"
       ],
       "notes": "Orion module. Network device configuration backup and management.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_nta",
@@ -2259,7 +2364,8 @@
         "server"
       ],
       "notes": "Orion module. Network traffic flow analysis.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_ipam",
@@ -2279,7 +2385,8 @@
         "server"
       ],
       "notes": "Orion module. IP address management and DHCP/DNS integration.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_vman",
@@ -2299,7 +2406,8 @@
         "server"
       ],
       "notes": "Orion module. VMware/Hyper-V monitoring.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_dpa",
@@ -2319,7 +2427,8 @@
         "server"
       ],
       "notes": "Database monitoring and query analysis.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_la",
@@ -2339,7 +2448,8 @@
         "server"
       ],
       "notes": "Orion module. Syslog and log management.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_patch_manager",
@@ -2358,7 +2468,8 @@
         "server"
       ],
       "notes": "Enterprise patch management. WSUS integration.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_whd",
@@ -2378,7 +2489,8 @@
         "server"
       ],
       "notes": "IT service management and ticketing. Multiple CVEs.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.10.0"
     },
     {
       "id": "solarwinds_servu",
@@ -2400,7 +2512,8 @@
         "server"
       ],
       "notes": "CRITICAL: Multiple CVEs in CISA KEV. Managed File Transfer server. High-value target.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "15.5"
     },
     {
       "id": "solarwinds_arm",
@@ -2420,7 +2533,8 @@
         "server"
       ],
       "notes": "CRITICAL: Multiple RCE vulns (CVE-2024-28991, CVE-2024-23469, etc.) patched in 2024.3. Access management and auditing.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.3"
     },
     {
       "id": "solarwinds_dameware_mrc",
@@ -2441,7 +2555,8 @@
         "server"
       ],
       "notes": "Remote desktop tool. Part of Engineer's Toolset.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.4"
     },
     {
       "id": "solarwinds_dameware_rs",
@@ -2460,7 +2575,8 @@
         "server"
       ],
       "notes": "Full remote support suite. Includes remote control and system tools.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.4"
     },
     {
       "id": "solarwinds_ets",
@@ -2480,7 +2596,8 @@
         "windows"
       ],
       "notes": "Collection of 60+ network diagnostic tools. Includes DameWare, traceroute, SNMP tools.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.4"
     },
     {
       "id": "solarwinds_kiwi_syslog",
@@ -2500,7 +2617,8 @@
         "server"
       ],
       "notes": "Lightweight syslog server. Common in small/medium environments.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "9.8"
     },
     {
       "id": "solarwinds_sftp",
@@ -2520,7 +2638,8 @@
         "server"
       ],
       "notes": "Free SFTP/SCP server from SolarWinds.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "5.1"
     },
     {
       "id": "solarwinds_tftp",
@@ -2539,7 +2658,8 @@
         "server"
       ],
       "notes": "Free TFTP server. Common for network device firmware updates.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "11.3"
     },
     {
       "id": "tableau_desktop",
@@ -2557,7 +2677,8 @@
         "windows"
       ],
       "notes": "Data visualization and analytics. Enterprise BI tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.3"
     },
     {
       "id": "tableau_server",
@@ -2575,7 +2696,8 @@
         "server"
       ],
       "notes": "Enterprise analytics server. High-value target with sensitive data.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.3"
     },
     {
       "id": "tableau_prep",
@@ -2593,7 +2715,8 @@
         "windows"
       ],
       "notes": "Data preparation and ETL tool.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.3"
     },
     {
       "id": "tableau_bridge",
@@ -2611,7 +2734,8 @@
         "server"
       ],
       "notes": "Secure data connectivity between Tableau Cloud and on-premises data.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.3"
     },
     {
       "id": "acrobat_dc",
@@ -2631,7 +2755,8 @@
         "server"
       ],
       "notes": "Continuous track (subscription). Auto-updates. 76 Adobe CVEs in KEV.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.001.20432"
     },
     {
       "id": "acrobat_2024",
@@ -2650,7 +2775,8 @@
         "server"
       ],
       "notes": "Classic track (perpetual license). Latest perpetual version. Quarterly updates.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "24.005.20360"
     },
     {
       "id": "acrobat_2020",
@@ -2669,7 +2795,8 @@
         "server"
       ],
       "notes": "Classic track (perpetual license). Extended support until 2025. Quarterly updates.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "20.005.30773"
     },
     {
       "id": "acrobat_reader_dc",
@@ -2689,7 +2816,8 @@
         "server"
       ],
       "notes": "Free PDF reader. Continuous track (auto-updates). Most deployed PDF reader.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.001.20432"
     },
     {
       "id": "acrobat_reader_2020",
@@ -2709,7 +2837,8 @@
         "server"
       ],
       "notes": "Free PDF reader. Classic track (perpetual). Extended support until 2025.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "20.005.30773"
     },
     {
       "id": "acrobat_reader_2024",
@@ -2729,7 +2858,8 @@
         "server"
       ],
       "notes": "Free PDF reader. Classic track 2024 (perpetual license). Quarterly updates.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "24.005.20360"
     },
     {
       "id": "adobe_coldfusion",
@@ -2749,7 +2879,8 @@
         "server"
       ],
       "notes": "CRITICAL: Multiple CVEs in CISA KEV. Web application server. High-value target.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2025.0.0"
     },
     {
       "id": "adobe_experience_manager",
@@ -2769,7 +2900,8 @@
         "server"
       ],
       "notes": "Enterprise CMS. Has KEV entries. Used for web content management.",
-      "lastChecked": "2026-01-13"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "6.5 SP22"
     },
     {
       "id": "adobe_commerce",
@@ -2789,8 +2921,9 @@
         "server"
       ],
       "notes": "CRITICAL: Multiple CVEs in CISA KEV. E-commerce platform. Handles payment data.",
-      "lastChecked": "2026-01-19",
-      "versionPattern": "^2\\."
+      "lastChecked": "2026-02-03",
+      "versionPattern": "^2\\.",
+      "latestVersion": "2.4.8"
     },
     {
       "id": "exchange_server",
@@ -2810,7 +2943,7 @@
         "server"
       ],
       "notes": "CRITICAL: 16 CVEs in CISA KEV. ProxyLogon, ProxyShell, ProxyNotShell. Enterprise email server.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bonline\\b",
         "\\b365\\b",
@@ -2818,7 +2951,8 @@
         "\\bowa\\b",
         "\\bexchange\\s*online\\b",
         "\\bexchange\\s*activesync\\b"
-      ]
+      ],
+      "latestVersion": "2019 CU15"
     },
     {
       "id": "weblogic",
@@ -2838,7 +2972,8 @@
         "server"
       ],
       "notes": "CRITICAL: 11 CVEs in CISA KEV. Java application server. Deserialization RCE vulnerabilities.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "14.1.2"
     },
     {
       "id": "sap_netweaver",
@@ -2858,7 +2993,8 @@
         "server"
       ],
       "notes": "CRITICAL: 10 CVEs in CISA KEV. ERP platform. Business-critical systems.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.55"
     },
     {
       "id": "vcenter_server",
@@ -2878,7 +3014,7 @@
         "server"
       ],
       "notes": "CRITICAL: 9 CVEs in CISA KEV. Virtualization management. Full infrastructure access.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bvsphere\\s*client\\b",
         "\\bvcsa\\b",
@@ -2886,7 +3022,8 @@
         "\\bvrealize\\b",
         "\\bworkstation\\b",
         "\\bfusion\\b"
-      ]
+      ],
+      "latestVersion": "8.0 U3h"
     },
     {
       "id": "apache_struts",
@@ -2906,7 +3043,8 @@
         "server"
       ],
       "notes": "CRITICAL: 7 CVEs in CISA KEV. Java web framework. Equifax breach vector (CVE-2017-5638).",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.0.1"
     },
     {
       "id": "sharepoint_server",
@@ -2925,7 +3063,8 @@
         "server"
       ],
       "notes": "CRITICAL: 7 CVEs in CISA KEV. Enterprise collaboration. RCE and privilege escalation.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "16.0.19127.20442"
     },
     {
       "id": "ivanti_connect_secure",
@@ -2946,7 +3085,8 @@
         "server"
       ],
       "notes": "CRITICAL: 7+ CVEs in CISA KEV. VPN infrastructure. Primary APT target.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "22.7R2.6"
     },
     {
       "id": "manageengine",
@@ -2966,7 +3106,8 @@
         "server"
       ],
       "notes": "CRITICAL: 6 CVEs in CISA KEV. IT management suite. Multiple products affected.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "13020"
     },
     {
       "id": "confluence",
@@ -2986,13 +3127,14 @@
         "server"
       ],
       "notes": "CRITICAL: 5 CVEs in CISA KEV. Enterprise wiki. Data Center and Server editions.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "excludePatterns": [
         "\\bcloud\\b",
         "\\bconfluence\\s*cloud\\b",
         "\\bconfluence\\s*plugin\\b",
         "\\bconfluence\\s*macro\\b"
-      ]
+      ],
+      "latestVersion": "10.2.2"
     },
     {
       "id": "veeam_backup",
@@ -3013,7 +3155,8 @@
         "server"
       ],
       "notes": "CRITICAL: 4 CVEs in CISA KEV. Backup infrastructure. Ransomware deletes backups first.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.5"
     },
     {
       "id": "trend_micro_apex_one",
@@ -3033,7 +3176,8 @@
         "server"
       ],
       "notes": "CRITICAL: 4 CVEs in CISA KEV. Endpoint security. Privilege escalation to disable protection.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2019 SaaS"
     },
     {
       "id": "ivanti_epm",
@@ -3054,7 +3198,8 @@
         "server"
       ],
       "notes": "CRITICAL: 4 CVEs in CISA KEV. Device management. Mass deployment attack vector.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.3"
     },
     {
       "id": "crushftp",
@@ -3073,7 +3218,8 @@
         "server"
       ],
       "notes": "CRITICAL: 3 CVEs in CISA KEV. MFT server. Actively exploited for data exfiltration.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "11.5.0"
     },
     {
       "id": "vmware_esxi",
@@ -3092,7 +3238,8 @@
         "server"
       ],
       "notes": "CRITICAL: 3 CVEs in CISA KEV. Hypervisor. Direct VM compromise and ransomware encryption.",
-      "lastChecked": "2026-01-19"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "8.0 U3"
     },
     {
       "id": "vmware_vcenter",
@@ -3111,7 +3258,8 @@
         "server"
       ],
       "notes": "CRITICAL: Enterprise virtualization management. VMSA advisories via Broadcom API.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "8.0 U3h"
     },
     {
       "id": "vmware_workstation",
@@ -3129,7 +3277,8 @@
         "windows"
       ],
       "notes": "Desktop hypervisor. VM escape vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "17.6.3"
     },
     {
       "id": "jira",
@@ -3150,7 +3299,8 @@
         "server"
       ],
       "notes": "CRITICAL: Issue tracking. Multiple high-severity CVEs. Data Center and Server editions.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "11.3.1"
     },
     {
       "id": "bamboo",
@@ -3170,7 +3320,8 @@
         "server"
       ],
       "notes": "CI/CD server. RCE vulnerabilities via build agents.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.1.1"
     },
     {
       "id": "bitbucket",
@@ -3190,7 +3341,8 @@
         "server"
       ],
       "notes": "Git repository management. Data Center and Server editions.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "10.1.4"
     },
     {
       "id": "netscaler_adc",
@@ -3210,7 +3362,8 @@
         "server"
       ],
       "notes": "CRITICAL: ADC appliance. Multiple critical CVEs actively exploited.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "14.1-29.72"
     },
     {
       "id": "netscaler_gateway",
@@ -3229,7 +3382,8 @@
         "server"
       ],
       "notes": "CRITICAL: VPN gateway. Authentication bypass and RCE vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "14.1-29.72"
     },
     {
       "id": "xenserver",
@@ -3248,7 +3402,8 @@
         "server"
       ],
       "notes": "Hypervisor. VM escape vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "8.4"
     },
     {
       "id": "oracle_java_se",
@@ -3270,7 +3425,8 @@
         "server"
       ],
       "notes": "CRITICAL: Java runtime. Quarterly CPU updates. Multiple CVEs per quarter.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.0.2"
     },
     {
       "id": "oracle_weblogic",
@@ -3289,7 +3445,8 @@
         "server"
       ],
       "notes": "CRITICAL: Java app server. Deserialization RCE vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "14.1.2"
     },
     {
       "id": "carbon_black",
@@ -3310,7 +3467,8 @@
         "server"
       ],
       "notes": "EDR/endpoint protection. Sensor and cloud connector.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "4.3.0"
     },
     {
       "id": "trellix_endpoint",
@@ -3331,7 +3489,8 @@
         "server"
       ],
       "notes": "Formerly McAfee. Enterprise endpoint protection.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "10.7.10"
     },
     {
       "id": "symantec_endpoint",
@@ -3352,7 +3511,8 @@
         "server"
       ],
       "notes": "Broadcom/Symantec enterprise endpoint protection.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "14.3 RU11"
     },
     {
       "id": "globalprotect",
@@ -3372,7 +3532,8 @@
         "windows"
       ],
       "notes": "CRITICAL: Enterprise VPN client. Authentication and RCE vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "6.3.4"
     },
     {
       "id": "cisco_anyconnect",
@@ -3392,7 +3553,8 @@
         "windows"
       ],
       "notes": "CRITICAL: Enterprise VPN client. Privilege escalation vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "5.1.8"
     },
     {
       "id": "forticlient",
@@ -3411,7 +3573,8 @@
         "windows"
       ],
       "notes": "VPN client and endpoint protection. SSL-VPN vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "7.4.3"
     },
     {
       "id": "fortios",
@@ -3431,7 +3594,7 @@
         "appliance"
       ],
       "notes": "CRITICAL: Enterprise firewall OS. 18+ KEV CVEs. Remote code execution.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^[67]\\.",
       "excludePatterns": [
         "\\bforticlient\\b",
@@ -3441,7 +3604,8 @@
         "\\bfortimail\\b",
         "\\bfortiweb\\b",
         "\\bfortiproxy\\b"
-      ]
+      ],
+      "latestVersion": "7.6.4"
     },
     {
       "id": "panos",
@@ -3461,7 +3625,7 @@
         "appliance"
       ],
       "notes": "CRITICAL: Enterprise firewall OS. 6+ KEV CVEs. Authentication bypass.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^(9|10|11)\\.",
       "excludePatterns": [
         "\\bglobalprotect\\b",
@@ -3471,7 +3635,8 @@
         "\\bxdr\\b",
         "\\bwildfire\\b",
         "\\btraps\\b"
-      ]
+      ],
+      "latestVersion": "11.2.6"
     },
     {
       "id": "cisco_asa",
@@ -3491,7 +3656,7 @@
         "appliance"
       ],
       "notes": "CRITICAL: Enterprise firewall. 12+ KEV CVEs. Path traversal vulnerabilities.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^9\\.",
       "excludePatterns": [
         "\\bftd\\b",
@@ -3501,7 +3666,8 @@
         "\\bise\\b",
         "\\bduo\\b",
         "\\bmeraki\\b"
-      ]
+      ],
+      "latestVersion": "9.24.1"
     },
     {
       "id": "cisco_ftd",
@@ -3521,7 +3687,7 @@
         "appliance"
       ],
       "notes": "Next-gen firewall. SSL VPN vulnerabilities. RCE exploits.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^[67]\\.",
       "excludePatterns": [
         "\\basa\\b",
@@ -3531,7 +3697,8 @@
         "\\bsecure\\s*client\\b",
         "\\bamp\\b",
         "\\bsecure\\s*endpoint\\b"
-      ]
+      ],
+      "latestVersion": "7.6.0"
     },
     {
       "id": "sonicos",
@@ -3551,7 +3718,7 @@
         "appliance"
       ],
       "notes": "CRITICAL: Enterprise firewall OS. 6+ KEV CVEs. SSL VPN exploits.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^[67]\\.",
       "excludePatterns": [
         "\\bsma\\b",
@@ -3560,7 +3727,8 @@
         "\\bgms\\b",
         "\\banalyzer\\b",
         "\\bcapture\\s*client\\b"
-      ]
+      ],
+      "latestVersion": "7.1.3"
     },
     {
       "id": "sonicwall_sma",
@@ -3580,14 +3748,15 @@
         "appliance"
       ],
       "notes": "CRITICAL: VPN appliance. Multiple KEV CVEs. RCE exploits.",
-      "lastChecked": "2026-01-21",
+      "lastChecked": "2026-02-03",
       "versionPattern": "^(10|12)\\.",
       "excludePatterns": [
         "\\bsonicos\\b",
         "\\bsonicwall\\s*firewall\\b",
         "\\bnetextender\\b",
         "\\bgms\\b"
-      ]
+      ],
+      "latestVersion": "12.4.3"
     },
     {
       "id": "visual_studio",
@@ -3608,7 +3777,8 @@
         "windows"
       ],
       "notes": "IDE for Windows development. Occasional RCE via project files.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "18.2.1"
     },
     {
       "id": "intellij_idea",
@@ -3628,7 +3798,8 @@
         "windows"
       ],
       "notes": "Java IDE. Plugin and project file vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2025.1.1"
     },
     {
       "id": "webex",
@@ -3648,7 +3819,8 @@
         "windows"
       ],
       "notes": "Video conferencing. Memory corruption and RCE vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "45.2"
     },
     {
       "id": "acronis_cyber_protect",
@@ -3669,7 +3841,8 @@
         "server"
       ],
       "notes": "Backup and security. Agent vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "16 Update 3"
     },
     {
       "id": "ivanti_connect_secure",
@@ -3689,7 +3862,8 @@
         "server"
       ],
       "notes": "CRITICAL: VPN gateway. Multiple actively exploited CVEs in CISA KEV.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "22.7R2.6"
     },
     {
       "id": "ivanti_epmm",
@@ -3709,7 +3883,8 @@
         "server"
       ],
       "notes": "CRITICAL: MDM solution. Authentication bypass CVEs in KEV.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "12.5.0"
     },
     {
       "id": "progress_moveit",
@@ -3728,7 +3903,8 @@
         "server"
       ],
       "notes": "CRITICAL: Managed file transfer. Mass exploitation in 2023 (Cl0p ransomware).",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "2024.1"
     },
     {
       "id": "beyond_trust_remote",
@@ -3748,7 +3924,8 @@
         "server"
       ],
       "notes": "CRITICAL: Remote support tool. Command injection CVEs in KEV.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "24.3"
     },
     {
       "id": "barracuda_esg",
@@ -3767,7 +3944,8 @@
         "server"
       ],
       "notes": "CRITICAL: Email gateway. Zero-day exploitation in 2023.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "9.2.1"
     },
     {
       "id": "papercut_mf",
@@ -3788,7 +3966,8 @@
         "server"
       ],
       "notes": "CRITICAL: Print management. RCE actively exploited by ransomware groups.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "25.0"
     },
     {
       "id": "veritas_netbackup",
@@ -3807,7 +3986,8 @@
         "server"
       ],
       "notes": "Enterprise backup. Pre-auth RCE vulnerabilities.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "11.0"
     },
     {
       "id": "manageengine_desktop_central",
@@ -3826,7 +4006,8 @@
         "server"
       ],
       "notes": "CRITICAL: Endpoint management. Multiple CVEs in CISA KEV.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "13020"
     },
     {
       "id": "sophos_firewall",
@@ -3845,7 +4026,8 @@
         "server"
       ],
       "notes": "CRITICAL: Network firewall. SQL injection and RCE CVEs.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "21.0"
     },
     {
       "id": "f5_big_ip",
@@ -3865,7 +4047,8 @@
         "server"
       ],
       "notes": "CRITICAL: Load balancer/ADC. Multiple actively exploited CVEs.",
-      "lastChecked": "2026-01-21"
+      "lastChecked": "2026-02-03",
+      "latestVersion": "17.1.2.1"
     },
     {
       "id": "vandyke_securecrt",
@@ -3884,7 +4067,9 @@
       ],
       "notes": "Auto-discovered from NVD CPE",
       "autoDiscovered": true,
-      "discoveredAt": "2026-01-22T03:30:38.370Z"
+      "discoveredAt": "2026-01-22T03:30:38.370Z",
+      "latestVersion": "9.7.1",
+      "lastChecked": "2026-02-03"
     }
   ]
 }

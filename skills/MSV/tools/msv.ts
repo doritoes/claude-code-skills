@@ -112,6 +112,7 @@ import type {
   VariantMsv,
 } from "./types";
 import { CtiReportGenerator } from "./CtiReportGenerator";
+import { EndOfLifeClient } from "./EndOfLifeClient";
 import { formatCtiReport } from "./CtiFormatter";
 import type { CTIReportOptions, CTIUserProfile, ReportPeriod, CTIOutputFormat } from "./CtiTypes";
 
@@ -739,9 +740,13 @@ async function queryMSV(
         branchesWithNoSafeVersion: branchesWithNoSafeVersion.length > 0 ? branchesWithNoSafeVersion : undefined,
       };
 
-      // Try to get latest version from catalog or Chocolatey
+      // Try to get latest version from multiple sources (in priority order):
+      // 1. Catalog (static, manually maintained)
+      // 2. Chocolatey (Windows package manager)
+      // 3. endoflife.date (structured EOL/version database)
       let latestVersion = software.latestVersion || null;
       if (!latestVersion) {
+        // Try Chocolatey first
         try {
           const chocoClient = new ChocolateyClient(config.dataDir);
           const chocoVersion = await chocoClient.getLatestVersion(software.id);
@@ -750,7 +755,21 @@ async function queryMSV(
             logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
           }
         } catch {
-          // Chocolatey lookup failed, continue without latest version
+          // Chocolatey lookup failed
+        }
+      }
+      if (!latestVersion) {
+        // Try endoflife.date as fallback
+        try {
+          const eolClient = new EndOfLifeClient(join(config.dataDir, "eol"));
+          const eolData = await eolClient.getProduct(software.id);
+          if (eolData?.cycles?.length > 0) {
+            // Get latest version from most recent cycle
+            latestVersion = eolData.cycles[0].latest;
+            logger.debug(`Latest version from endoflife.date: ${latestVersion}`);
+          }
+        } catch {
+          // endoflife.date lookup failed, continue without latest version
         }
       }
 
@@ -1469,9 +1488,13 @@ async function queryMSV(
   const now = new Date().toISOString();
   const dataAge = calculateDataFreshness(now, now);
 
-  // Try to get latest version from catalog or Chocolatey
+  // Try to get latest version from multiple sources (in priority order):
+  // 1. Catalog (static, manually maintained)
+  // 2. Chocolatey (Windows package manager)
+  // 3. endoflife.date (structured EOL/version database)
   let latestVersion = software.latestVersion || null;
   if (!latestVersion) {
+    // Try Chocolatey first
     try {
       const chocoClient = new ChocolateyClient(config.dataDir);
       const chocoVersion = await chocoClient.getLatestVersion(software.id);
@@ -1480,7 +1503,21 @@ async function queryMSV(
         logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
       }
     } catch {
-      // Chocolatey lookup failed, continue without latest version
+      // Chocolatey lookup failed
+    }
+  }
+  if (!latestVersion) {
+    // Try endoflife.date as fallback
+    try {
+      const eolClient = new EndOfLifeClient(join(config.dataDir, "eol"));
+      const eolData = await eolClient.getProduct(software.id);
+      if (eolData?.cycles?.length > 0) {
+        // Get latest version from most recent cycle
+        latestVersion = eolData.cycles[0].latest;
+        logger.debug(`Latest version from endoflife.date: ${latestVersion}`);
+      }
+    } catch {
+      // endoflife.date lookup failed, continue without latest version
     }
   }
 

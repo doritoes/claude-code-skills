@@ -1,0 +1,262 @@
+{
+  "chrome": {
+    "latest": "145.0.7632.26",
+    "source": "chocolatey",
+    "displayName": "Google Chrome"
+  },
+  "edge": {
+    "latest": "144.0.3719.104",
+    "source": "chocolatey",
+    "displayName": "Microsoft Edge"
+  },
+  "firefox": {
+    "latest": "147.0.2",
+    "source": "chocolatey",
+    "displayName": "Mozilla Firefox"
+  },
+  "brave": {
+    "latest": "1.87.181-beta",
+    "source": "chocolatey",
+    "displayName": "Brave Browser"
+  },
+  "opera": {
+    "latest": "127.0.5778.14",
+    "source": "chocolatey",
+    "displayName": "Opera Browser"
+  },
+  "7zip": {
+    "latest": "25.1.0",
+    "source": "chocolatey",
+    "displayName": "7-Zip"
+  },
+  "winrar": {
+    "latest": "7.13.0",
+    "source": "chocolatey",
+    "displayName": "WinRAR"
+  },
+  "peazip": {
+    "latest": "10.8.0",
+    "source": "chocolatey",
+    "displayName": "PeaZip"
+  },
+  "foxit": {
+    "latest": "2025.3.0.35737",
+    "source": "chocolatey",
+    "displayName": "Foxit PDF Reader"
+  },
+  "putty": {
+    "latest": "0.83.0",
+    "source": "chocolatey",
+    "displayName": "PuTTY"
+  },
+  "winscp": {
+    "latest": "6.5.5",
+    "source": "chocolatey",
+    "displayName": "WinSCP"
+  },
+  "teamviewer": {
+    "latest": "15.74.4",
+    "source": "chocolatey",
+    "displayName": "TeamViewer"
+  },
+  "anydesk": {
+    "latest": "9.6.9",
+    "source": "chocolatey",
+    "displayName": "AnyDesk"
+  },
+  "vscode": {
+    "latest": "1.108.2",
+    "source": "chocolatey",
+    "displayName": "Visual Studio Code"
+  },
+  "wireshark": {
+    "latest": "4.6.3",
+    "source": "chocolatey",
+    "displayName": "Wireshark"
+  },
+  "zoom": {
+    "latest": "6.6.11.23272",
+    "source": "chocolatey",
+    "displayName": "Zoom"
+  },
+  "slack": {
+    "latest": "4.48.86",
+    "source": "chocolatey",
+    "displayName": "Slack"
+  },
+  "discord": {
+    "latest": "1.0.9222",
+    "source": "chocolatey",
+    "displayName": "Discord"
+  },
+  "vlc": {
+    "latest": "3.0.23",
+    "source": "chocolatey",
+    "displayName": "VLC Media Player"
+  },
+  "java": {
+    "latest": "25.0.2",
+    "source": "endoflife.date",
+    "displayName": "Oracle Java (JRE)"
+  },
+  "jdk": {
+    "latest": "25.0.2",
+    "source": "endoflife.date",
+    "displayName": "Oracle JDK"
+  },
+  "nodejs": {
+    "latest": "25.6.0",
+    "source": "chocolatey",
+    "displayName": "Node.js"
+  },
+  "filezilla": {
+    "latest": "3.69.5",
+    "source": "chocolatey",
+    "displayName": "FileZilla"
+  },
+  "malwarebytes": {
+    "latest": "5.4.7.138",
+    "source": "chocolatey",
+    "displayName": "Malwarebytes"
+  },
+  "ccleaner": {
+    "latest": "6.39.11548",
+    "source": "chocolatey",
+    "displayName": "CCleaner"
+  },
+  "irfanview": {
+    "latest": "4.73.0",
+    "source": "chocolatey",
+    "displayName": "IrfanView"
+  },
+  "keepass": {
+    "latest": "2.60.0",
+    "source": "chocolatey",
+    "displayName": "KeePass"
+  },
+  "bitwarden": {
+    "latest": "2025.12.1",
+    "source": "chocolatey",
+    "displayName": "Bitwarden"
+  },
+  "veracrypt": {
+    "latest": "1.26.24",
+    "source": "chocolatey",
+    "displayName": "VeraCrypt"
+  },
+  "curl": {
+    "latest": "8.18.0",
+    "source": "chocolatey",
+    "displayName": "curl"
+  },
+  "postgresql": {
+    "latest": "18.1.0",
+    "source": "chocolatey",
+    "displayName": "PostgreSQL"
+  },
+  "mysql": {
+    "latest": "9.6.0",
+    "source": "chocolatey",
+    "displayName": "MySQL"
+  },
+  "mariadb": {
+    "latest": "12.1.2",
+    "source": "endoflife.date",
+    "displayName": "MariaDB"
+  },
+  "mongodb": {
+    "latest": "8.2.4",
+    "source": "chocolatey",
+    "displayName": "MongoDB"
+  },
+  "redis": {
+    "latest": "3.1.0",
+    "source": "chocolatey",
+    "displayName": "Redis"
+  },
+  "nginx": {
+    "latest": "1.29.4",
+    "source": "endoflife.date",
+    "displayName": "nginx"
+  },
+  "tomcat": {
+    "latest": "11.0.18",
+    "source": "endoflife.date",
+    "displayName": "Apache Tomcat"
+  },
+  "virtualbox": {
+    "latest": "7.2.6",
+    "source": "chocolatey",
+    "displayName": "Oracle VirtualBox"
+  },
+  "terraform": {
+    "latest": "1.15.0-alpha20251203",
+    "source": "chocolatey",
+    "displayName": "HashiCorp Terraform"
+  },
+  "powershell": {
+    "latest": "7.5.4",
+    "source": "endoflife.date",
+    "displayName": "PowerShell (All Variants)"
+  },
+  "powershell7": {
+    "latest": "7.5.4",
+    "source": "endoflife.date",
+    "displayName": "PowerShell 7"
+  },
+  "obs": {
+    "latest": "32.0.4",
+    "source": "chocolatey",
+    "displayName": "OBS Studio"
+  },
+  "handbrake": {
+    "latest": "1.10.2",
+    "source": "chocolatey",
+    "displayName": "HandBrake"
+  },
+  "audacity": {
+    "latest": "3.7.7",
+    "source": "chocolatey",
+    "displayName": "Audacity"
+  },
+  "steam": {
+    "latest": "3.10.91.91241028",
+    "source": "chocolatey",
+    "displayName": "Steam"
+  },
+  "vcenter_server": {
+    "latest": "8.0 U3h",
+    "source": "endoflife.date",
+    "displayName": "VMware vCenter Server"
+  },
+  "sharepoint_server": {
+    "latest": "16.0.19127.20442",
+    "source": "endoflife.date",
+    "displayName": "Microsoft SharePoint Server"
+  },
+  "confluence": {
+    "latest": "10.2.2",
+    "source": "endoflife.date",
+    "displayName": "Atlassian Confluence"
+  },
+  "jira": {
+    "latest": "11.3.1",
+    "source": "endoflife.date",
+    "displayName": "Atlassian Jira"
+  },
+  "bamboo": {
+    "latest": "12.1.1",
+    "source": "endoflife.date",
+    "displayName": "Atlassian Bamboo"
+  },
+  "bitbucket": {
+    "latest": "10.1.4",
+    "source": "endoflife.date",
+    "displayName": "Atlassian Bitbucket"
+  },
+  "visual_studio": {
+    "latest": "18.2.1",
+    "source": "endoflife.date",
+    "displayName": "Microsoft Visual Studio"
+  }
+}
