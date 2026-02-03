@@ -777,32 +777,39 @@ async function checkDatabaseHealth(config: ServerConfig): Promise<DatabaseHealth
   return health;
 }
 
+// Helper to pad lines with ANSI codes (strips codes for length calc)
+function padBox(content: string, width: number = 58): string {
+  const visibleLength = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+  const padding = width - visibleLength;
+  return content + ' '.repeat(Math.max(0, padding));
+}
+
 function displayDatabaseHealth(db: DatabaseHealth, diskPercent: number): void {
-  console.log("┌─ DATABASE HEALTH ───────────────────────────────────────────┐");
+  console.log("┌─ DATABASE HEALTH ──────────────────────────────────────────┐");
 
   // Hash table size
   const hashStatus = db.hashTableMb < 5000 ? "\x1b[32m✓\x1b[0m" :
                      db.hashTableMb < 10000 ? "\x1b[33m⚠\x1b[0m" : "\x1b[31m✗\x1b[0m";
-  console.log(`│ ${hashStatus} Hash Table: ${db.hashTableMb.toLocaleString()} MB (${db.hashTableRows.toLocaleString()} rows)`);
+  console.log(`│ ${padBox(`${hashStatus} Hash Table: ${db.hashTableMb.toLocaleString()} MB (${db.hashTableRows.toLocaleString()} rows)`)} │`);
 
   // Total DB size
-  console.log(`│ ○ Total Database: ${db.totalDbMb.toLocaleString()} MB`);
+  console.log(`│ ${padBox(`○ Total Database: ${db.totalDbMb.toLocaleString()} MB`)} │`);
 
   // Active vs archivable hashlists
-  console.log(`│ ○ Active Hashlists: ${db.activeHashlists.toLocaleString()}`);
+  console.log(`│ ${padBox(`○ Active Hashlists: ${db.activeHashlists.toLocaleString()}`)} │`);
 
   if (db.archivableHashlists > 0) {
-    console.log(`│ \x1b[33m⚠\x1b[0m Archivable Hashlists: ${db.archivableHashlists} (can reclaim ~${db.estimatedReclaimMb} MB)`);
+    console.log(`│ ${padBox(`\x1b[33m⚠\x1b[0m Archivable Hashlists: ${db.archivableHashlists} (can reclaim ~${db.estimatedReclaimMb} MB)`)} │`);
   }
 
   // Cleanup recommendation
   if (db.needsCleanup || diskPercent > 70) {
-    console.log(`│`);
-    console.log(`│ \x1b[33m→ CLEANUP RECOMMENDED:\x1b[0m`);
-    console.log(`│   1. Export passwords: bun Tools/PasswordExporter.ts export`);
-    console.log(`│   2. Archive hashlists: bun Tools/HashlistArchiver.ts`);
+    console.log(`│ ${padBox('')} │`);
+    console.log(`│ ${padBox(`\x1b[33m→ CLEANUP RECOMMENDED:\x1b[0m`)} │`);
+    console.log(`│ ${padBox(`  1. Export passwords: bun Tools/PasswordExporter.ts export`)} │`);
+    console.log(`│ ${padBox(`  2. Archive hashlists: bun Tools/HashlistArchiver.ts`)} │`);
     if (db.hashTableMb > 10000) {
-      console.log(`│   3. Optimize table: OPTIMIZE TABLE Hash (after archiving)`);
+      console.log(`│ ${padBox(`  3. Optimize table: OPTIMIZE TABLE Hash (after archiving)`)} │`);
     }
   }
 
@@ -810,33 +817,33 @@ function displayDatabaseHealth(db: DatabaseHealth, diskPercent: number): void {
 }
 
 function displayServerHealth(health: ServerHealth): void {
-  console.log("┌─ SERVER HEALTH ─────────────────────────────────────────────┐");
+  console.log("┌─ SERVER HEALTH ────────────────────────────────────────────┐");
 
   // Docker
   const dockerStatus = health.docker.running === health.docker.total && health.docker.total > 0
     ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
-  console.log(`│ ${dockerStatus} Docker: ${health.docker.running}/${health.docker.total} containers running`);
+  console.log(`│ ${padBox(`${dockerStatus} Docker: ${health.docker.running}/${health.docker.total} containers running`)} │`);
   for (const container of health.docker.containers) {
-    console.log(`│   ${container}`);
+    console.log(`│ ${padBox(`  ${container}`)} │`);
   }
 
   // Memory
   const memStatus = health.memory.percent <= 85 ? "\x1b[32m✓\x1b[0m" : "\x1b[33m⚠\x1b[0m";
-  console.log(`│ ${memStatus} Memory: ${health.memory.used}/${health.memory.total} (${health.memory.percent}%)`);
+  console.log(`│ ${padBox(`${memStatus} Memory: ${health.memory.used}/${health.memory.total} (${health.memory.percent}%)`)} │`);
 
   // Disk
   const diskStatus = health.disk.percent <= 80 ? "\x1b[32m✓\x1b[0m" : "\x1b[33m⚠\x1b[0m";
-  console.log(`│ ${diskStatus} Disk: ${health.disk.used}/${health.disk.total} (${health.disk.percent}%)`);
+  console.log(`│ ${padBox(`${diskStatus} Disk: ${health.disk.used}/${health.disk.total} (${health.disk.percent}%)`)} │`);
 
   // Uptime
-  console.log(`│ ○ Uptime: ${health.uptime}`);
+  console.log(`│ ${padBox(`○ Uptime: ${health.uptime}`)} │`);
 
   // Issues
   if (health.issues.length > 0) {
-    console.log(`│`);
-    console.log(`│ \x1b[33mIssues:\x1b[0m`);
+    console.log(`│ ${padBox('')} │`);
+    console.log(`│ ${padBox(`\x1b[33mIssues:\x1b[0m`)} │`);
     for (const issue of health.issues) {
-      console.log(`│   → ${issue}`);
+      console.log(`│ ${padBox(`  → ${issue}`)} │`);
     }
   }
 
@@ -869,7 +876,7 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
 
   // Quick status
   const status = await getQuickStatus(config);
-  console.log("┌─ QUICK STATUS ─────────────────────────────────────────────┐");
+  console.log("┌─ QUICK STATUS ──────────────────────────────────────────────┐");
   if (status.queryFailed) {
     console.log("│ \x1b[31m⚠ QUERY FAILED - Cannot get status (check server connection)\x1b[0m │");
     console.log("│ SSH or MySQL may be unresponsive. Check server health.    │");
