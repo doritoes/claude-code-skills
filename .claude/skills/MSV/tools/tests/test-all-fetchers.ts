@@ -12,7 +12,13 @@ import { FortinetAdvisoryFetcher } from "../FortinetAdvisoryFetcher";
 import { PaloAltoAdvisoryFetcher } from "../PaloAltoAdvisoryFetcher";
 import { CiscoAdvisoryFetcher } from "../CiscoAdvisoryFetcher";
 import { SonicWallAdvisoryFetcher } from "../SonicWallAdvisoryFetcher";
+import { JuniperAdvisoryFetcher } from "../JuniperAdvisoryFetcher";
+import { IvantiAdvisoryFetcher } from "../IvantiAdvisoryFetcher";
 import { CurlAdvisoryFetcher } from "../CurlAdvisoryFetcher";
+import { F5AdvisoryFetcher } from "../F5AdvisoryFetcher";
+import { CheckPointAdvisoryFetcher } from "../CheckPointAdvisoryFetcher";
+import { OPNsenseAdvisoryFetcher } from "../OPNsenseAdvisoryFetcher";
+import { PfSenseAdvisoryFetcher } from "../PfSenseAdvisoryFetcher";
 // These use different import patterns - need wrapper classes from VendorAdvisory.ts
 // import { MozillaAdvisoryFetcher } from "../MozillaAdvisoryFetcher";
 // import { MsrcAdvisoryFetcher } from "../MsrcAdvisoryFetcher";
@@ -113,6 +119,30 @@ async function main() {
     {
       name: "SonicWall",
       fn: () => new SonicWallAdvisoryFetcher(CACHE_DIR).fetch()
+    },
+    {
+      name: "Juniper JunOS",
+      fn: () => new JuniperAdvisoryFetcher(CACHE_DIR).fetch()
+    },
+    {
+      name: "Ivanti Connect Secure",
+      fn: () => new IvantiAdvisoryFetcher(CACHE_DIR, "connect_secure").fetch()
+    },
+    {
+      name: "F5 BIG-IP",
+      fn: () => new F5AdvisoryFetcher(CACHE_DIR).fetch()
+    },
+    {
+      name: "Check Point Gaia",
+      fn: () => new CheckPointAdvisoryFetcher(CACHE_DIR).fetch()
+    },
+    {
+      name: "OPNsense",
+      fn: () => new OPNsenseAdvisoryFetcher(CACHE_DIR).fetch()
+    },
+    {
+      name: "pfSense",
+      fn: () => new PfSenseAdvisoryFetcher(CACHE_DIR).fetch()
     },
     // Software Vendors (via VendorAdvisory wrappers)
     {

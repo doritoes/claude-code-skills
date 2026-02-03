@@ -2168,6 +2168,7 @@
       "cpe23": "cpe:2.3:a:solarwinds:orion_platform:*:*:*:*:*:*:*:*",
       "category": "monitoring",
       "priority": "critical",
+      "latestVersion": "2025.2",
       "aliases": [
         "solarwinds orion",
         "orion platform",
@@ -2178,8 +2179,8 @@
         "windows",
         "server"
       ],
-      "notes": "SUNBURST supply chain attack (2020). Multiple KEV entries. Critical enterprise monitoring.",
-      "lastChecked": "2026-01-13"
+      "notes": "SUNBURST supply chain attack (2020). Multiple KEV entries. Critical enterprise monitoring. Now called SolarWinds Platform.",
+      "lastChecked": "2026-02-03"
     },
     {
       "id": "solarwinds_npm",

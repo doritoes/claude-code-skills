@@ -285,12 +285,13 @@ export class FortinetAdvisoryFetcher {
     // Group by major.minor version
     const branchMap = new Map<string, { msv: string; latest: string }>();
 
-    // Known latest versions per branch (would be fetched from release notes)
+    // Known latest versions per branch (updated 2026-02-03)
+    // Source: docs.fortinet.com
     const knownLatest: Record<string, string> = {
-      "7.6": "7.6.4",
-      "7.4": "7.4.8",
-      "7.2": "7.2.10",
-      "7.0": "7.0.17",
+      "7.6": "7.6.6",
+      "7.4": "7.4.11",
+      "7.2": "7.2.13",
+      "7.0": "7.0.19",
       "6.4": "6.4.16",
     };
 

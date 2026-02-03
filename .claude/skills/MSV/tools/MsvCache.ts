@@ -119,11 +119,13 @@ export class MsvCache {
         );
 
         if (existingBranch) {
-          // Only update if new MSV is higher
+          // Only update MSV if new MSV is higher (MSV can never decrease)
           if (this.compareVersions(newBranch.msv, existingBranch.msv) > 0) {
             existingBranch.msv = newBranch.msv;
-            existingBranch.lastChecked = newBranch.lastChecked;
           }
+          // ALWAYS update lastChecked when data is refreshed
+          // This fixes the bug where --force wouldn't update staleness indicator
+          existingBranch.lastChecked = newBranch.lastChecked;
           // Always update latest known
           if (this.compareVersions(newBranch.latestKnown, existingBranch.latestKnown) > 0) {
             existingBranch.latestKnown = newBranch.latestKnown;

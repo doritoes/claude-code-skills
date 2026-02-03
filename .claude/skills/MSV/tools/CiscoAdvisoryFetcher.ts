@@ -328,14 +328,17 @@ export class CiscoAdvisoryFetcher {
   private calculateBranchMsv(advisories: CiscoAdvisory[], product?: string): BranchMsv[] {
     const branchMap = new Map<string, { msv: string; latest: string }>();
 
-    // Known latest versions for common Cisco products
+    // Known latest versions for common Cisco products (updated 2026-02-03)
+    // Source: cisco.com/c/en/us/support/security/adaptive-security-appliance-asa-software
+    // Note: Cisco skipped 9.21 entirely - goes from 9.20 to 9.22
     const knownLatest: Record<string, Record<string, string>> = {
       asa: {
-        "9.22": "9.22.1",
-        "9.21": "9.21.2",
-        "9.20": "9.20.3",
+        "9.24": "9.24.1",
+        "9.23": "9.23.1",
+        "9.22": "9.22.2",
+        "9.20": "9.20.4",
         "9.19": "9.19.1",
-        "9.18": "9.18.5",
+        "9.18": "9.18.4",
         "9.16": "9.16.4",
       },
       ftd: {

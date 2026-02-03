@@ -1447,6 +1447,30 @@ export function getVendorFetcher(
       if (vendor.toLowerCase() === "sonicwall") {
         return new SonicWallVendorAdvisoryFetcher(cacheDir, product);
       }
+      // Check for Juniper Networks products
+      if (vendor.toLowerCase() === "juniper" || vendor.toLowerCase() === "juniper_networks" || vendor.toLowerCase() === "juniper networks") {
+        return new JuniperVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Ivanti products (CISA KEV priority target)
+      if (vendor.toLowerCase() === "ivanti") {
+        return new IvantiVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for F5 products (critical network infrastructure)
+      if (vendor.toLowerCase() === "f5" || vendor.toLowerCase() === "f5_networks" || vendor.toLowerCase() === "f5 networks") {
+        return new F5VendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for Check Point products (Seth's primary firewall vendor - CCSE/CCME certified)
+      if (vendor.toLowerCase() === "checkpoint" || vendor.toLowerCase() === "check_point" || vendor.toLowerCase() === "check point") {
+        return new CheckPointVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for OPNsense (open source firewall, FreeBSD-based)
+      if (vendor.toLowerCase() === "opnsense" || vendor.toLowerCase() === "deciso") {
+        return new OPNsenseVendorAdvisoryFetcher(cacheDir, product);
+      }
+      // Check for pfSense (open source firewall, FreeBSD-based)
+      if (vendor.toLowerCase() === "pfsense" || vendor.toLowerCase() === "netgate") {
+        return new PfSenseVendorAdvisoryFetcher(cacheDir, product);
+      }
       return null;
   }
 }
@@ -1459,6 +1483,12 @@ import { FortinetAdvisoryFetcher, fetchFortinetAdvisories } from "./FortinetAdvi
 import { PaloAltoAdvisoryFetcher, fetchPaloAltoAdvisories } from "./PaloAltoAdvisoryFetcher";
 import { CiscoAdvisoryFetcher, fetchCiscoAdvisories } from "./CiscoAdvisoryFetcher";
 import { SonicWallAdvisoryFetcher, fetchSonicWallAdvisories } from "./SonicWallAdvisoryFetcher";
+import { JuniperAdvisoryFetcher, fetchJuniperAdvisories } from "./JuniperAdvisoryFetcher";
+import { IvantiAdvisoryFetcher, fetchIvantiAdvisories } from "./IvantiAdvisoryFetcher";
+import { F5AdvisoryFetcher, fetchF5Advisories } from "./F5AdvisoryFetcher";
+import { CheckPointAdvisoryFetcher, fetchCheckPointAdvisories } from "./CheckPointAdvisoryFetcher";
+import { OPNsenseAdvisoryFetcher, fetchOPNsenseAdvisories } from "./OPNsenseAdvisoryFetcher";
+import { PfSenseAdvisoryFetcher, fetchPfSenseAdvisories } from "./PfSenseAdvisoryFetcher";
 
 /**
  * Fortinet Vendor Advisory Fetcher (Wrapper)
@@ -1521,5 +1551,111 @@ class SonicWallVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
 
   async fetch(): Promise<VendorAdvisoryResult> {
     return fetchSonicWallAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * Juniper Networks Vendor Advisory Fetcher (Wrapper)
+ */
+class JuniperVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchJuniperAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * Ivanti Vendor Advisory Fetcher (Wrapper)
+ * WARNING: Ivanti products are frequent CISA KEV targets - prioritize patching
+ */
+class IvantiVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchIvantiAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * F5 BIG-IP Vendor Advisory Fetcher (Wrapper)
+ * Critical network infrastructure - load balancers, WAF, APM
+ */
+class F5VendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchF5Advisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * Check Point Vendor Advisory Fetcher (Wrapper)
+ * Seth's primary firewall vendor - CCSE/CCME certified
+ * Covers: Gaia OS, Security Gateway, Management Server, CloudGuard, Maestro
+ */
+class CheckPointVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchCheckPointAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * OPNsense Vendor Advisory Fetcher (Wrapper)
+ * Open-source firewall (FreeBSD-based fork of pfSense)
+ * Uses endoflife.date API for structured version data
+ * Version format: YY.R (24.7, 25.1, 26.1)
+ */
+class OPNsenseVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchOPNsenseAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+  }
+}
+
+/**
+ * pfSense Vendor Advisory Fetcher (Wrapper)
+ * Open-source firewall (FreeBSD-based)
+ * pfSense Plus (commercial): YY.MM format
+ * pfSense CE (community): X.Y.Z format
+ */
+class PfSenseVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
+  private product: string;
+
+  constructor(cacheDir: string, product: string = "all") {
+    super(cacheDir);
+    this.product = product;
+  }
+
+  async fetch(): Promise<VendorAdvisoryResult> {
+    return fetchPfSenseAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
   }
 }
