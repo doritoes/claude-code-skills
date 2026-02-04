@@ -108,6 +108,10 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 | "power on", "workers started", "agents down" | `Workflows/PostPowerOn.md` |
 | "worker disk", "worker health", "clean workers" | `bun Tools/WorkerHealthCheck.ts` |
 | "hashlist coverage", "multi-task coverage", "combined coverage" | `bun Tools/HashlistCoverageAnalyzer.ts` |
+| "process sand", "sand attack plan", "escalating attacks" | `bun Tools/SandProcessor.ts` |
+| "analyze diamonds", "extract patterns", "BETA words" | `bun Tools/DiamondAnalyzer.ts` |
+| "glass attacks", "untried attacks", "what attacks for glass" | `bun Tools/SandProcessor.ts --glass <batch>` |
+| "attack history", "which attacks tried" | `bun Tools/SandProcessor.ts --history <batch>` |
 
 ## Quick Commands
 
