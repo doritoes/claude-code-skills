@@ -37,6 +37,7 @@ import {
 import {
   generateAction,
   formatActionBox,
+  detectVersionSchemeMismatch,
   type ActionGuidance,
   type ActionInput,
 } from "./ActionGuidance";
@@ -726,20 +727,6 @@ async function queryMSV(
         }));
       }
 
-      // Generate action guidance
-      const branchesWithNoSafeVersion = branches.filter(b => b.noSafeVersion);
-      const actionInput: ActionInput = {
-        currentVersion: null,
-        minimumSafeVersion,
-        recommendedVersion,
-        admiraltyRating,
-        hasKevCves: cached.hasKevCves || false,
-        cveCount,
-        sources: cached.dataSources,
-        vendor: software.vendor,
-        branchesWithNoSafeVersion: branchesWithNoSafeVersion.length > 0 ? branchesWithNoSafeVersion : undefined,
-      };
-
       // Try to get latest version from multiple sources (in priority order):
       // 1. Catalog (static, manually maintained)
       // 2. Chocolatey (Windows package manager)
@@ -772,6 +759,23 @@ async function queryMSV(
           // endoflife.date lookup failed, continue without latest version
         }
       }
+
+      // Generate action guidance (now that we have latestVersion)
+      const branchesWithNoSafeVersion = branches.filter(b => b.noSafeVersion);
+      const actionInput: ActionInput = {
+        currentVersion: null,
+        minimumSafeVersion,
+        recommendedVersion,
+        admiraltyRating,
+        hasKevCves: cached.hasKevCves || false,
+        cveCount,
+        sources: cached.dataSources,
+        vendor: software.vendor,
+        branchesWithNoSafeVersion: branchesWithNoSafeVersion.length > 0 ? branchesWithNoSafeVersion : undefined,
+        latestVersion,
+        // Note: cveFixedVersions not available from cache, so version mismatch detection
+        // will be limited for cached results
+      };
 
       // Calculate risk score from cached data
       const riskScoreInput: RiskScoreInput = {
@@ -1146,13 +1150,25 @@ async function queryMSV(
     }
   }
 
-  // 3.5. Query NVD by CPE if: no CVEs found yet, OR CVEs found but no version data
+  // 3.5. Query NVD by CPE if: no CVEs found yet, OR CVEs found but no version data, OR version mismatch detected
   const hasVersionData = exploitedCves.some(cve => cve.fixedVersion);
-  const shouldQueryNvd = (exploitedCves.length === 0 || !hasVersionData) && software.cpe23;
+
+  // Detect version scheme mismatch (CVEs may be for different product with similar name)
+  const cveFixedVersionsForMismatchCheck = exploitedCves
+    .map(c => c.fixedVersion)
+    .filter((v): v is string => v !== null && v !== undefined);
+  const versionMismatch = detectVersionSchemeMismatch(software.latestVersion, cveFixedVersionsForMismatchCheck);
+
+  const shouldQueryNvd = (exploitedCves.length === 0 || !hasVersionData || versionMismatch.hasMismatch) && software.cpe23;
   if (shouldQueryNvd) {
-    const reason = exploitedCves.length === 0
-      ? "no CVEs from other sources"
-      : `${exploitedCves.length} CVEs found but missing version data`;
+    let reason: string;
+    if (versionMismatch.hasMismatch) {
+      reason = `version mismatch detected - ${versionMismatch.reason}`;
+    } else if (exploitedCves.length === 0) {
+      reason = "no CVEs from other sources";
+    } else {
+      reason = `${exploitedCves.length} CVEs found but missing version data`;
+    }
     logger.debug(`Querying NVD by CPE (${reason})...`);
     try {
       const nvdClient = new NvdClient(config.dataDir);
@@ -1246,6 +1262,7 @@ async function queryMSV(
           source: "NVD",
           queried: true,
           cveCount: filteredResults.length,
+          note: versionMismatch.hasMismatch ? "queried due to version mismatch in other sources" : undefined,
         });
 
         logger.debug(`Found ${filteredResults.length} CVEs from NVD (CVSS >= 4.0)`);
@@ -1255,6 +1272,7 @@ async function queryMSV(
           source: "NVD",
           queried: true,
           cveCount: 0,
+          note: versionMismatch.hasMismatch ? "queried due to version mismatch (no relevant CVEs found)" : undefined,
         });
         logger.debug("No CVEs found in NVD for this CPE");
       }
@@ -1421,6 +1439,12 @@ async function queryMSV(
 
   // Generate action guidance
   const branchesWithNoSafeVersion = branches.filter(b => b.noSafeVersion);
+
+  // Collect fixed versions from CVEs for version mismatch detection
+  const cveFixedVersions = exploitedCves
+    .map(c => c.fixedVersion)
+    .filter((v): v is string => v !== null && v !== undefined);
+
   const actionInput: ActionInput = {
     currentVersion: null,
     minimumSafeVersion,
@@ -1431,6 +1455,8 @@ async function queryMSV(
     sources,
     vendor: software.vendor,
     branchesWithNoSafeVersion: branchesWithNoSafeVersion.length > 0 ? branchesWithNoSafeVersion : undefined,
+    latestVersion: software.latestVersion,
+    cveFixedVersions: cveFixedVersions.length > 0 ? cveFixedVersions : undefined,
   };
   const action = generateAction(actionInput);
 

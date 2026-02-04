@@ -47,6 +47,8 @@ export interface ActionInput {
   sources: string[];
   vendor?: string;  // Vendor name for security page lookup
   branchesWithNoSafeVersion?: Array<{branch: string; msv: string; latest: string}>;
+  latestVersion?: string | null;  // Known latest version from catalog
+  cveFixedVersions?: string[];    // Fixed versions found in CVEs for mismatch detection
 }
 
 // =============================================================================
@@ -153,7 +155,33 @@ export function generateAction(input: ActionInput): ActionGuidance {
     sources,
     vendor,
     branchesWithNoSafeVersion,
+    latestVersion,
+    cveFixedVersions,
   } = input;
+
+  // Case -1: Check for version scheme mismatch (CVEs may be for different product)
+  const versionMismatch = detectVersionSchemeMismatch(latestVersion, cveFixedVersions);
+  if (versionMismatch.hasMismatch && cveCount > 0 && !minimumSafeVersion) {
+    const vendorUrl = getVendorSecurityPage(vendor);
+    return {
+      action: "MONITOR",
+      symbol: "⚠",
+      color: COLORS.CYAN,
+      headline: "DATA CONFLICT - LIKELY SAFE",
+      message: `Found ${cveCount} CVEs but they appear to reference a different product.`,
+      urgency: "low",
+      guidance: {
+        vendorSecurityPage: vendorUrl,
+        steps: [
+          versionMismatch.reason || "Version scheme mismatch detected",
+          `Current product version is ${latestVersion} - CVEs reference much older versions`,
+          "These CVEs likely apply to a different product with a similar name",
+          `Verify at vendor site: ${vendorUrl}`,
+          "If using latest version, you are likely safe from these CVEs",
+        ],
+      },
+    };
+  }
 
   // Case 0: Branches with no safe version available (MSV > latest)
   if (branchesWithNoSafeVersion && branchesWithNoSafeVersion.length > 0) {
@@ -238,14 +266,21 @@ export function generateAction(input: ActionInput): ActionGuidance {
   }
 
   // Case 3: MSV determined but no current version provided
+  // This is a SUCCESS - we determined the MSV, user just needs to check their version
   if (minimumSafeVersion && !currentVersion) {
     return {
-      action: "INVESTIGATE",
-      symbol: "?",
-      color: COLORS.MAGENTA,
-      headline: "VERSION CHECK NEEDED",
-      message: `MSV is ${minimumSafeVersion}. Verify your installed version meets this requirement.`,
-      urgency: "medium",
+      action: "NO_ACTION",
+      symbol: "✓",
+      color: COLORS.GREEN,
+      headline: "MSV DETERMINED",
+      message: `Minimum safe version is ${minimumSafeVersion}. Ensure your installed version meets or exceeds this.`,
+      urgency: "info",
+      guidance: {
+        steps: [
+          `Verify your installed version is ${minimumSafeVersion} or later`,
+          `To check compliance: msv query <software> --version YOUR_VERSION`,
+        ],
+      },
     };
   }
 
@@ -372,7 +407,7 @@ export function formatActionBox(guidance: ActionGuidance): string {
     // Add next steps
     if (steps && steps.length > 0) {
       lines.push(`│${" ".repeat(boxWidth)}│`);
-      lines.push(`│${BOLD}  Next Steps:${RESET}${" ".repeat(boxWidth - 14)}│`);
+      lines.push(`│${BOLD}  Next Steps:${RESET}${" ".repeat(boxWidth - 13)}│`);
       for (let i = 0; i < steps.length; i++) {
         const stepLine = `${i + 1}. ${steps[i]}`;
         const wrappedStep = wrapText(stepLine, boxWidth - 5);
@@ -446,4 +481,59 @@ function wrapText(text: string, width: number): string[] {
 export function getUrgencyRank(urgency: ActionGuidance["urgency"]): number {
   const ranks = { critical: 5, high: 4, medium: 3, low: 2, info: 1 };
   return ranks[urgency] || 0;
+}
+
+/**
+ * Detect if CVE fixed versions are incompatible with the product's version scheme
+ * This catches cases like TFTP where CVEs reference different products (tftpd32 vs SolarWinds TFTP)
+ *
+ * Returns true if there's a major version mismatch suggesting CVEs are for a different product
+ */
+export function detectVersionSchemeMismatch(
+  latestVersion: string | null | undefined,
+  cveFixedVersions: string[] | undefined
+): { hasMismatch: boolean; reason?: string } {
+  if (!latestVersion || !cveFixedVersions || cveFixedVersions.length === 0) {
+    return { hasMismatch: false };
+  }
+
+  // Extract major version from latest (e.g., "11.3" -> 11, "25.0.1" -> 25)
+  const latestMajor = parseInt(latestVersion.split(".")[0], 10);
+  if (isNaN(latestMajor)) return { hasMismatch: false };
+
+  // Extract major versions from CVE fixed versions
+  // Handle formats like "> 1.66", ">=2.0", "1.65", etc.
+  const cveMajors = cveFixedVersions
+    .filter(v => v) // Filter nulls
+    .map(v => {
+      // Remove comparison operators and whitespace: "> 1.66" -> "1.66"
+      const clean = v.replace(/^[><=\s]+/, "").trim();
+      return parseInt(clean.split(".")[0], 10);
+    })
+    .filter(n => !isNaN(n));
+
+  if (cveMajors.length === 0) return { hasMismatch: false };
+
+  // Check if CVE versions are significantly different from product's version scheme
+  // E.g., latest is 11.x but CVEs show 1.x or 4.x - suggests different product
+  const maxCveMajor = Math.max(...cveMajors);
+  const minCveMajor = Math.min(...cveMajors);
+
+  // If the product is at major version 10+ but CVEs are all below 5, likely wrong product
+  if (latestMajor >= 10 && maxCveMajor < 5) {
+    return {
+      hasMismatch: true,
+      reason: `CVEs reference versions ${minCveMajor}.x-${maxCveMajor}.x but product is at ${latestMajor}.x - likely different product`,
+    };
+  }
+
+  // If there's a 5x+ difference in major versions, flag as mismatch
+  if (latestMajor > maxCveMajor * 5) {
+    return {
+      hasMismatch: true,
+      reason: `Major version mismatch: CVEs at ${maxCveMajor}.x, product at ${latestMajor}.x`,
+    };
+  }
+
+  return { hasMismatch: false };
 }
