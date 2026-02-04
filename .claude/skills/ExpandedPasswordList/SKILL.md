@@ -106,6 +106,8 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 | "publish passwords", "push to github" | `Workflows/Publish.md` |
 | "create GLASS", "build UNOBTAINIUM", "optimize rules" | `Workflows/Optimize.md` |
 | "power on", "workers started", "agents down" | `Workflows/PostPowerOn.md` |
+| "worker disk", "worker health", "clean workers" | `bun Tools/WorkerHealthCheck.ts` |
+| "hashlist coverage", "multi-task coverage", "combined coverage" | `bun Tools/HashlistCoverageAnalyzer.ts` |
 
 ## Quick Commands
 
@@ -139,6 +141,18 @@ bun Tools/SafeChunkAbort.ts --detect             # Find stuck chunks (dry-run)
 bun Tools/SafeChunkAbort.ts --detect --abort     # Resolve stuck chunks (agent restart + fallback)
 bun Tools/SafeChunkAbort.ts --chunk 2399 --abort # Resolve specific chunk
 bun Tools/SafeChunkAbort.ts --chunk 2399 --abort --direct  # Direct abort (skip agent restart)
+
+# Worker disk health monitoring (gets fresh IPs from AWS CLI)
+bun Tools/WorkerHealthCheck.ts                   # Show all worker disk health
+bun Tools/WorkerHealthCheck.ts --clean --dry-run # Preview cleanup
+bun Tools/WorkerHealthCheck.ts --clean           # Clean workers >70% disk
+bun Tools/WorkerHealthCheck.ts --clean --all     # Clean ALL workers
+
+# Hashlist coverage analysis (multiple tasks on same hashlist)
+bun Tools/HashlistCoverageAnalyzer.ts --tasks 1207,1208,1209  # Analyze specific tasks
+bun Tools/HashlistCoverageAnalyzer.ts --batch batch-0125      # Analyze batch by pattern
+bun Tools/HashlistCoverageAnalyzer.ts --tasks 1207,1208 --archive --dry-run  # Preview archive
+bun Tools/HashlistCoverageAnalyzer.ts --batch batch-0125 --archive  # Archive complete groups
 
 # ============================================================================
 # BATCH SUBMISSION

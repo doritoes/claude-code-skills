@@ -851,10 +851,133 @@ function displayServerHealth(health: ServerHealth): void {
 }
 
 // =============================================================================
+// Worker Health Check (via AWS CLI)
+// =============================================================================
+
+interface WorkerHealth {
+  name: string;
+  ip: string;
+  diskPercent: number;
+  diskUsed: string;
+  diskTotal: string;
+  hashlistSize: string;
+  status: "healthy" | "warning" | "critical" | "unreachable";
+}
+
+async function checkWorkerDiskHealth(): Promise<WorkerHealth[]> {
+  const workers: WorkerHealth[] = [];
+  const AWS_REGION = "us-west-2";
+
+  try {
+    // Get worker IPs from AWS
+    const awsCmd = `aws ec2 describe-instances --filters "Name=tag:Name,Values=hashcrack-gpu-worker-*" "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].[Tags[?Key=='Name'].Value|[0],PublicIpAddress]" --output text --region ${AWS_REGION}`;
+    const awsResult = execSync(awsCmd, {
+      encoding: "utf-8",
+      timeout: 30000,
+      shell: process.platform === "win32" ? "powershell.exe" : "/bin/bash",
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+
+    if (!awsResult) return workers;
+
+    const workerList = awsResult.split("\n").map(line => {
+      const [name, ip] = line.split("\t");
+      return { name: name || "unknown", ip };
+    }).filter(w => w.ip && w.ip !== "None");
+
+    // Check each worker
+    for (const worker of workerList) {
+      const health: WorkerHealth = {
+        name: worker.name,
+        ip: worker.ip,
+        diskPercent: 0,
+        diskUsed: "N/A",
+        diskTotal: "N/A",
+        hashlistSize: "N/A",
+        status: "unreachable",
+      };
+
+      try {
+        const sshCmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes ubuntu@${worker.ip} "df -h / | tail -1 && du -sh /opt/hashtopolis-agent/hashlists/ 2>/dev/null | cut -f1"`;
+        const result = execSync(sshCmd, {
+          encoding: "utf-8",
+          timeout: 15000,
+          shell: process.platform === "win32" ? "powershell.exe" : "/bin/bash",
+          windowsHide: true,
+          stdio: ["pipe", "pipe", "pipe"],
+        }).trim();
+
+        const lines = result.split("\n");
+        if (lines[0]) {
+          const dfParts = lines[0].split(/\s+/);
+          if (dfParts.length >= 5) {
+            health.diskTotal = dfParts[1];
+            health.diskUsed = dfParts[2];
+            health.diskPercent = parseInt(dfParts[4].replace("%", "")) || 0;
+          }
+        }
+        if (lines[1]) {
+          health.hashlistSize = lines[1];
+        }
+
+        health.status = health.diskPercent >= 85 ? "critical" :
+                        health.diskPercent >= 70 ? "warning" : "healthy";
+      } catch (e) {
+        // Worker unreachable
+      }
+
+      workers.push(health);
+    }
+  } catch (e) {
+    // AWS CLI failed
+  }
+
+  return workers;
+}
+
+function displayWorkerHealth(workers: WorkerHealth[]): void {
+  if (workers.length === 0) {
+    console.log("┌─ WORKER DISK HEALTH ───────────────────────────────────────┐");
+    console.log("│ \x1b[33m⚠ Could not get worker info (check AWS CLI)\x1b[0m               │");
+    console.log("└────────────────────────────────────────────────────────────┘");
+    return;
+  }
+
+  console.log("┌─ WORKER DISK HEALTH ───────────────────────────────────────┐");
+
+  const healthy = workers.filter(w => w.status === "healthy").length;
+  const warning = workers.filter(w => w.status === "warning").length;
+  const critical = workers.filter(w => w.status === "critical").length;
+  const unreachable = workers.filter(w => w.status === "unreachable").length;
+
+  // Summary line
+  const summaryIcon = critical > 0 ? "\x1b[31m✗\x1b[0m" : warning > 0 ? "\x1b[33m⚠\x1b[0m" : "\x1b[32m✓\x1b[0m";
+  console.log(`│ ${summaryIcon} Workers: ${workers.length} total | ${healthy} healthy | ${warning} warning | ${critical} critical | ${unreachable} unreachable`);
+
+  // Show disk range
+  const reachable = workers.filter(w => w.status !== "unreachable");
+  if (reachable.length > 0) {
+    const minDisk = Math.min(...reachable.map(w => w.diskPercent));
+    const maxDisk = Math.max(...reachable.map(w => w.diskPercent));
+    const avgHashlist = reachable.map(w => w.hashlistSize).filter(s => s !== "N/A")[0] || "N/A";
+    console.log(`│   Disk: ${minDisk}-${maxDisk}% | Hashlists: ~${avgHashlist} each`);
+  }
+
+  // Show warnings/criticals
+  const problems = workers.filter(w => w.status === "warning" || w.status === "critical");
+  if (problems.length > 0) {
+    console.log(`│   \x1b[33m→ Run: bun Tools/WorkerHealthCheck.ts --clean\x1b[0m`);
+  }
+
+  console.log("└────────────────────────────────────────────────────────────┘");
+}
+
+// =============================================================================
 // Main Monitor Function
 // =============================================================================
 
-async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boolean } = {}): Promise<void> {
+async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boolean; workers?: boolean } = {}): Promise<void> {
   console.log("╭─────────────────────────────────────────────────────────────╮");
   console.log("│        EXPANDEDPASSWORDLIST PIPELINE MONITOR                │");
   console.log("╰─────────────────────────────────────────────────────────────╯");
@@ -874,9 +997,17 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
   displayDatabaseHealth(dbHealth, serverHealth.disk.percent);
   console.log("");
 
+  // Worker disk health (only if --workers flag)
+  if (options.workers) {
+    console.log("Checking worker disk health (via AWS CLI)...");
+    const workerHealth = await checkWorkerDiskHealth();
+    displayWorkerHealth(workerHealth);
+    console.log("");
+  }
+
   // Quick status
   const status = await getQuickStatus(config);
-  console.log("┌─ QUICK STATUS ──────────────────────────────────────────────┐");
+  console.log("┌─ QUICK STATUS ─────────────────────────────────────────────┐");
   if (status.queryFailed) {
     console.log("│ \x1b[31m⚠ QUERY FAILED - Cannot get status (check server connection)\x1b[0m │");
     console.log("│ SSH or MySQL may be unresponsive. Check server health.    │");
@@ -1063,6 +1194,7 @@ Usage:
   bun PipelineMonitor.ts --fix        Auto-fix keyspace=0 (useNewBench only)
   bun PipelineMonitor.ts --watch      Continuous monitoring (30s interval)
   bun PipelineMonitor.ts --cleanup    Run HashlistArchiver to reclaim disk
+  bun PipelineMonitor.ts --workers    Include GPU worker disk health (via AWS CLI)
 
 Health Checks:
   - Server health (Docker, Memory, Disk usage)
@@ -1076,6 +1208,7 @@ Health Checks:
   - Priority alignment (Task vs TaskWrapper)
   - Archive readiness (safe archiving validation)
   - Crack distribution (detect incomplete batches)
+  - Worker disk health (--workers flag, requires AWS CLI)
 
 Database Cleanup (--cleanup):
   - Exports cracked passwords before deleting (safeguards PEARLS)
@@ -1105,6 +1238,7 @@ Queue Management (per Lesson #39):
     fix: args.includes("--fix"),
     watch: args.includes("--watch"),
     cleanup: args.includes("--cleanup"),
+    workers: args.includes("--workers"),
     health: args.includes("--health") || (!args.includes("--quick") && !args.includes("--cleanup"))
   };
 

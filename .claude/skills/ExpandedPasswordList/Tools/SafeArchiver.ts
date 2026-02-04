@@ -243,7 +243,7 @@ function validateBatch(config: ServerConfig, batchPattern: string): TaskValidati
   return validations;
 }
 
-async function archiveTask(config: ServerConfig, taskId: number, dryRun: boolean): Promise<boolean> {
+async function archiveTask(config: ServerConfig, taskId: number, dryRun: boolean, force: boolean = false): Promise<boolean> {
   const validation = validateTask(config, taskId);
 
   console.log(`\nTask ${taskId}: ${validation.taskName}`);
@@ -252,7 +252,7 @@ async function archiveTask(config: ServerConfig, taskId: number, dryRun: boolean
   console.log(`  Coverage: ${validation.maxCoverage}/${validation.keyspace}`);
   console.log(`  Cracked: ${validation.cracked}`);
 
-  if (!validation.isValid) {
+  if (!validation.isValid && !force) {
     console.log(`  ❌ NOT SAFE TO ARCHIVE:`);
     for (const issue of validation.issues) {
       console.log(`     - ${issue}`);
@@ -260,7 +260,14 @@ async function archiveTask(config: ServerConfig, taskId: number, dryRun: boolean
     return false;
   }
 
-  console.log(`  ✓ Safe to archive`);
+  if (!validation.isValid && force) {
+    console.log(`  ⚠ FORCE ARCHIVE (issues found but overridden):`);
+    for (const issue of validation.issues) {
+      console.log(`     - ${issue}`);
+    }
+  } else {
+    console.log(`  ✓ Safe to archive`);
+  }
 
   if (!dryRun) {
     // Archive BOTH Task AND TaskWrapper (UI uses TaskWrapper.isArchived for filtering)
@@ -305,7 +312,7 @@ async function archiveBatch(config: ServerConfig, batchPattern: string, dryRun: 
 
   for (const validation of validations) {
     if (validation.isValid || force) {
-      await archiveTask(config, validation.taskId, dryRun);
+      await archiveTask(config, validation.taskId, dryRun, force);
     } else {
       console.log(`\nTask ${validation.taskId}: ${validation.taskName}`);
       console.log(`  ❌ SKIPPED - Issues found:`);
@@ -367,7 +374,7 @@ Examples:
     if (batchIndex !== -1 && args[batchIndex + 1]) {
       await archiveBatch(config, args[batchIndex + 1], dryRun, force);
     } else if (taskIndex !== -1 && args[taskIndex + 1]) {
-      await archiveTask(config, parseInt(args[taskIndex + 1]), dryRun);
+      await archiveTask(config, parseInt(args[taskIndex + 1]), dryRun, force);
     } else if (checkIndex !== -1 && args[checkIndex + 1]) {
       await archiveBatch(config, args[checkIndex + 1], true, false);
     } else {

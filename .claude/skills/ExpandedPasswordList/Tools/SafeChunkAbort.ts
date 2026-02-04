@@ -2,10 +2,17 @@
 /**
  * SafeChunkAbort.ts - Safe Chunk Abort with Comprehensive Validation
  *
- * Addresses Hashtopolis limitation: chunks with crackPos NULL errors don't auto-timeout
- * because the agent keeps communicating (even though progress fails to save).
+ * Addresses TWO Hashtopolis edge cases:
  *
- * This tool provides a SAFE way to unstick chunks by validating ALL conditions:
+ * 1. STUCK CHUNKS - chunks with crackPos NULL errors don't auto-timeout
+ *    because the agent keeps communicating (even though progress fails to save).
+ *    Validated with safety gates before aborting.
+ *
+ * 2. ORPHANED CHUNKS - running chunks whose parent task is ARCHIVED.
+ *    These occur when a task is archived while chunks are still processing.
+ *    These are always invalid and can be aborted immediately without gates.
+ *
+ * STUCK CHUNK SAFETY GATES:
  * - GATE A: Chunk exists and is in DISPATCHED state
  * - GATE B: Chunk has been running for minimum time (>15 min default)
  * - GATE C: Progress is NOT advancing (verified over 30s window)
@@ -269,6 +276,73 @@ interface StuckChunk {
   agentName: string;
   minutesRunning: number;
   progress: number;
+}
+
+interface OrphanedChunk {
+  chunkId: number;
+  taskId: number;
+  taskName: string;
+  agentName: string;
+  minutesRunning: number;
+  progress: number;
+}
+
+/**
+ * Detect orphaned chunks - running chunks whose parent task is ARCHIVED
+ * These are always invalid and should be aborted immediately.
+ */
+function detectOrphanedChunks(config: ServerConfig): OrphanedChunk[] {
+  const result = execSQL(config, `
+    SELECT c.chunkId, c.taskId, t.taskName, a.agentName, c.progress,
+      TIMESTAMPDIFF(MINUTE, FROM_UNIXTIME(c.dispatchTime), NOW()) as minutes_running
+    FROM Chunk c
+    JOIN Task t ON c.taskId = t.taskId
+    LEFT JOIN Agent a ON c.agentId = a.agentId
+    WHERE c.state = 2
+      AND t.isArchived = 1
+    ORDER BY minutes_running DESC
+  `);
+
+  if (!result) return [];
+
+  return result.split("\n").filter(Boolean).map(line => {
+    const parts = line.split("\t");
+    return {
+      chunkId: parseInt(parts[0]),
+      taskId: parseInt(parts[1]),
+      taskName: parts[2],
+      agentName: parts[3] || "unknown",
+      progress: parseInt(parts[4]) || 0,
+      minutesRunning: parseInt(parts[5]) || 0
+    };
+  });
+}
+
+/**
+ * Abort an orphaned chunk - simpler than stuck chunk resolution
+ * No progress check needed since the parent task is archived.
+ */
+function abortOrphanedChunk(config: ServerConfig, chunkId: number, taskName: string): boolean {
+  console.log(`│ Aborting orphaned chunk ${chunkId} (task: ${taskName})...`);
+
+  // Set state=6 (ABORTED) and clear agentId
+  execSQL(config, `
+    UPDATE Chunk
+    SET state = 6, agentId = NULL
+    WHERE chunkId = ${chunkId} AND state = 2
+  `);
+
+  // Verify
+  const verifyResult = execSQL(config, `SELECT state FROM Chunk WHERE chunkId = ${chunkId}`);
+  const newState = parseInt(verifyResult);
+
+  if (newState === 6) {
+    console.log(`│ ✓ Chunk ${chunkId} aborted (orphaned - parent task archived)`);
+    return true;
+  } else {
+    console.log(`│ ✗ Failed to abort chunk ${chunkId} (state=${newState})`);
+    return false;
+  }
 }
 
 async function detectStuckChunks(config: ServerConfig, minMinutes: number): Promise<StuckChunk[]> {
@@ -594,11 +668,58 @@ async function detectAndAbort(
   console.log(`│            SAFE CHUNK ABORT - Auto Detection                │`);
   console.log(`╰─────────────────────────────────────────────────────────────╯`);
   console.log(``);
-  console.log(`┌─ DETECTION ─────────────────────────────────────────────────┐`);
+
+  // First: Check for orphaned chunks (running chunks with archived parent tasks)
+  console.log(`┌─ ORPHANED CHUNK DETECTION ──────────────────────────────────┐`);
+  console.log(`│ Looking for orphaned chunks (archived tasks with running chunks)...`);
+
+  const orphanedChunks = detectOrphanedChunks(config);
+
+  if (orphanedChunks.length > 0) {
+    console.log(`│`);
+    console.log(`│ Found ${orphanedChunks.length} ORPHANED chunk(s):`);
+    for (const chunk of orphanedChunks) {
+      console.log(`│   - Chunk ${chunk.chunkId}: ${chunk.taskName} on ${chunk.agentName}`);
+      console.log(`│     Running ${chunk.minutesRunning} min (TASK ARCHIVED - should not be running)`);
+    }
+    console.log(`└────────────────────────────────────────────────────────────┘`);
+    console.log(``);
+
+    if (options.doAbort) {
+      console.log(`┌─ RESOLVING ORPHANED CHUNKS ───────────────────────────────┐`);
+      let resolved = 0;
+      for (const chunk of orphanedChunks) {
+        const success = abortOrphanedChunk(config, chunk.chunkId, chunk.taskName);
+        if (success) resolved++;
+      }
+      console.log(`└────────────────────────────────────────────────────────────┘`);
+      console.log(`\n✓ Resolved ${resolved}/${orphanedChunks.length} orphaned chunk(s).`);
+      console.log(``);
+    } else {
+      console.log(`┌─ DRY RUN (ORPHANED) ──────────────────────────────────────┐`);
+      console.log(`│ Found ${orphanedChunks.length} orphaned chunk(s).`);
+      console.log(`│ Use --abort to resolve them.`);
+      console.log(`└────────────────────────────────────────────────────────────┘`);
+      console.log(``);
+    }
+  } else {
+    console.log(`│ ✓ No orphaned chunks detected`);
+    console.log(`└────────────────────────────────────────────────────────────┘`);
+    console.log(``);
+  }
+
+  // Second: Check for stuck chunks (normal detection)
+  console.log(`┌─ STUCK CHUNK DETECTION ─────────────────────────────────────┐`);
   console.log(`│ Minimum age: ${options.minMinutes} minutes`);
   console.log(`│ Looking for stuck chunks...`);
 
   const stuckChunks = await detectStuckChunks(config, options.minMinutes);
+
+  if (stuckChunks.length === 0 && orphanedChunks.length === 0) {
+    console.log(`│ ✓ No stuck chunks detected`);
+    console.log(`└────────────────────────────────────────────────────────────┘`);
+    return;
+  }
 
   if (stuckChunks.length === 0) {
     console.log(`│ ✓ No stuck chunks detected`);
@@ -657,14 +778,17 @@ if (import.meta.main) {
 
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
-SafeChunkAbort - Safely resolve stuck chunks with comprehensive validation
+SafeChunkAbort - Safely resolve stuck and orphaned chunks
 
 PURPOSE:
-  Addresses Hashtopolis limitation where chunks with crackPos NULL errors
-  don't auto-timeout (agent keeps communicating, resetting timeout clock).
+  Addresses two Hashtopolis edge cases:
 
-  This tool validates that a chunk is TRULY stuck before resolving it,
-  allowing Hashtopolis to self-heal by creating a replacement chunk.
+  1. STUCK CHUNKS - Chunks with crackPos NULL errors that don't auto-timeout
+     (agent keeps communicating, resetting timeout clock).
+
+  2. ORPHANED CHUNKS - Running chunks whose parent task is ARCHIVED.
+     These occur when a task is archived while chunks are still processing.
+     The --detect flag automatically finds and handles both types.
 
 RESOLUTION METHODS:
   1. AGENT RESTART (default) - Restarts the agent service on the worker

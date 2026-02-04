@@ -20,6 +20,7 @@ const getEnv = (key: string): string => {
 
 interface ExportConfig {
   serverIp: string;
+  sshUser: string;
   dbPassword: string;
   outputDir: string;
 }
@@ -30,15 +31,22 @@ function getConfig(): ExportConfig {
 
   return {
     serverIp,
+    sshUser: getEnv("HASHCRACK_SSH_USER") || "ubuntu",
     dbPassword: getEnv("HASHCRACK_DB_PASSWORD"),
     outputDir: join(__dirname, "..", "data", "exports"),
   };
 }
 
 function execSQL(config: ExportConfig, query: string, timeout = 300000): string {
-  // Flatten query to single line
-  const flatQuery = query.replace(/\s+/g, " ").trim();
-  const cmd = `ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ubuntu@${config.serverIp} "sudo docker exec hashtopolis-db mysql -uroot -p'${config.dbPassword}' hashtopolis -N -e '${flatQuery.replace(/'/g, "\\'")}'" 2>&1 | grep -v 'Warning'`;
+  // Clean SQL and collapse whitespace
+  const cleanSql = query.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Use base64 encoding to avoid ALL shell quote escaping issues
+  // This pattern works reliably with CONCAT(), special chars, etc.
+  const b64Sql = Buffer.from(cleanSql).toString('base64');
+  const sshCmd = `echo '${b64Sql}' | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN`;
+  const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${config.sshUser}@${config.serverIp} "${sshCmd}" 2>&1 | grep -v 'Warning'`;
+
   try {
     return execSync(cmd, { encoding: "utf-8", maxBuffer: 500 * 1024 * 1024, timeout }).trim();
   } catch (e: any) {

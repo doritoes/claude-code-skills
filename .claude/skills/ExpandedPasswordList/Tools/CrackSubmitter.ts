@@ -27,6 +27,7 @@ const HASHCRACK_DIR = resolve(dirname(dirname(CURRENT_FILE)), "..", "Hashcrack",
 const SKILL_DIR = dirname(dirname(CURRENT_FILE));
 const DATA_DIR = resolve(SKILL_DIR, "data");
 const CANDIDATES_DIR = resolve(DATA_DIR, "candidates");
+const SAND_DIR = resolve(DATA_DIR, "sand");
 
 // Cracking settings
 const HASH_TYPE_SHA1 = 100;
@@ -38,6 +39,12 @@ const MAX_HASHES_PER_TASK = 1_000_000; // 1M hashes per hashlist
 const ROCKYOU_FILE_ID = 1;
 const ONERULE_FILE_ID = 3;  // OneRuleToRuleThemStill.rule (was 2 for OneRuleToRuleThemAll.rule)
 const ATTACK_FILES = [ROCKYOU_FILE_ID, ONERULE_FILE_ID];
+
+// Custom attack presets (name -> { attackCmd, fileIds })
+const ATTACK_PRESETS: Record<string, { attackCmd: string; fileIds: number[] }> = {
+  default: { attackCmd: DEFAULT_ATTACK_CMD, fileIds: ATTACK_FILES },
+  nocap: { attackCmd: "#HL# nocap.txt -r nocap.rule", fileIds: [5, 6] },  // nocap.txt=5, nocap.rule=6
+};
 
 // =============================================================================
 // CRITICAL: Rule Attack Keyspace (READ THIS!)
@@ -268,17 +275,17 @@ interface BatchFile {
 /**
  * Load candidate batch files (supports both .txt and .txt.gz)
  */
-async function loadBatches(batchNumber?: number): Promise<BatchFile[]> {
-  if (!existsSync(CANDIDATES_DIR)) {
-    throw new Error(`Candidates directory not found: ${CANDIDATES_DIR}`);
+async function loadBatches(batchNumber?: number, inputDir: string = CANDIDATES_DIR): Promise<BatchFile[]> {
+  if (!existsSync(inputDir)) {
+    throw new Error(`Input directory not found: ${inputDir}`);
   }
 
-  const files = readdirSync(CANDIDATES_DIR)
+  const files = readdirSync(inputDir)
     .filter((f) => f.startsWith("batch-") && (f.endsWith(".txt") || f.endsWith(".txt.gz")))
     .sort();
 
   if (files.length === 0) {
-    throw new Error("No candidate batch files found. Run Filter workflow first.");
+    throw new Error(`No batch files found in ${inputDir}`);
   }
 
   const batches: BatchFile[] = [];
@@ -294,7 +301,7 @@ async function loadBatches(batchNumber?: number): Promise<BatchFile[]> {
     // Skip if specific batch requested and this isn't it
     if (batchNumber !== undefined && num !== batchNumber) continue;
 
-    const path = resolve(CANDIDATES_DIR, file);
+    const path = resolve(inputDir, file);
     let content: string;
 
     if (isCompressed) {
@@ -359,8 +366,14 @@ async function submitBatches(options: {
   dryRun?: boolean;
   workers?: number;
   priorityOverride?: number;
+  attackPreset?: string;
+  sourceDir?: string;
 } = {}): Promise<void> {
-  const { dryRun = false, workers = 1, priorityOverride } = options;
+  const { dryRun = false, workers = 1, priorityOverride, attackPreset = "default", sourceDir = "candidates" } = options;
+
+  // Get attack configuration from preset
+  const attackConfig = ATTACK_PRESETS[attackPreset] || ATTACK_PRESETS.default;
+  const inputDir = sourceDir === "sand" ? SAND_DIR : CANDIDATES_DIR;
 
   const state = new StateManager(DATA_DIR);
   const pipelineState = state.load();
@@ -370,8 +383,8 @@ async function submitBatches(options: {
     console.warn("Warning: Filter stage not complete");
   }
 
-  // Load batches
-  const batches = await loadBatches(options.batchNumber);
+  // Load batches from appropriate directory
+  const batches = await loadBatches(options.batchNumber, inputDir);
 
   if (batches.length === 0) {
     console.error("No batches to submit");
@@ -383,6 +396,9 @@ async function submitBatches(options: {
 
   console.log("CrackSubmitter");
   console.log("==============");
+  console.log(`Source: ${sourceDir} (${inputDir})`);
+  console.log(`Attack: ${attackPreset} (${attackConfig.attackCmd})`);
+  console.log(`File IDs: ${attackConfig.fileIds.join(", ")}`);
   console.log(`Batches to submit: ${batches.length}`);
   console.log(`Total hashes: ${totalHashes.toLocaleString()}`);
   console.log(`Workers: ${workers}`);
@@ -428,6 +444,12 @@ async function submitBatches(options: {
     const priority = priorityOverride ?? calculatePriority(batchNum);
     console.log(`  Batch ${batchNum} → Priority ${priority}`);
 
+    // Generate naming prefix based on source and attack
+    // HIBP- for default pipeline, SAND-<attack>- for SAND testing
+    const namePrefix = sourceDir === "sand"
+      ? `SAND-${attackPreset}-${batch.name}`
+      : `HIBP-${batch.name}`;
+
     // CRITICAL: Check for existing tasks to prevent duplicate work
     const existingParts = checkBatchExists(serverConfig, batch.name);
     if (existingParts.length > 0) {
@@ -449,7 +471,7 @@ async function submitBatches(options: {
 
           if (subHashes.length === 0) continue;
 
-          const hashlistName = `HIBP-${batch.name}-part${i + 1}`;
+          const hashlistName = `${namePrefix}-part${i + 1}`;
 
           // Double-check this specific task doesn't exist
           const existingTaskId = checkTaskExists(serverConfig, `Crack-${hashlistName}`);
@@ -472,10 +494,10 @@ async function submitBatches(options: {
           const { taskId } = await createTaskViaDB(serverConfig, {
             name: `Crack-${hashlistName}`,
             hashlistId,
-            attackCmd: DEFAULT_ATTACK_CMD,
+            attackCmd: attackConfig.attackCmd,
             maxAgents: 1, // Force one agent per task for parallelization
             priority, // Dynamic priority based on batch number
-            fileIds: ATTACK_FILES,
+            fileIds: attackConfig.fileIds,
             useNewBench,
           });
 
@@ -485,7 +507,7 @@ async function submitBatches(options: {
         }
       } else {
         // Single hashlist for this batch
-        const hashlistName = `HIBP-${batch.name}`;
+        const hashlistName = namePrefix;
         const taskName = `Crack-${hashlistName}`;
 
         // CRITICAL: Check for existing task to prevent duplicate work
@@ -511,10 +533,10 @@ async function submitBatches(options: {
         const { taskId } = await createTaskViaDB(serverConfig, {
           name: taskName,
           hashlistId,
-          attackCmd: DEFAULT_ATTACK_CMD,
+          attackCmd: attackConfig.attackCmd,
           maxAgents: 1, // Rule attacks: ALWAYS 1 worker per task (hashcat -s limitation)
           priority, // Dynamic priority based on batch number
-          fileIds: ATTACK_FILES,
+          fileIds: attackConfig.fileIds,
           useNewBench,
         });
 
@@ -559,6 +581,8 @@ Usage:
   bun CrackSubmitter.ts --dry-run          Show what would be submitted
   bun CrackSubmitter.ts --workers <n>      Split across N parallel workers
   bun CrackSubmitter.ts --priority <n>     Override auto-calculated priority
+  bun CrackSubmitter.ts --attack <preset>  Use attack preset (default, nocap)
+  bun CrackSubmitter.ts --source <dir>     Source directory (candidates, sand)
 
 Options:
   --all             Submit all available batches
@@ -570,6 +594,8 @@ Options:
                     Auto-calculation: priority = 1000 - batch_number
                     Example: batch-0006 gets priority 994, batch-0100 gets priority 900
                     CRITICAL: Minimum priority is 1, NOT 0 (0 = completed task indicator)
+  --attack <preset> Attack preset: default (rockyou+OneRule), nocap (nocap.txt+nocap.rule)
+  --source <dir>    Source: candidates (default), sand (uncracked from previous runs)
 
 Input: ${CANDIDATES_DIR}/
 `);
@@ -582,6 +608,8 @@ Input: ${CANDIDATES_DIR}/
   let dryRun = false;
   let workers = 1;
   let priorityOverride: number | undefined;
+  let attackPreset = "default";
+  let sourceDir = "candidates";
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -600,7 +628,20 @@ Input: ${CANDIDATES_DIR}/
       case "--priority":
         priorityOverride = parseInt(args[++i]);
         break;
+      case "--attack":
+        attackPreset = args[++i] || "default";
+        break;
+      case "--source":
+        sourceDir = args[++i] || "candidates";
+        break;
     }
+  }
+
+  // Validate attack preset
+  if (!ATTACK_PRESETS[attackPreset]) {
+    console.error(`Unknown attack preset: ${attackPreset}`);
+    console.error(`Available presets: ${Object.keys(ATTACK_PRESETS).join(", ")}`);
+    process.exit(1);
   }
 
   if (!all && batchNumber === undefined) {
@@ -609,7 +650,7 @@ Input: ${CANDIDATES_DIR}/
   }
 
   try {
-    await submitBatches({ batchNumber, all, dryRun, workers, priorityOverride });
+    await submitBatches({ batchNumber, all, dryRun, workers, priorityOverride, attackPreset, sourceDir });
   } catch (e) {
     console.error(`Error: ${(e as Error).message}`);
     process.exit(1);

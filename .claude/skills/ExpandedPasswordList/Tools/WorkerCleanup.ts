@@ -2,6 +2,10 @@
 /**
  * WorkerCleanup.ts - Clean Worker Disk Space
  *
+ * @deprecated Use WorkerHealthCheck.ts instead.
+ * This tool uses stale terraform IPs which change on worker reboot.
+ * WorkerHealthCheck.ts gets fresh IPs from AWS CLI.
+ *
  * Monitors and cleans disk space on Hashcrack workers.
  * Workers accumulate hashlists and .pot files that can fill disk.
  *
