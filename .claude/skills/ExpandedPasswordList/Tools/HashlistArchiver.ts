@@ -8,47 +8,84 @@
  * 3. Deletes Hash table rows for the hashlist (reclaims disk)
  *
  * SAFETY: Only operates on hashlists where ALL associated tasks are archived.
+ *
+ * @author PAI (Personal AI Infrastructure)
+ * @license MIT
  */
 
-import { execSync } from "child_process";
-import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
-import { join } from "path";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-// Load config from parent .env
-const envPath = join(__dirname, "..", "..", "..", ".env");
-const envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
-const getEnv = (key: string): string => {
-  const match = envContent.match(new RegExp(`^${key}=(.*)$`, "m"));
-  return match ? match[1].trim() : process.env[key] || "";
-};
+const CURRENT_FILE = fileURLToPath(import.meta.url);
+const SKILL_DIR = dirname(dirname(CURRENT_FILE));
+const HASHCRACK_DIR = resolve(SKILL_DIR, "..", "Hashcrack");
+
+// =============================================================================
+// Configuration
+// =============================================================================
 
 interface Config {
   serverIp: string;
   dbPassword: string;
+  sshUser: string;
   outputDir: string;
 }
 
 function getConfig(): Config {
-  const serverUrl = getEnv("HASHCRACK_SERVER_URL") || "http://35.87.24.127:8080";
-  const serverIp = serverUrl.replace(/^https?:\/\//, "").replace(/:\d+$/, "");
+  const terraformDir = resolve(HASHCRACK_DIR, "terraform", "aws");
+
+  let serverIp = "16.146.72.52";
+  let dbPassword = "NJyf6IviJRC1jYQ0u57tRuCm";
+
+  try {
+    serverIp = execSync(`terraform output -raw server_ip`, {
+      encoding: "utf-8",
+      cwd: terraformDir,
+      stdio: ['pipe', 'pipe', 'pipe']
+    }).trim();
+    dbPassword = execSync(`terraform output -raw db_password`, {
+      encoding: "utf-8",
+      cwd: terraformDir,
+      stdio: ['pipe', 'pipe', 'pipe']
+    }).trim();
+  } catch {
+    // Use fallback values
+  }
 
   return {
     serverIp,
-    dbPassword: getEnv("HASHCRACK_DB_PASSWORD"),
-    outputDir: join(__dirname, "..", "data", "exports"),
+    dbPassword,
+    sshUser: "ubuntu",
+    outputDir: resolve(SKILL_DIR, "data", "exports"),
   };
 }
 
 function execSQL(config: Config, query: string, timeout = 300000): string {
-  // Flatten query to single line and escape properly
-  const flatQuery = query.replace(/\s+/g, " ").trim();
-  const cmd = `ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ubuntu@${config.serverIp} "sudo docker exec hashtopolis-db mysql -uroot -p'${config.dbPassword}' hashtopolis -N -e '${flatQuery.replace(/'/g, "\\'")}'" 2>&1 | grep -v 'Warning'`;
+  // Clean SQL and escape for shell - use base64 to avoid quoting issues
+  const cleanSql = query.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  const b64Sql = Buffer.from(cleanSql).toString('base64');
+  const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN"`;
+
   try {
-    return execSync(cmd, { encoding: "utf-8", maxBuffer: 500 * 1024 * 1024, timeout }).trim();
-  } catch (e: any) {
-    return e.stdout?.toString() || `ERROR: ${e.message}`;
+    // Use PowerShell on Windows, default shell elsewhere
+    const shell = process.platform === "win32" ? "powershell.exe" : "/bin/bash";
+    return execSync(cmd, {
+      encoding: "utf-8",
+      maxBuffer: 500 * 1024 * 1024,
+      timeout,
+      shell
+    }).trim();
+  } catch (e: unknown) {
+    const error = e as { stdout?: Buffer; message?: string };
+    return error.stdout?.toString() || `ERROR: ${error.message || "Unknown error"}`;
   }
 }
+
+// =============================================================================
+// Types
+// =============================================================================
 
 interface HashlistInfo {
   hashlistId: number;
@@ -58,6 +95,10 @@ interface HashlistInfo {
   allTasksArchived: boolean;
   hashRowCount: number;
 }
+
+// =============================================================================
+// Core Functions
+// =============================================================================
 
 async function getArchivableHashlists(config: Config): Promise<HashlistInfo[]> {
   // Step 1: Get basic hashlist info (fast query)
@@ -123,7 +164,7 @@ async function archiveHashlist(config: Config, hashlist: HashlistInfo, options: 
     const exported = execSQL(config, exportQuery);
 
     if (exported && !exported.includes("ERROR")) {
-      const exportFile = join(options.exportDir, "cracked-master.txt");
+      const exportFile = resolve(options.exportDir, "cracked-master.txt");
       appendFileSync(exportFile, exported + "\n");
       console.log(`  ✓ Appended to ${exportFile}`);
     }
@@ -141,6 +182,7 @@ async function bulkDeleteHashlists(config: Config, hashlistIds: number[]): Promi
   // Delete in batches of 100 hashlists at a time
   let totalDeleted = 0;
   const batchSize = 100;
+  const shell = process.platform === "win32" ? "powershell.exe" : "/bin/bash";
 
   for (let i = 0; i < hashlistIds.length; i += batchSize) {
     const batch = hashlistIds.slice(i, i + batchSize);
@@ -148,32 +190,39 @@ async function bulkDeleteHashlists(config: Config, hashlistIds: number[]): Promi
 
     console.log(`  Deleting hashlists ${batch[0]}-${batch[batch.length-1]}...`);
 
-    // Use direct SSH command with longer timeout for bulk operations
+    // Use base64 encoding for SQL to avoid quoting issues
+    const deleteSql = `DELETE FROM Hash WHERE hashlistId IN (${idList}); SELECT ROW_COUNT();`;
+    const b64Sql = Buffer.from(deleteSql).toString('base64');
+
     try {
-      const { execSync } = await import("child_process");
-      const cmd = `ssh -o ConnectTimeout=300 -o ServerAliveInterval=60 -o StrictHostKeyChecking=no ubuntu@${config.serverIp} 'sudo docker exec hashtopolis-db mysql -uroot -p"${config.dbPassword}" hashtopolis -e "DELETE FROM Hash WHERE hashlistId IN (${idList}); SELECT ROW_COUNT();"'`;
-      const result = execSync(cmd, { encoding: "utf-8", timeout: 600000 });
+      const cmd = `ssh -o ConnectTimeout=300 -o ServerAliveInterval=60 -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis"`;
+      const result = execSync(cmd, { encoding: "utf-8", timeout: 600000, shell });
       const match = result.match(/(\d+)/);
       const deleted = match ? parseInt(match[1]) : 0;
       totalDeleted += deleted;
       console.log(`  ✓ Deleted ${deleted.toLocaleString()} rows`);
-    } catch (e: any) {
+    } catch {
       console.log(`  ⚠ Bulk delete may have succeeded despite timeout`);
       // Continue - the delete may have worked even if SSH timed out
     }
 
     // Archive the hashlists
     try {
-      const { execSync } = await import("child_process");
-      const cmd = `ssh -o ConnectTimeout=60 -o StrictHostKeyChecking=no ubuntu@${config.serverIp} 'sudo docker exec hashtopolis-db mysql -uroot -p"${config.dbPassword}" hashtopolis -e "UPDATE Hashlist SET isArchived=1 WHERE hashlistId IN (${idList})"'`;
-      execSync(cmd, { encoding: "utf-8", timeout: 60000 });
-    } catch (e) {
+      const archiveSql = `UPDATE Hashlist SET isArchived=1 WHERE hashlistId IN (${idList})`;
+      const b64Archive = Buffer.from(archiveSql).toString('base64');
+      const cmd = `ssh -o ConnectTimeout=60 -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "echo ${b64Archive} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis"`;
+      execSync(cmd, { encoding: "utf-8", timeout: 60000, shell });
+    } catch {
       // Continue
     }
   }
 
   return totalDeleted;
 }
+
+// =============================================================================
+// CLI
+// =============================================================================
 
 async function main() {
   const args = process.argv.slice(2);
@@ -199,8 +248,10 @@ Safety:
 
   const dryRun = args.includes("--dry-run");
   const statusOnly = args.includes("--status");
-  const limit = parseInt(args.find(a => a.startsWith("--limit="))?.split("=")[1] || "0");
-  const specificHashlist = parseInt(args.find(a => a.startsWith("--hashlist="))?.split("=")[1] || "0");
+  const limitArg = args.find(a => a.startsWith("--limit="));
+  const limit = limitArg ? parseInt(limitArg.split("=")[1]) : 0;
+  const hashlistArg = args.find(a => a.startsWith("--hashlist="));
+  const specificHashlist = hashlistArg ? parseInt(hashlistArg.split("=")[1]) : 0;
 
   console.log("╭─────────────────────────────────────────────────────────────╮");
   console.log("│              HASHLIST ARCHIVER                              │");
@@ -222,7 +273,7 @@ Safety:
 
   // Get archivable hashlists
   console.log("\nFinding archivable hashlists...");
-  let hashlists = await getArchivableHashlists(config);
+  const hashlists = await getArchivableHashlists(config);
 
   // Filter to only those with all tasks archived and has Hash rows
   const archivable = hashlists.filter(h => h.allTasksArchived && h.hashRowCount > 0);
