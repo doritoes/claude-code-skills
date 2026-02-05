@@ -50,6 +50,8 @@ interface WorkerHealth {
   hashlistCount: number;
   potSize: string;
   tmpSize: string;
+  attackFilesOk: boolean;
+  attackFileIssues: string[];
   status: "healthy" | "warning" | "critical" | "unreachable";
 }
 
@@ -140,6 +142,8 @@ function checkWorkerHealth(worker: WorkerInfo): WorkerHealth {
     hashlistCount: 0,
     potSize: "N/A",
     tmpSize: "N/A",
+    attackFilesOk: true,
+    attackFileIssues: [],
     status: "unreachable",
   };
 
@@ -176,10 +180,46 @@ function checkWorkerHealth(worker: WorkerInfo): WorkerHealth {
   const tmpInfo = sshExec(worker.publicIp, "du -sh /tmp 2>/dev/null | cut -f1");
   health.tmpSize = tmpInfo || "0";
 
-  // Determine status
+  // Check attack files for corruption (ERR3 - file not present)
+  // Expected: rockyou.txt ~139MB, OneRuleToRuleThemStill.rule ~486KB
+  const attackFilesInfo = sshExec(worker.publicIp,
+    "ls -la /opt/hashtopolis-agent/files/ 2>/dev/null && " +
+    "head -c 50 /opt/hashtopolis-agent/files/rockyou.txt 2>/dev/null && echo '|||' && " +
+    "head -c 50 /opt/hashtopolis-agent/files/OneRuleToRuleThemStill.rule 2>/dev/null"
+  );
+
+  if (attackFilesInfo) {
+    // Check for ERR3 error (corrupted download)
+    if (attackFilesInfo.includes("ERR3")) {
+      health.attackFilesOk = false;
+      health.attackFileIssues.push("ERR3 - file download failed (getFile endpoint issue)");
+    }
+
+    // Check for truncated rockyou.txt (should be ~139MB, not 23 bytes)
+    const rockyouMatch = attackFilesInfo.match(/rockyou\.txt[^\n]*?(\d+)/);
+    if (rockyouMatch) {
+      const rockyouSize = parseInt(rockyouMatch[1]);
+      if (rockyouSize < 1000000) { // Less than 1MB means truncated/corrupt
+        health.attackFilesOk = false;
+        health.attackFileIssues.push(`rockyou.txt truncated (${rockyouSize} bytes, expected ~139MB)`);
+      }
+    }
+
+    // Check for truncated rule file (should be ~486KB)
+    const ruleMatch = attackFilesInfo.match(/OneRuleToRuleThemStill\.rule[^\n]*?(\d+)/);
+    if (ruleMatch) {
+      const ruleSize = parseInt(ruleMatch[1]);
+      if (ruleSize < 100000) { // Less than 100KB means truncated/corrupt
+        health.attackFilesOk = false;
+        health.attackFileIssues.push(`OneRuleToRuleThemStill.rule truncated (${ruleSize} bytes, expected ~486KB)`);
+      }
+    }
+  }
+
+  // Determine status - attack file issues make worker "warning" at minimum
   if (health.diskPercent >= DISK_CRITICAL_THRESHOLD) {
     health.status = "critical";
-  } else if (health.diskPercent >= DISK_WARN_THRESHOLD) {
+  } else if (health.diskPercent >= DISK_WARN_THRESHOLD || !health.attackFilesOk) {
     health.status = "warning";
   } else {
     health.status = "healthy";
@@ -266,13 +306,27 @@ function printSummary(workers: WorkerHealth[]): void {
   const warning = workers.filter(w => w.status === "warning").length;
   const critical = workers.filter(w => w.status === "critical").length;
   const unreachable = workers.filter(w => !w.reachable).length;
+  const attackFileIssues = workers.filter(w => !w.attackFilesOk);
 
   console.log(`\nSummary: ${workers.length} workers | ${healthy} healthy | ${warning} warning | ${critical} critical | ${unreachable} unreachable`);
+
+  // Show attack file issues prominently
+  if (attackFileIssues.length > 0) {
+    console.log("\n\x1b[31m⚠ ATTACK FILE ISSUES DETECTED:\x1b[0m");
+    for (const w of attackFileIssues) {
+      console.log(`  ${w.name}:`);
+      for (const issue of w.attackFileIssues) {
+        console.log(`    - ${issue}`);
+      }
+    }
+    console.log("\n  Fix: Run bun Tools/WarmStart.ts to copy files to correct location,");
+    console.log("       then restart agents: bun Tools/AgentManager.ts --restart-all");
+  }
 
   if (critical > 0) {
     console.log("\n\x1b[31m⚠ CRITICAL: Some workers have disk usage above 85%!\x1b[0m");
     console.log("  Run: bun Tools/WorkerHealthCheck.ts --clean");
-  } else if (warning > 0) {
+  } else if (warning > 0 && attackFileIssues.length === 0) {
     console.log("\n\x1b[33m⚠ WARNING: Some workers have disk usage above 70%\x1b[0m");
     console.log("  Consider running: bun Tools/WorkerHealthCheck.ts --clean --dry-run");
   }

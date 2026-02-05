@@ -82,7 +82,9 @@ function execSQL(config: ServerConfig, sql: string): string {
   const b64Sql = Buffer.from(cleanSql).toString('base64');
   const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN"`;
   try {
-    return execSync(cmd, { encoding: "utf-8", timeout: 30000, shell: "bash" }).trim();
+    // Use PowerShell on Windows, default shell elsewhere
+    const shell = process.platform === "win32" ? "powershell.exe" : "/bin/bash";
+    return execSync(cmd, { encoding: "utf-8", timeout: 30000, shell }).trim();
   } catch (e) {
     console.error("SQL error:", (e as Error).message);
     return "";

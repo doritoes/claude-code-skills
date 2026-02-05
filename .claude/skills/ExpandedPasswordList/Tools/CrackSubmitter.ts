@@ -148,23 +148,35 @@ async function runPreFlightGates(config: { serverIp: string; dbPassword: string;
   }
   console.log("  ✓ Files found");
 
-  // GATE B: File download test (warning only - files verified in GATE A)
+  // GATE B: File download test - MUST pass (files must be downloadable by agents)
+  // ERR3 = "file not present" - means getFile.php cannot find files at expected path
+  // Fix: Run WarmStart.ts to copy files to /usr/local/share/hashtopolis/files/
   console.log("GATE B: Testing file download...");
   const token = execSQL(config, "SELECT token FROM Agent LIMIT 1");
   if (!token) {
     throw new Error("GATE B FAILED: No agents registered. Wait for agents to register.");
   }
-  try {
-    const downloadCmd = `ssh -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "curl -s -w '%{size_download}' -o /dev/null 'http://localhost:8080/getFile.php?file=1&token=${token}'"`;
-    const downloadSize = parseInt(execSync(downloadCmd, { encoding: "utf-8", timeout: 60000 }).trim());
-    if (downloadSize < 1000000) {
-      console.log(`  ⚠ File download test returned ${downloadSize} bytes (may need direct file access)`);
-    } else {
-      console.log(`  ✓ File download works (${(downloadSize / 1024 / 1024).toFixed(1)}MB)`);
-    }
-  } catch (e) {
-    console.log(`  ⚠ File download test skipped: ${(e as Error).message}`);
+  // Download file content to check for ERR3 error message
+  const downloadContentCmd = `ssh -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "curl -s 'http://localhost:8080/getFile.php?file=1&token=${token}' | head -c 100"`;
+  const downloadContent = execSync(downloadContentCmd, { encoding: "utf-8", timeout: 60000 }).trim();
+
+  if (downloadContent.includes("ERR3")) {
+    throw new Error(`GATE B FAILED: File download returns ERR3 (file not present).
+    Files exist at /var/www/hashtopolis/files/ but getFile.php expects /usr/local/share/hashtopolis/files/.
+    FIX: Run 'bun Tools/WarmStart.ts' to copy files to correct location.`);
   }
+
+  // Also check file size to detect truncated downloads
+  const downloadSizeCmd = `ssh -o StrictHostKeyChecking=no ${config.sshUser}@${config.serverIp} "curl -s -w '%{size_download}' -o /dev/null 'http://localhost:8080/getFile.php?file=1&token=${token}'"`;
+  const downloadSize = parseInt(execSync(downloadSizeCmd, { encoding: "utf-8", timeout: 60000 }).trim());
+
+  if (downloadSize < 1000000) {
+    throw new Error(`GATE B FAILED: File download returned only ${downloadSize} bytes (expected ~139MB for rockyou.txt).
+    This indicates truncated or corrupted file download.
+    FIX: Run 'bun Tools/WarmStart.ts' to copy files to correct location.`);
+  }
+
+  console.log(`  ✓ File download works (${(downloadSize / 1024 / 1024).toFixed(1)}MB)`)
 
   // GATE C: Agents trusted + ignoreErrors=1 (CRITICAL for rule attacks)
   console.log("GATE C: Checking agent trust and error handling...");

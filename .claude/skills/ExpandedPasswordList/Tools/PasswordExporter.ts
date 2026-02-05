@@ -44,8 +44,9 @@ function execSQL(config: ExportConfig, query: string, timeout = 300000): string 
   // Use base64 encoding to avoid ALL shell quote escaping issues
   // This pattern works reliably with CONCAT(), special chars, etc.
   const b64Sql = Buffer.from(cleanSql).toString('base64');
-  const sshCmd = `echo '${b64Sql}' | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN`;
-  const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${config.sshUser}@${config.serverIp} "${sshCmd}" 2>&1 | grep -v 'Warning'`;
+  // Run grep on the server (not locally) to filter MySQL warnings - grep doesn't exist on Windows
+  const sshCmd = `echo '${b64Sql}' | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN 2>&1 | grep -v 'Warning'`;
+  const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${config.sshUser}@${config.serverIp} "${sshCmd}"`;
 
   try {
     return execSync(cmd, { encoding: "utf-8", maxBuffer: 500 * 1024 * 1024, timeout }).trim();

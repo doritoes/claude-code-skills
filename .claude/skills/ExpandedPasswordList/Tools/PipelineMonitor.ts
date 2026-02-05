@@ -408,11 +408,13 @@ async function checkPriorityAlignment(config: ServerConfig): Promise<HealthCheck
 
 async function checkTasksReadyToArchive(config: ServerConfig): Promise<HealthCheck> {
   // Find tasks that appear complete but may have issues
+  // CRITICAL: Also check agent assignments - agents may still be assigned even if chunks show complete
   const result = execSQL(config, `
     SELECT t.taskId, t.taskName,
       (SELECT COUNT(*) FROM Chunk c WHERE c.taskId=t.taskId AND c.state IN (0,2)) as active_chunks,
       (SELECT COUNT(*) FROM Chunk c WHERE c.taskId=t.taskId AND c.state=6) as aborted_chunks,
-      (SELECT COUNT(*) FROM Chunk c WHERE c.taskId=t.taskId AND c.state=4) as finished_chunks
+      (SELECT COUNT(*) FROM Chunk c WHERE c.taskId=t.taskId AND c.state=4) as finished_chunks,
+      (SELECT COUNT(*) FROM Assignment a WHERE a.taskId=t.taskId) as assigned_agents
     FROM Task t
     WHERE t.isArchived = 0
     AND t.keyspaceProgress >= t.keyspace
@@ -428,9 +430,12 @@ async function checkTasksReadyToArchive(config: ServerConfig): Promise<HealthChe
   const needsReview: string[] = [];
 
   for (const task of tasks) {
-    const [taskId, taskName, active, aborted, finished] = task.split("\t");
-    if (parseInt(active) === 0 && parseInt(aborted) === 0 && parseInt(finished) > 0) {
+    const [taskId, taskName, active, aborted, finished, assigned] = task.split("\t");
+    // CRITICAL: Must also have no assigned agents - they may still be working even if stats show 100%
+    if (parseInt(active) === 0 && parseInt(aborted) === 0 && parseInt(finished) > 0 && parseInt(assigned) === 0) {
       safeToArchive.push(taskName);
+    } else if (parseInt(assigned) > 0) {
+      needsReview.push(`${taskName} (${assigned} agent(s) assigned)`);
     } else {
       needsReview.push(`${taskName} (active=${active}, aborted=${aborted})`);
     }
