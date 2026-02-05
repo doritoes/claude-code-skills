@@ -1,0 +1,804 @@
+#!/usr/bin/env bun
+/**
+ * SandProcessor.ts - SAND Batch Processing Orchestrator
+ *
+ * Transforms SAND (hard hashes from Stage 1) into DIAMONDS (cracked) and GLASS
+ * (uncrackable) using escalating attack phases with intelligent hashlist reuse.
+ *
+ * Key features:
+ * - Hashlist reuse: Create ONE hashlist per batch, run MULTIPLE attacks
+ * - Intelligent parallelization: maxAgents=1 for rules, 0 for brute force
+ * - State tracking: Resume from where we left off
+ * - Strategy evolution: Learn from crack rates, reorder attacks
+ *
+ * @author PAI (Personal AI Infrastructure)
+ * @license MIT
+ */
+
+import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
+import { execSync } from "node:child_process";
+import { SandStateManager, DEFAULT_ATTACK_ORDER } from "./SandStateManager";
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+const CURRENT_FILE = fileURLToPath(import.meta.url);
+const SKILL_DIR = dirname(dirname(CURRENT_FILE));
+const DATA_DIR = resolve(SKILL_DIR, "data");
+const SAND_DIR = resolve(DATA_DIR, "sand");
+const DIAMONDS_DIR = resolve(DATA_DIR, "diamonds");
+const GLASS_DIR = resolve(DATA_DIR, "glass");
+const HASHCRACK_DIR = resolve(SKILL_DIR, "..", "Hashcrack", "tools");
+
+const HASH_TYPE_SHA1 = 100;
+
+// =============================================================================
+// Attack Presets
+// =============================================================================
+
+interface AttackPreset {
+  name: string;
+  phase: string;
+  attackCmd: string;
+  fileIds: number[];
+  maxAgents: number;  // 0 = unlimited, 1 = single agent (for rules)
+  isSmall: number;    // 1 = small job (quick completion)
+  priority: number;
+  expectedRate: number;
+  description: string;
+}
+
+/**
+ * Attack presets organized by phase.
+ * File IDs reference files uploaded to Hashtopolis.
+ *
+ * IMPORTANT: SAND = hashes that SURVIVED rockyou.txt + OneRuleToRuleThemStill
+ * DO NOT repeat attacks that are subsets of what was already tried!
+ *
+ * Strategy:
+ * 1. NEW WORDLISTS - rizzyou.txt has GenZ terms NOT in rockyou
+ * 2. HYBRID ATTACKS - append patterns not covered by rules (-a 6)
+ * 3. COMBINATOR - word+word combinations (-a 1)
+ * 4. MASK - pure pattern-based attacks (-a 3)
+ * 5. BRUTE FORCE - exhaustive short passwords
+ *
+ * NOTE: Adjust fileIds based on your Hashtopolis file configuration!
+ * Query with: SELECT fileId, filename FROM File;
+ */
+const ATTACK_PRESETS: Record<string, AttackPreset> = {
+  // ==========================================================================
+  // Phase 1: NEW WORDLISTS (highest value - completely new root words!)
+  // SAND survived rockyou, so try words NOT in rockyou
+  // ==========================================================================
+  "newwords-rizzyou-onerule": {
+    name: "newwords-rizzyou-onerule",
+    phase: "new-wordlists",
+    attackCmd: "#HL# rizzyou.txt -r OneRuleToRuleThemStill.rule",
+    fileIds: [9, 3],  // rizzyou.txt=9, OneRuleToRuleThemStill.rule=3
+    maxAgents: 1,  // Rule attack requires maxAgents=1
+    isSmall: 0,
+    priority: 100,
+    expectedRate: 0.02,
+    description: "GenZ words + OneRule (NEW roots, proven rules)",
+  },
+  "newwords-nocap-genz": {
+    name: "newwords-nocap-genz",
+    phase: "new-wordlists",
+    attackCmd: "#HL# nocap.txt -r GenZ.rule",
+    fileIds: [5, 6],  // nocap.txt=5, GenZ.rule=6
+    maxAgents: 1,
+    isSmall: 0,
+    priority: 95,
+    expectedRate: 0.015,
+    description: "Combined wordlist + GenZ patterns (2015-2025 years)",
+  },
+
+  // ==========================================================================
+  // Phase 3: HYBRID ATTACKS (after brute force seeds feedback loop)
+  // Rules transform words, hybrids APPEND patterns
+  // ==========================================================================
+  "hybrid-rockyou-4digit": {
+    name: "hybrid-rockyou-4digit",
+    phase: "hybrid",
+    attackCmd: "#HL# -a 6 rockyou.txt ?d?d?d?d",
+    fileIds: [1],  // rockyou.txt only
+    maxAgents: 0,  // Hybrid can use multiple agents
+    isSmall: 0,
+    priority: 80,
+    expectedRate: 0.03,
+    description: "rockyou + 4 digit suffix (password1234)",
+  },
+  "hybrid-rockyou-year": {
+    name: "hybrid-rockyou-year",
+    phase: "hybrid",
+    attackCmd: "#HL# -a 6 rockyou.txt 20?d?d",
+    fileIds: [1],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 78,
+    expectedRate: 0.02,
+    description: "rockyou + year suffix (password2024)",
+  },
+  "hybrid-rizzyou-4digit": {
+    name: "hybrid-rizzyou-4digit",
+    phase: "hybrid",
+    attackCmd: "#HL# -a 6 rizzyou.txt ?d?d?d?d",
+    fileIds: [9],  // rizzyou.txt
+    maxAgents: 0,
+    isSmall: 1,  // Small wordlist = quick job
+    priority: 75,
+    expectedRate: 0.01,
+    description: "GenZ words + 4 digit suffix (minecraft1234)",
+  },
+  "hybrid-rockyou-special-digits": {
+    name: "hybrid-rockyou-special-digits",
+    phase: "hybrid",
+    attackCmd: "#HL# -a 6 rockyou.txt ?s?d?d?d",
+    fileIds: [1],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 72,
+    expectedRate: 0.015,
+    description: "rockyou + special + 3 digits (password!123)",
+  },
+
+  // ==========================================================================
+  // Phase 4: COMBINATOR (word+word combinations - mode -a 1)
+  // Creates compound passwords like "loveforever", "happyday"
+  // ==========================================================================
+  "combo-common-numbers": {
+    name: "combo-common-numbers",
+    phase: "combinator",
+    attackCmd: "#HL# -a 1 common-words.txt numbers-1000.txt",
+    fileIds: [10, 11],  // common-words.txt, numbers-1000.txt
+    maxAgents: 0,
+    isSmall: 1,
+    priority: 65,
+    expectedRate: 0.008,
+    description: "Common words + numbers (love123, happy2024)",
+  },
+
+  // ==========================================================================
+  // Phase 5: MASK ATTACKS (common patterns, large keyspace)
+  // Run last - less guaranteed, more speculative
+  // ==========================================================================
+  "mask-Ullllldd": {
+    name: "mask-Ullllldd",
+    phase: "mask",
+    attackCmd: "#HL# -a 3 ?u?l?l?l?l?l?d?d",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 50,
+    expectedRate: 0.01,
+    description: "Uppercase + 5 lower + 2 digits (Summer23)",
+  },
+  "mask-lllllldd": {
+    name: "mask-lllllldd",
+    phase: "mask",
+    attackCmd: "#HL# -a 3 ?l?l?l?l?l?l?d?d",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 48,
+    expectedRate: 0.015,
+    description: "6 lowercase + 2 digits (summer23)",
+  },
+  "mask-Ullllllld": {
+    name: "mask-Ullllllld",
+    phase: "mask",
+    attackCmd: "#HL# -a 3 ?u?l?l?l?l?l?l?l?d",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 55,
+    expectedRate: 0.008,
+    description: "Uppercase + 7 lower + 1 digit (Password1)",
+  },
+  "mask-dddddddd": {
+    name: "mask-dddddddd",
+    phase: "mask",
+    attackCmd: "#HL# -a 3 ?d?d?d?d?d?d?d?d",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 1,  // Only 10^8 = 100M combinations
+    priority: 52,
+    expectedRate: 0.005,
+    description: "8 digits (phone numbers, dates)",
+  },
+
+  // ==========================================================================
+  // Phase 2: BRUTE FORCE (EARLY - guaranteed cracks seed feedback loop!)
+  // Run early to get DIAMONDS for DiamondAnalyzer → UNOBTAINIUM.rule
+  // ==========================================================================
+  "brute-1-5": {
+    name: "brute-1-5",
+    phase: "brute",
+    attackCmd: "#HL# -a 3 ?a?a?a?a?a --increment --increment-min=1",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 1,  // Small job - quick completion
+    priority: 92,  // HIGH - run early for feedback loop
+    expectedRate: 0.005,
+    description: "Brute force 1-5 chars (fast, seeds feedback)",
+  },
+  "brute-6": {
+    name: "brute-6",
+    phase: "brute",
+    attackCmd: "#HL# -a 3 ?a?a?a?a?a?a",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 89,  // HIGH - guaranteed patterns
+    expectedRate: 0.003,
+    description: "Brute force 6 characters",
+  },
+  "brute-7": {
+    name: "brute-7",
+    phase: "brute",
+    attackCmd: "#HL# -a 3 ?a?a?a?a?a?a?a",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 86,  // Run before hybrid/mask
+    expectedRate: 0.002,
+    description: "Brute force 7 characters",
+  },
+
+  // ==========================================================================
+  // FEEDBACK LOOP: UNOBTAINIUM (rules learned from DIAMONDS)
+  // Added dynamically after DiamondAnalyzer extracts effective patterns
+  // ==========================================================================
+  "feedback-beta-onerule": {
+    name: "feedback-beta-onerule",
+    phase: "feedback",
+    attackCmd: "#HL# beta.txt -r OneRuleToRuleThemStill.rule",
+    fileIds: [12, 3],  // beta.txt=12 (uploaded after generation), OneRule=3
+    maxAgents: 1,
+    isSmall: 1,  // BETA is small list of new roots
+    priority: 110,  // Higher than NEW-WORDLISTS when available
+    expectedRate: 0.01,
+    description: "New root words from DIAMONDS + proven rules",
+  },
+  "feedback-rockyou-unobtainium": {
+    name: "feedback-rockyou-unobtainium",
+    phase: "feedback",
+    attackCmd: "#HL# rockyou.txt -r unobtainium.rule",
+    fileIds: [1, 13],  // rockyou.txt=1, unobtainium.rule=13 (uploaded after generation)
+    maxAgents: 1,
+    isSmall: 0,
+    priority: 108,
+    expectedRate: 0.01,
+    description: "rockyou + rules learned from DIAMONDS patterns",
+  },
+};
+
+// =============================================================================
+// Server Configuration
+// =============================================================================
+
+interface ServerConfig {
+  serverIp: string;
+  dbPassword: string;
+  sshUser: string;
+}
+
+function getServerConfig(): ServerConfig {
+  const terraformDir = resolve(HASHCRACK_DIR, "..", "terraform", "aws");
+
+  try {
+    const serverIp = execSync(`terraform output -raw server_ip`, { encoding: "utf-8", cwd: terraformDir }).trim();
+    const dbPassword = execSync(`terraform output -raw db_password`, { encoding: "utf-8", cwd: terraformDir }).trim();
+    return { serverIp, dbPassword, sshUser: "ubuntu" };
+  } catch (e) {
+    throw new Error("Cannot get server config from terraform. Ensure terraform is deployed.");
+  }
+}
+
+function execSQL(config: ServerConfig, sql: string): string {
+  const cleanSql = sql.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  const b64Sql = Buffer.from(cleanSql).toString('base64');
+  const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN"`;
+
+  try {
+    const shell = process.platform === "win32" ? "powershell.exe" : "/bin/bash";
+    return execSync(cmd, { encoding: "utf-8", timeout: 30000, shell }).trim();
+  } catch (e) {
+    console.error("SQL error:", (e as Error).message);
+    return "";
+  }
+}
+
+// =============================================================================
+// Hashtopolis Client
+// =============================================================================
+
+async function getHashtopolisClient() {
+  const clientPath = resolve(HASHCRACK_DIR, "HashtopolisClient.ts");
+  if (!existsSync(clientPath)) {
+    throw new Error(`HashtopolisClient not found at ${clientPath}`);
+  }
+  const { HashtopolisClient } = await import(clientPath);
+  return { HashtopolisClient };
+}
+
+// =============================================================================
+// SAND Batch Loading
+// =============================================================================
+
+interface SandBatch {
+  name: string;
+  path: string;
+  hashes: string[];
+}
+
+async function loadSandBatch(batchNumber: number): Promise<SandBatch | null> {
+  const paddedNum = String(batchNumber).padStart(4, "0");
+  const batchName = `batch-${paddedNum}`;
+
+  // Try both compressed and uncompressed
+  const gzPath = resolve(SAND_DIR, `${batchName}.txt.gz`);
+  const txtPath = resolve(SAND_DIR, `${batchName}.txt`);
+
+  let content: string;
+  let path: string;
+
+  if (existsSync(gzPath)) {
+    const compressed = readFileSync(gzPath);
+    content = gunzipSync(compressed).toString("utf-8");
+    path = gzPath;
+  } else if (existsSync(txtPath)) {
+    content = readFileSync(txtPath, "utf-8");
+    path = txtPath;
+  } else {
+    return null;
+  }
+
+  const hashes = content.trim().split("\n").filter((h) => h.length === 40);
+
+  return { name: batchName, path, hashes };
+}
+
+function listSandBatches(): number[] {
+  if (!existsSync(SAND_DIR)) {
+    return [];
+  }
+
+  const files = readdirSync(SAND_DIR).filter(
+    (f) => f.startsWith("batch-") && (f.endsWith(".txt") || f.endsWith(".txt.gz"))
+  );
+
+  const numbers: number[] = [];
+  for (const file of files) {
+    const match = file.match(/batch-(\d+)\.txt/);
+    if (match) {
+      numbers.push(parseInt(match[1]));
+    }
+  }
+
+  return numbers.sort((a, b) => a - b);
+}
+
+// =============================================================================
+// Task Creation
+// =============================================================================
+
+async function createTaskViaDB(
+  config: ServerConfig,
+  params: {
+    name: string;
+    hashlistId: number;
+    attackCmd: string;
+    maxAgents: number;
+    priority: number;
+    fileIds: number[];
+    isSmall: number;
+  }
+): Promise<{ wrapperId: number; taskId: number }> {
+  const useNewBench = 0;  // ALWAYS use OLD format per Lesson #46
+
+  // 1. Create TaskWrapper
+  const wrapperSQL = `INSERT INTO TaskWrapper (priority, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked, maxAgents) VALUES (${params.priority}, 0, ${params.hashlistId}, 1, '${params.name}', 0, 0, ${params.maxAgents})`;
+
+  execSQL(config, wrapperSQL);
+  const wrapperId = parseInt(execSQL(config, "SELECT MAX(taskWrapperId) FROM TaskWrapper"));
+
+  // 2. Create Task
+  const taskSQL = `INSERT INTO Task (taskName, attackCmd, chunkTime, statusTimer, keyspace, keyspaceProgress, priority, maxAgents, color, isSmall, isCpuTask, useNewBench, skipKeyspace, crackerBinaryId, crackerBinaryTypeId, taskWrapperId, isArchived, notes, staticChunks, chunkSize, forcePipe, usePreprocessor, preprocessorCommand) VALUES ('${params.name}', '${params.attackCmd}', 600, 5, 0, 0, ${params.priority}, ${params.maxAgents}, NULL, ${params.isSmall}, 0, ${useNewBench}, 0, 1, 1, ${wrapperId}, 0, '', 0, 0, 0, 0, '')`;
+
+  execSQL(config, taskSQL);
+  const taskId = parseInt(execSQL(config, "SELECT MAX(taskId) FROM Task"));
+
+  // 3. Link files to task
+  for (const fileId of params.fileIds) {
+    execSQL(config, `INSERT INTO FileTask (fileId, taskId) VALUES (${fileId}, ${taskId})`);
+  }
+
+  return { wrapperId, taskId };
+}
+
+// =============================================================================
+// Main Processing Logic
+// =============================================================================
+
+async function processBatch(
+  batchNumber: number,
+  options: {
+    attackName?: string;
+    dryRun?: boolean;
+    skipExisting?: boolean;
+  } = {}
+): Promise<void> {
+  const { dryRun = false, skipExisting = true, attackName } = options;
+
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`Processing SAND batch ${batchNumber}`);
+  console.log("=".repeat(60));
+
+  // Load batch
+  const batch = await loadSandBatch(batchNumber);
+  if (!batch) {
+    console.error(`Batch ${batchNumber} not found in ${SAND_DIR}`);
+    return;
+  }
+
+  console.log(`Loaded ${batch.name}: ${batch.hashes.length.toLocaleString()} hashes`);
+
+  // Initialize state manager
+  const stateManager = new SandStateManager(DATA_DIR);
+  let batchState = stateManager.getBatch(batch.name);
+
+  // Get server config
+  const config = getServerConfig();
+  console.log(`Server: ${config.serverIp}`);
+
+  // Get Hashtopolis client
+  const { HashtopolisClient } = await getHashtopolisClient();
+  const client = HashtopolisClient.fromEnv();
+
+  // Create or reuse hashlist
+  let hashlistId: number;
+
+  if (batchState?.hashlistId) {
+    hashlistId = batchState.hashlistId;
+    console.log(`Reusing existing hashlist ${hashlistId} for ${batch.name}`);
+  } else {
+    if (dryRun) {
+      console.log(`[DRY RUN] Would create hashlist: SAND-${batch.name}`);
+      hashlistId = 0;
+    } else {
+      console.log(`Creating new hashlist for ${batch.name}...`);
+      hashlistId = await client.createHashlist({
+        name: `SAND-${batch.name}`,
+        hashTypeId: HASH_TYPE_SHA1,
+        hashes: batch.hashes,
+      });
+      console.log(`Created hashlist ${hashlistId}`);
+
+      // Initialize batch state
+      stateManager.initBatch(batch.name, hashlistId, batch.hashes.length);
+      batchState = stateManager.getBatch(batch.name)!;
+    }
+  }
+
+  // Determine which attacks to run
+  let attacksToRun: string[];
+
+  if (attackName) {
+    // Single attack specified
+    if (!ATTACK_PRESETS[attackName]) {
+      console.error(`Unknown attack: ${attackName}`);
+      console.error(`Available attacks: ${Object.keys(ATTACK_PRESETS).join(", ")}`);
+      return;
+    }
+    attacksToRun = [attackName];
+  } else {
+    // All remaining attacks
+    attacksToRun = batchState?.attacksRemaining || [...DEFAULT_ATTACK_ORDER];
+  }
+
+  console.log(`\nAttacks to run: ${attacksToRun.length}`);
+  for (const a of attacksToRun) {
+    const preset = ATTACK_PRESETS[a];
+    if (preset) {
+      console.log(`  - ${a}: ${preset.description}`);
+    }
+  }
+
+  // Run each attack
+  for (const attack of attacksToRun) {
+    const preset = ATTACK_PRESETS[attack];
+    if (!preset) {
+      console.warn(`Unknown attack ${attack}, skipping`);
+      continue;
+    }
+
+    // Skip if already applied
+    if (skipExisting && stateManager.isAttackApplied(batch.name, attack)) {
+      console.log(`\n[SKIP] ${attack} already applied to ${batch.name}`);
+      continue;
+    }
+
+    console.log(`\n--- Attack: ${attack} ---`);
+    console.log(`Phase: ${preset.phase}`);
+    console.log(`Command: ${preset.attackCmd}`);
+    console.log(`maxAgents: ${preset.maxAgents}, isSmall: ${preset.isSmall}`);
+
+    if (dryRun) {
+      console.log(`[DRY RUN] Would create task: SAND-${batch.name}-${attack}`);
+      continue;
+    }
+
+    // Check if task already exists
+    const taskName = `SAND-${batch.name}-${attack}`;
+    const existingTask = execSQL(config, `SELECT taskId FROM Task WHERE taskName = '${taskName}' AND isArchived = 0 LIMIT 1`);
+    if (existingTask) {
+      console.log(`Task ${taskName} already exists (ID: ${existingTask}), skipping`);
+      continue;
+    }
+
+    // Create task
+    const { taskId } = await createTaskViaDB(config, {
+      name: taskName,
+      hashlistId,
+      attackCmd: preset.attackCmd,
+      maxAgents: preset.maxAgents,
+      priority: preset.priority,
+      fileIds: preset.fileIds,
+      isSmall: preset.isSmall,
+    });
+
+    console.log(`Created task ${taskId}: ${taskName}`);
+
+    // Update state
+    stateManager.startAttack(batch.name, attack, taskId);
+  }
+
+  console.log(`\nBatch ${batchNumber} processing initiated.`);
+  console.log(`Monitor with: bun Tools/PipelineMonitor.ts`);
+}
+
+async function showStatus(): Promise<void> {
+  const stateManager = new SandStateManager(DATA_DIR);
+  const state = stateManager.load();
+  const summary = stateManager.getSummary();
+
+  console.log("SAND Processing Status");
+  console.log("======================");
+  console.log(`Started: ${state.startedAt || "Not started"}`);
+  console.log(`Last updated: ${state.lastUpdated || "Never"}`);
+  console.log("");
+  console.log("Batch Summary:");
+  console.log(`  Total: ${summary.totalBatches}`);
+  console.log(`  Pending: ${summary.pending}`);
+  console.log(`  In Progress: ${summary.inProgress}`);
+  console.log(`  Completed: ${summary.completed}`);
+  console.log(`  Failed: ${summary.failed}`);
+  console.log("");
+  console.log(`Total Cracked: ${summary.totalCracked.toLocaleString()} / ${summary.totalHashes.toLocaleString()}`);
+  if (summary.totalHashes > 0) {
+    console.log(`Overall Rate: ${((summary.totalCracked / summary.totalHashes) * 100).toFixed(2)}%`);
+  }
+
+  // Show per-batch details
+  if (Object.keys(state.batches).length > 0) {
+    console.log("\nPer-Batch Status:");
+    for (const [name, batch] of Object.entries(state.batches)) {
+      const rate = batch.hashCount > 0 ? ((batch.cracked / batch.hashCount) * 100).toFixed(1) : "0";
+      console.log(`  ${name}: ${batch.status} (${batch.cracked.toLocaleString()}/${batch.hashCount.toLocaleString()} = ${rate}%)`);
+      console.log(`    Applied: ${batch.attacksApplied.length}, Remaining: ${batch.attacksRemaining.length}`);
+    }
+  }
+
+  // Show attack statistics
+  const stats = stateManager.getAttackStats();
+  if (Object.keys(stats).length > 0) {
+    console.log("\nAttack Statistics:");
+    for (const [name, s] of Object.entries(stats)) {
+      console.log(`  ${name}: ${(s.avgRate * 100).toFixed(2)}% avg rate (${s.attempted} attempts)`);
+    }
+  }
+}
+
+async function showHistory(batchNumber: number): Promise<void> {
+  const paddedNum = String(batchNumber).padStart(4, "0");
+  const batchName = `batch-${paddedNum}`;
+
+  const stateManager = new SandStateManager(DATA_DIR);
+  const batch = stateManager.getBatch(batchName);
+
+  if (!batch) {
+    console.error(`No history for ${batchName}`);
+    return;
+  }
+
+  console.log(`Attack History: ${batchName}`);
+  console.log("=".repeat(40));
+  console.log(`Hashlist ID: ${batch.hashlistId}`);
+  console.log(`Hash Count: ${batch.hashCount.toLocaleString()}`);
+  console.log(`Total Cracked: ${batch.cracked.toLocaleString()}`);
+  console.log(`Status: ${batch.status}`);
+  console.log("");
+  console.log("Applied Attacks:");
+  for (const attack of batch.attacksApplied) {
+    const taskId = batch.taskIds[attack] || "?";
+    console.log(`  ✓ ${attack} (Task ${taskId})`);
+  }
+  console.log("");
+  console.log("Remaining Attacks:");
+  for (const attack of batch.attacksRemaining) {
+    console.log(`  ○ ${attack}`);
+  }
+}
+
+async function analyzeStrategy(): Promise<void> {
+  const stateManager = new SandStateManager(DATA_DIR);
+  const stats = stateManager.getAttackStats();
+
+  console.log("Strategy Analysis");
+  console.log("=================");
+
+  // Sort by effectiveness
+  const sorted = Object.entries(stats)
+    .map(([name, s]) => ({
+      name,
+      rate: s.avgRate,
+      time: s.avgTimeSeconds,
+      attempts: s.attempted,
+      effectiveness: s.avgRate / Math.max(s.avgTimeSeconds / 3600, 0.1),
+    }))
+    .sort((a, b) => b.effectiveness - a.effectiveness);
+
+  console.log("\nAttack Effectiveness (crack rate / hour):");
+  for (const { name, rate, time, attempts, effectiveness } of sorted) {
+    const status = effectiveness > 0.001 ? "✓" : "⚠";
+    console.log(`  ${status} ${name}: ${(effectiveness * 100).toFixed(4)} eff (${(rate * 100).toFixed(2)}% in ${(time / 60).toFixed(0)}min, ${attempts} tries)`);
+  }
+
+  // Show ineffective attacks
+  const ineffective = stateManager.getIneffectiveAttacks();
+  if (ineffective.length > 0) {
+    console.log("\n⚠ Ineffective attacks (consider skipping):");
+    for (const name of ineffective) {
+      console.log(`  - ${name}`);
+    }
+  }
+
+  // Suggest reordering
+  console.log("\n→ Run `bun Tools/SandStateManager.ts --reorder` to optimize attack order");
+}
+
+async function listAvailableAttacks(): Promise<void> {
+  console.log("Available Attacks");
+  console.log("=================\n");
+
+  const phases = new Map<string, AttackPreset[]>();
+  for (const preset of Object.values(ATTACK_PRESETS)) {
+    if (!phases.has(preset.phase)) {
+      phases.set(preset.phase, []);
+    }
+    phases.get(preset.phase)!.push(preset);
+  }
+
+  for (const [phase, presets] of phases) {
+    console.log(`${phase.toUpperCase()}:`);
+    for (const p of presets) {
+      const agents = p.maxAgents === 0 ? "multi" : `${p.maxAgents}`;
+      const small = p.isSmall ? " [SMALL]" : "";
+      console.log(`  ${p.name}${small}`);
+      console.log(`    ${p.description}`);
+      console.log(`    Cmd: ${p.attackCmd}`);
+      console.log(`    Agents: ${agents}, Priority: ${p.priority}, Expected: ${(p.expectedRate * 100).toFixed(1)}%`);
+    }
+    console.log("");
+  }
+}
+
+// =============================================================================
+// CLI Entry Point
+// =============================================================================
+
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+
+  if (args[0] === "--help" || args[0] === "-h") {
+    console.log(`
+SandProcessor - SAND Batch Processing Orchestrator
+
+Usage:
+  bun SandProcessor.ts --batch <n>              Process SAND batch N (all attacks)
+  bun SandProcessor.ts --batch <n> --attack <a> Process single attack on batch
+  bun SandProcessor.ts --batch <n> --dry-run    Preview without submitting
+  bun SandProcessor.ts --status                 Show processing status
+  bun SandProcessor.ts --history <n>            Show attack history for batch
+  bun SandProcessor.ts --analyze                Analyze attack effectiveness
+  bun SandProcessor.ts --attacks                List available attacks
+  bun SandProcessor.ts --list                   List available SAND batches
+
+Options:
+  --batch <n>      Batch number to process
+  --attack <name>  Specific attack to run (see --attacks for list)
+  --dry-run        Preview without creating tasks
+  --status         Show overall status
+  --history <n>    Show history for batch N
+  --analyze        Analyze which attacks are effective
+  --attacks        List all available attacks
+
+SAND Directory: ${SAND_DIR}
+`);
+    process.exit(0);
+  }
+
+  // Parse arguments
+  let batchNumber: number | undefined;
+  let attackName: string | undefined;
+  let dryRun = false;
+  let showStatusFlag = false;
+  let historyBatch: number | undefined;
+  let analyzeFlag = false;
+  let listAttacksFlag = false;
+  let listBatchesFlag = false;
+
+  for (let i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case "--batch":
+        batchNumber = parseInt(args[++i]);
+        break;
+      case "--attack":
+        attackName = args[++i];
+        break;
+      case "--dry-run":
+        dryRun = true;
+        break;
+      case "--status":
+        showStatusFlag = true;
+        break;
+      case "--history":
+        historyBatch = parseInt(args[++i]);
+        break;
+      case "--analyze":
+        analyzeFlag = true;
+        break;
+      case "--attacks":
+        listAttacksFlag = true;
+        break;
+      case "--list":
+        listBatchesFlag = true;
+        break;
+    }
+  }
+
+  try {
+    if (showStatusFlag) {
+      await showStatus();
+    } else if (historyBatch !== undefined) {
+      await showHistory(historyBatch);
+    } else if (analyzeFlag) {
+      await analyzeStrategy();
+    } else if (listAttacksFlag) {
+      await listAvailableAttacks();
+    } else if (listBatchesFlag) {
+      const batches = listSandBatches();
+      console.log(`Available SAND batches in ${SAND_DIR}:`);
+      if (batches.length === 0) {
+        console.log("  (none found)");
+      } else {
+        for (const n of batches) {
+          console.log(`  batch-${String(n).padStart(4, "0")}`);
+        }
+      }
+    } else if (batchNumber !== undefined) {
+      await processBatch(batchNumber, { attackName, dryRun });
+    } else {
+      console.error("Specify --batch <n>, --status, --history <n>, --analyze, --attacks, or --list");
+      process.exit(1);
+    }
+  } catch (e) {
+    console.error(`Error: ${(e as Error).message}`);
+    process.exit(1);
+  }
+}

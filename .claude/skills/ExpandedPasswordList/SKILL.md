@@ -105,7 +105,8 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 | "collect PEARLS", "get cracked" | `Workflows/Collect.md` |
 | "publish passwords", "push to github" | `Workflows/Publish.md` |
 | "create GLASS", "build UNOBTAINIUM", "optimize rules" | `Workflows/Optimize.md` |
-| "power on", "workers started", "agents down" | `Workflows/PostPowerOn.md` |
+| "power on", "warm start", "instances started" | `bun Tools/WarmStart.ts` |
+| "agents down", "fix agents" | `Workflows/PostPowerOn.md` |
 | "worker disk", "worker health", "clean workers" | `bun Tools/WorkerHealthCheck.ts` |
 | "hashlist coverage", "multi-task coverage", "combined coverage" | `bun Tools/HashlistCoverageAnalyzer.ts` |
 | "process sand", "sand attack plan", "escalating attacks" | `bun Tools/SandProcessor.ts` |
@@ -120,6 +121,8 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 # ⛔ MANDATORY PRE-FLIGHT (Run this FIRST - EVERY session, EVERY time)
 # ============================================================================
 
+bun Tools/WarmStart.ts                    # Run after AWS instances power on (updates IPs)
+bun Tools/WarmStart.ts --check            # Check if warm start is needed
 bun Tools/PipelineMonitor.ts --quick      # Check pipeline state before ANY operation
 # If this shows errors: STOP and fix them before proceeding
 # If tasks have keyspace=0: WAIT - do not "fix" them
@@ -159,12 +162,32 @@ bun Tools/HashlistCoverageAnalyzer.ts --tasks 1207,1208 --archive --dry-run  # P
 bun Tools/HashlistCoverageAnalyzer.ts --batch batch-0125 --archive  # Archive complete groups
 
 # ============================================================================
-# BATCH SUBMISSION
+# BATCH SUBMISSION (Stage 1: GRAVEL → PEARLS + SAND)
 # ============================================================================
 
 # Submit new batches for cracking
 bun Tools/CrackSubmitter.ts --batch 17 --workers 8   # Submit batch 17 with 8 workers
 bun Tools/CrackSubmitter.ts --batch 17 --workers 8 --priority 90  # Override priority
+
+# ============================================================================
+# SAND PROCESSING (Stage 2: SAND → DIAMONDS + GLASS)
+# ============================================================================
+
+# Process SAND batches with escalating attacks
+bun Tools/SandProcessor.ts --batch 1                 # Process SAND batch 1 (all attacks)
+bun Tools/SandProcessor.ts --batch 1 --attack rule-dive  # Run specific attack only
+bun Tools/SandProcessor.ts --batch 1 --dry-run       # Preview without submitting
+bun Tools/SandProcessor.ts --status                  # Show processing status
+bun Tools/SandProcessor.ts --history 1               # Show attack history for batch
+bun Tools/SandProcessor.ts --analyze                 # Analyze attack effectiveness
+bun Tools/SandProcessor.ts --attacks                 # List all available attacks
+bun Tools/SandProcessor.ts --list                    # List available SAND batches
+
+# SAND state management
+bun Tools/SandStateManager.ts                        # Show SAND processing state
+bun Tools/SandStateManager.ts --stats                # Show attack statistics
+bun Tools/SandStateManager.ts --reorder              # Reorder attacks by effectiveness
+bun Tools/SandStateManager.ts --reset                # Reset SAND state (careful!)
 
 # ============================================================================
 # INITIAL SETUP (Run once)
@@ -222,7 +245,9 @@ bun Tools/PearlPrioritizer.ts --analyze     # Count distribution
 - PEARLS: `data/results/cracked.txt`
 - Prioritized: `data/results/pearls-prioritized.txt` (sorted by frequency)
 - With counts: `data/results/pearls-with-counts.txt` (PASSWORD:COUNT)
-- GLASS (future): `data/wordlists/glass.txt`
+- SAND batches: `data/sand/batch-*.txt.gz` (uncracked from Stage 1)
+- DIAMONDS: `data/diamonds/batch-*.txt` (Stage 2+ cracked)
+- GLASS: `data/glass/batch-*.txt` (uncrackable hashes)
 - UNOBTAINIUM (future): `data/rules/unobtainium.rule`
 
 ## Generational Password Analysis
