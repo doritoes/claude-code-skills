@@ -879,7 +879,7 @@ async function checkWorkerDiskHealth(): Promise<WorkerHealth[]> {
     const awsResult = execSync(awsCmd, {
       encoding: "utf-8",
       timeout: 30000,
-      shell: process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
+      shell: process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash",
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
@@ -908,7 +908,7 @@ async function checkWorkerDiskHealth(): Promise<WorkerHealth[]> {
         const result = execSync(sshCmd, {
           encoding: "utf-8",
           timeout: 15000,
-          shell: process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
+          shell: process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash",
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],
         }).trim();

@@ -70,7 +70,7 @@ function execSQL(config: Config, query: string, timeout = 300000): string {
 
   try {
     // Use PowerShell on Windows, default shell elsewhere
-    const shell = process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash";
+    const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
     return execSync(cmd, {
       encoding: "utf-8",
       maxBuffer: 500 * 1024 * 1024,
@@ -182,7 +182,7 @@ async function bulkDeleteHashlists(config: Config, hashlistIds: number[]): Promi
   // Delete in batches of 100 hashlists at a time
   let totalDeleted = 0;
   const batchSize = 100;
-  const shell = process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash";
+  const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
 
   for (let i = 0; i < hashlistIds.length; i += batchSize) {
     const batch = hashlistIds.slice(i, i + batchSize);

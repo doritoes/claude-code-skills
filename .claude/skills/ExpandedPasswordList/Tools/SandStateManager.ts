@@ -72,29 +72,35 @@ export interface SandState {
  * Feedback attacks are prepended when BETA.txt and unobtainium.rule exist.
  */
 export const DEFAULT_ATTACK_ORDER = [
-  // Phase 0: Feedback loop (added when files exist)
-  // "feedback-beta-onerule",      // Enabled when BETA.txt is generated
-  // "feedback-rockyou-unobtainium", // Enabled when unobtainium.rule is generated
-  // Phase 1: New wordlists (highest value - new root words!)
-  "newwords-rizzyou-onerule",
-  "newwords-rizzyou-nocap",  // GenZ words + nocap.rule (Still+bussin) - Feedback from DIAMOND analysis
-  // "newwords-nocap-genz",  // DISABLED: Missing files (5,6), causes keyspace errors - see Lesson #52
-  // Phase 2: Brute force EARLY (guaranteed cracks → seeds feedback loop!)
-  "brute-5",     // 5 chars - fast (NOTE: --increment doesn't work with Hashtopolis)
-  "brute-6",     // 6 chars - still reasonable time
-  "brute-7",     // 7 chars - longer but valuable patterns
-  // Phase 3: Hybrid attacks (append patterns)
-  "hybrid-rockyou-4digit",
-  "hybrid-rockyou-year",
-  "hybrid-rizzyou-4digit",
-  "hybrid-rockyou-special-digits",
-  // Phase 4: Combinator (disabled - files not uploaded)
-  // "combo-common-numbers",
-  // Phase 5: Mask attacks (common patterns, longer keyspace)
-  "mask-Ullllldd",
-  "mask-lllllldd",
-  "mask-Ullllllld",
-  "mask-dddddddd",
+  // ══════════════════════════════════════════════════════════════════════
+  // OPTIMIZED ATTACK ORDER - Based on Batch 2 ROI Analysis (2026-02-06)
+  // ══════════════════════════════════════════════════════════════════════
+  //
+  // TIER 1: HIGH ROI (70.6% of cracks) - Brute force dominates SAND
+  "brute-7",     // 38.5% of cracks - TOP PERFORMER
+  "brute-6",     // 32.1% of cracks - SECOND BEST
+  //
+  // TIER 2: MEDIUM ROI (21.3% of cracks)
+  "hybrid-rockyou-4digit",  // 13.6% - word + 4 digits (e.g., password1234)
+  "mask-lllllldd",          //  5.3% - 6 lowercase + 2 digits (e.g., abcdef12)
+  "brute-5",                //  4.1% - 5-char exhaustive
+  "mask-Ullllllld",         //  2.8% - Capital + 7 lower + 1 digit
+  //
+  // TIER 3: LOW ROI (8.1% of cracks) - Run if time permits
+  "mask-Ullllldd",                  // 2.4% - Capital + 4 lower + 2 digits
+  "hybrid-rockyou-special-digits",  // 1.0% - word + ! + digits
+  //
+  // ══════════════════════════════════════════════════════════════════════
+  // REMOVED: ZERO/MINIMAL VALUE (< 0.2% combined)
+  // ══════════════════════════════════════════════════════════════════════
+  // ✗ mask-dddddddd         - Redundant (covered by brute-7)
+  // ✗ newwords-rizzyou-*    - GenZ words ineffective on SAND (<0.2%)
+  // ✗ hybrid-rizzyou-4digit - Minimal ROI (<0.1%)
+  // ✗ hybrid-rockyou-year   - Minimal ROI (<0.1%)
+  //
+  // KEY INSIGHT: SAND = passwords that SURVIVED rockyou+OneRule
+  // They're short random strings, NOT cultural references.
+  // Brute force wins because these aren't dictionary-based passwords.
 ];
 
 /**

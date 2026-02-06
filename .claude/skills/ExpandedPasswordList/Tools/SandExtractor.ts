@@ -63,7 +63,7 @@ function execSQL(config: ServerConfig, sql: string, timeout = 300000): string {
   const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN"`;
 
   try {
-    const shell = process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash";
+    const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
     return execSync(cmd, { encoding: "utf-8", maxBuffer: 500 * 1024 * 1024, timeout, shell }).trim();
   } catch (e: unknown) {
     const error = e as { stdout?: Buffer; message?: string };

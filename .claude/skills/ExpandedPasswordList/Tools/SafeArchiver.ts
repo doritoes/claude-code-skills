@@ -83,7 +83,7 @@ function execSQL(config: ServerConfig, sql: string): string {
   const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN"`;
   try {
     // Use PowerShell on Windows, default shell elsewhere
-    const shell = process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash";
+    const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
     return execSync(cmd, { encoding: "utf-8", timeout: 30000, shell }).trim();
   } catch (e) {
     console.error("SQL error:", (e as Error).message);
@@ -247,6 +247,11 @@ function validateBatch(config: ServerConfig, batchPattern: string): TaskValidati
 
 async function archiveTask(config: ServerConfig, taskId: number, dryRun: boolean, force: boolean = false): Promise<boolean> {
   const validation = validateTask(config, taskId);
+
+  // Warn if this is a SAND task - should use SandArchiver for state tracking
+  if (validation.taskName.startsWith("SAND-")) {
+    console.log(`\n⚠ NOTE: SAND task detected. Use 'bun Tools/SandArchiver.ts' for proper state tracking.`);
+  }
 
   console.log(`\nTask ${taskId}: ${validation.taskName}`);
   console.log(`  Keyspace: ${validation.keyspaceProgress}/${validation.keyspace} (${Math.round(validation.keyspaceProgress / validation.keyspace * 100)}%)`);

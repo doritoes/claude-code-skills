@@ -1491,3 +1491,106 @@ bun Tools/SandStateManager.ts --reset     # Clear failed state
 bun Tools/SandProcessor.ts --batch 1      # Start fresh
 ```
 
+## Lesson #53: Use SandArchiver for SAND Tasks, Not SafeArchiver (2026-02-06)
+
+**Context:** Batch-0002 was archived using SafeArchiver directly, causing SAND state to become out of sync (attacksApplied=[], attacksRemaining=[all], status=in_progress even though all tasks were archived).
+
+### The Problem
+
+Two separate archiving tools exist with different purposes:
+- **SafeArchiver.ts** - Archives tasks with validation, but does NOT update SAND state
+- **SandArchiver.ts** - Wraps SafeArchiver AND updates SAND state (attacksApplied, cracked, status)
+
+When SafeArchiver was used directly on SAND tasks, the tasks were archived in Hashtopolis but:
+- `sand-state.json` still showed `attacksRemaining: [all 13 attacks]`
+- `attacksApplied: []` was empty
+- `status: "in_progress"` instead of `"completed"`
+
+### The Fix
+
+1. **Always use SandArchiver for SAND tasks:**
+   ```bash
+   # CORRECT - updates both Hashtopolis AND SAND state
+   bun Tools/SandArchiver.ts --batch batch-0002
+
+   # WRONG - only archives, doesn't update SAND state
+   bun Tools/SafeArchiver.ts --batch batch-0002
+   ```
+
+2. **SafeArchiver now warns on SAND tasks** - Added detection to warn when archiving SAND-prefixed tasks
+
+3. **SAND workflow is:**
+   - `SandProcessor.ts --batch N` → Creates tasks, tracks in state
+   - Monitor progress with `PipelineMonitor.ts`
+   - `SandArchiver.ts --batch batch-XXXX` → Archives AND updates state
+   - `DiamondCollector.ts --batch batch-XXXX` → Collects cracked passwords
+   - `DiamondFeedback.ts --batch batch-XXXX` → Analyzes for feedback
+
+### Prevention
+
+**Tool routing by task prefix:**
+| Task prefix | Use this tool | NOT this |
+|-------------|---------------|----------|
+| `SAND-*` | `SandArchiver.ts` | SafeArchiver directly |
+| Other tasks | `SafeArchiver.ts` | - |
+
+**State management hierarchy:**
+```
+SandProcessor → creates state entry (attacksRemaining populated)
+    ↓
+SandArchiver → calls SafeArchiver + updates state (attacksApplied populated)
+    ↓
+SandStateManager → persists state to sand-state.json
+```
+
+## Lesson #54: Attack ROI Analysis and Deferred Attacks (2026-02-06)
+
+**Context:** After batch 2 completed, analyzed attack effectiveness to optimize batch 3+ strategy.
+
+### Batch 2 Attack ROI Analysis
+
+| Tier | Attack | Cracked | % of Total | Status |
+|------|--------|---------|------------|--------|
+| **HIGH** | brute-7 | 8,810 | 38.5% | ⭐ PRIORITY |
+| **HIGH** | brute-6 | 7,351 | 32.1% | ⭐ PRIORITY |
+| MEDIUM | hybrid-rockyou-4digit | 3,125 | 13.6% | Keep |
+| MEDIUM | mask-lllllldd | 1,210 | 5.3% | Keep |
+| MEDIUM | brute-5 | 936 | 4.1% | Keep |
+| LOW | mask-Ullllllld | 639 | 2.8% | Keep |
+| LOW | mask-Ullllldd | 561 | 2.4% | Keep |
+| LOW | hybrid-rockyou-special-digits | 233 | 1.0% | Keep |
+| **MINIMAL** | newwords-rizzyou-onerule | 28 | 0.1% | Defer to GLASS |
+| **MINIMAL** | hybrid-rockyou-year | 9 | <0.1% | Defer to GLASS |
+| **MINIMAL** | hybrid-rizzyou-4digit | 5 | <0.1% | Defer to GLASS |
+| **ZERO** | mask-dddddddd | 0 | 0% | Defer to GLASS |
+| **ZERO** | newwords-rizzyou-nocap | 0 | 0% | Defer to GLASS |
+
+### Key Insight
+
+**SAND = passwords that survived rockyou+OneRule.** They're fundamentally different from normal passwords:
+- Mostly short random strings (5-7 chars)
+- NOT cultural references or dictionary words
+- Brute force wins because they're not dictionary-based
+
+### Deferred Attacks for GLASS Phase
+
+**IMPORTANT:** The low-value attacks (< 1% ROI) should still be run eventually on GLASS (final uncracked residue):
+
+```
+DEFERRED TO GLASS:
+  - newwords-rizzyou-onerule    (0.1%)
+  - newwords-rizzyou-nocap      (0%)
+  - hybrid-rockyou-year         (<0.1%)
+  - hybrid-rizzyou-4digit       (<0.1%)
+  - mask-dddddddd               (0% - redundant with brute-7)
+```
+
+**Rationale:** Even 0.1% of 56M SAND hashes = 56,000 passwords. Low-value attacks should run during off-peak times or after high-value attacks complete.
+
+### Future Work
+
+1. **Run deferred attacks on GLASS** after all SAND batches complete primary attacks
+2. **Consider brute-8** for GLASS phase (extends winning brute strategy)
+3. **Upload feedback files** (BETA.txt, unobtainium.rule) when batch count is sufficient
+4. **Track cumulative DIAMONDS** to measure feedback loop effectiveness
+
