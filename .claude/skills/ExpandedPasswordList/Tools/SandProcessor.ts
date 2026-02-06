@@ -264,9 +264,31 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
   },
 
   // ==========================================================================
-  // FEEDBACK LOOP: UNOBTAINIUM (rules learned from DIAMONDS)
-  // Added dynamically after DiamondAnalyzer extracts effective patterns
+  // FEEDBACK LOOP: Test rules/words learned from DIAMONDS
+  //
+  // PURPOSE: Validate effectiveness of feedback-generated assets
+  //
+  // UNOBTAINIUM.rule contains ONLY rules NOT already in:
+  //   - OneRuleToRuleThemStill.rule
+  //   - nocap.rule
+  //
+  // If unobtainium cracks are ZERO, the feedback is working correctly
+  // (all effective rules are already in the baseline files).
+  // If unobtainium cracks are >0, we've found genuinely new patterns!
+  //
+  // Run these attacks EVERY batch to measure feedback effectiveness.
   // ==========================================================================
+  "test-unobtainium": {
+    name: "test-unobtainium",
+    phase: "feedback",
+    attackCmd: "#HL# rockyou.txt -r UNOBTAINUM.rule",
+    fileIds: [1, 8],  // rockyou.txt=1, UNOBTAINUM.rule=8 (already on server)
+    maxAgents: 1,
+    isSmall: 0,
+    priority: 45,  // Lower priority - run AFTER main attacks for comparison
+    expectedRate: 0.001,  // Expected low (most patterns already covered)
+    description: "TEST: rockyou + NEW rules not in OneRule/nocap (measures feedback effectiveness)",
+  },
   "feedback-beta-onerule": {
     name: "feedback-beta-onerule",
     phase: "feedback",
@@ -276,7 +298,7 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     isSmall: 1,  // BETA is small list of new roots
     priority: 110,  // Higher than NEW-WORDLISTS when available
     expectedRate: 0.01,
-    description: "New root words from DIAMONDS + proven rules",
+    description: "TEST: New root words from DIAMONDS + proven rules",
   },
   "feedback-rockyou-unobtainium": {
     name: "feedback-rockyou-unobtainium",
@@ -287,7 +309,7 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     isSmall: 0,
     priority: 108,
     expectedRate: 0.01,
-    description: "rockyou + rules learned from DIAMONDS patterns",
+    description: "TEST: rockyou + rules learned from DIAMONDS patterns",
   },
 };
 

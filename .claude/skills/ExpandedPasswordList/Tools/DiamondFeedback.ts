@@ -44,6 +44,10 @@ const MIN_SUFFIX_FREQUENCY = 3;
 const NOCAP_PATH = resolve(DATA_DIR, "nocap.txt");
 const ROCKYOU_PATH = resolve(DATA_DIR, "rockyou.txt");
 
+// Baseline rule files to compare against (avoid duplicating existing rules)
+const ONERULE_PATH = resolve(SKILL_DIR, "..", "..", "..", "OneRuleToRuleThemStill.rule");
+const NOCAP_RULE_PATH = resolve(DATA_DIR, "nocap.rule");
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -73,8 +77,13 @@ interface FeedbackReport {
   baselineLoaded: boolean;
   baselinePath: string | null;
   baselineRootCount: number;
+  baselineRulesLoaded: boolean;
+  baselineRuleSources: string[];
+  baselineRuleCount: number;
   totalRootsExtracted: number;
   newRoots: number;
+  candidateRules: number;
+  filteredRules: number;
   newRules: number;
   topNewRoots: string[];
   topPatterns: string[];
@@ -387,6 +396,55 @@ async function loadBaselineRoots(): Promise<BaselineResult> {
   return { roots, loaded: true, path: baselinePath, count: roots.size };
 }
 
+interface BaselineRulesResult {
+  rules: Set<string>;
+  loaded: boolean;
+  sources: string[];
+  count: number;
+}
+
+/**
+ * Load baseline rules from OneRuleToRuleThemStill and nocap.rule
+ * Used to filter out rules that already exist in standard rule files
+ */
+async function loadBaselineRules(): Promise<BaselineRulesResult> {
+  const rules = new Set<string>();
+  const sources: string[] = [];
+
+  const rulePaths = [
+    { path: ONERULE_PATH, name: "OneRuleToRuleThemStill.rule" },
+    { path: NOCAP_RULE_PATH, name: "nocap.rule" },
+  ];
+
+  for (const { path, name } of rulePaths) {
+    if (!existsSync(path)) {
+      console.log(`  Baseline rule file not found: ${name}`);
+      continue;
+    }
+
+    const rl = createInterface({
+      input: createReadStream(path),
+      crlfDelay: Infinity,
+    });
+
+    let count = 0;
+    for await (const line of rl) {
+      // Skip comments and empty lines
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+
+      // Normalize rule (remove extra whitespace)
+      const normalizedRule = trimmed.replace(/\s+/g, " ");
+      rules.add(normalizedRule);
+      count++;
+    }
+
+    sources.push(`${name} (${count.toLocaleString()} rules)`);
+  }
+
+  return { rules, loaded: sources.length > 0, sources, count: rules.size };
+}
+
 /**
  * Analyze all DIAMONDS and generate feedback
  */
@@ -514,52 +572,82 @@ async function generateFeedback(options: {
     console.log(`  Wrote ${newRoots.length} roots to ${betaPath}`);
   }
 
-  // Generate pattern-based rules
-  const rules = new Set<string>();
+  // Load baseline rules to filter against
+  console.log(`\nLoading baseline rules for comparison...`);
+  const baselineRules = await loadBaselineRules();
+  if (baselineRules.loaded) {
+    console.log(`  Baseline rules: ${baselineRules.count.toLocaleString()} from ${baselineRules.sources.join(", ")}`);
+  } else {
+    console.log(`  ⚠ No baseline rules loaded - all generated rules will be included`);
+  }
+
+  // Generate pattern-based rules (candidates before filtering)
+  const candidateRules = new Set<string>();
 
   // From detected patterns
   for (const [pattern, count] of aggregated.patterns) {
     const rule = patternToRule(pattern, count);
-    if (rule) rules.add(rule);
+    if (rule) candidateRules.add(rule);
   }
 
   // From actual suffixes
   const suffixRules = generateSuffixRules(aggregated.suffixes);
   for (const rule of suffixRules) {
-    rules.add(rule);
+    candidateRules.add(rule);
   }
 
   // Add year suffix rules (2015-2026)
   for (let year = 2015; year <= 2026; year++) {
-    rules.add(`$${String(year)[0]} $${String(year)[1]} $${String(year)[2]} $${String(year)[3]}`);
+    candidateRules.add(`$${String(year)[0]} $${String(year)[1]} $${String(year)[2]} $${String(year)[3]}`);
   }
 
   // Add common combination rules
-  rules.add("c $1");  // Capitalize + 1
-  rules.add("c $1 $2 $3");  // Capitalize + 123
-  rules.add("c $!");  // Capitalize + !
-  rules.add("l $1 $2 $3");  // Lowercase + 123
-  rules.add("u");  // Uppercase all
-  rules.add("sa@ se3 si1 so0");  // Full leetspeak
+  candidateRules.add("c $1");  // Capitalize + 1
+  candidateRules.add("c $1 $2 $3");  // Capitalize + 123
+  candidateRules.add("c $!");  // Capitalize + !
+  candidateRules.add("l $1 $2 $3");  // Lowercase + 123
+  candidateRules.add("u");  // Uppercase all
+  candidateRules.add("sa@ se3 si1 so0");  // Full leetspeak
 
-  const ruleArray = Array.from(rules);
-  console.log(`\nRules generated: ${ruleArray.length}`);
+  // Filter out rules that already exist in baseline rule files
+  const newRules: string[] = [];
+  let filteredCount = 0;
+  for (const rule of candidateRules) {
+    const normalizedRule = rule.replace(/\s+/g, " ");
+    if (baselineRules.rules.has(normalizedRule)) {
+      filteredCount++;
+    } else {
+      newRules.push(rule);
+    }
+  }
 
-  // Generate unobtainium.rule
+  console.log(`\nRules analysis:`);
+  console.log(`  Candidate rules generated: ${candidateRules.size}`);
+  console.log(`  Already in baseline: ${filteredCount} (filtered out)`);
+  console.log(`  NEW rules (not in OneRule/nocap): ${newRules.length}`);
+
+  // Generate unobtainium.rule (only NEW rules not in existing rule files)
   const rulePath = resolve(FEEDBACK_DIR, "unobtainium.rule");
   if (!dryRun) {
     const ruleContent = [
       "# UNOBTAINIUM.rule - Auto-generated from DIAMOND analysis",
+      "#",
+      "# PURPOSE: Rules discovered from cracked passwords (DIAMONDS) that are",
+      "#          NOT already covered by OneRuleToRuleThemStill.rule or nocap.rule.",
+      "#          This file should be TESTED each batch to measure effectiveness.",
+      "#",
       `# Generated: ${new Date().toISOString()}`,
       `# Batches analyzed: ${batchesAnalyzed.join(", ")}`,
       `# Total passwords: ${aggregated.totalPasswords.toLocaleString()}`,
+      `# Baseline filtered: ${filteredCount} rules (already in OneRule/nocap)`,
+      `# New rules: ${newRules.length}`,
       "",
-      "# Pattern-based rules",
-      ...ruleArray,
+      "# NEW pattern-based rules (not in baseline)",
+      ...newRules,
       "",
     ].join("\n");
     writeFileSync(rulePath, ruleContent);
-    console.log(`  Wrote ${ruleArray.length} rules to ${rulePath}`);
+    console.log(`  Wrote ${newRules.length} NEW rules to ${rulePath}`);
   }
 
   // Print analysis summary
@@ -621,9 +709,14 @@ async function generateFeedback(options: {
     baselineLoaded: baseline.loaded,
     baselinePath: baseline.path,
     baselineRootCount: baseline.count,
+    baselineRulesLoaded: baselineRules.loaded,
+    baselineRuleSources: baselineRules.sources,
+    baselineRuleCount: baselineRules.count,
     totalRootsExtracted: aggregated.rootWords.size,
     newRoots: newRoots.length,
-    newRules: ruleArray.length,
+    candidateRules: candidateRules.size,
+    filteredRules: filteredCount,
+    newRules: newRules.length,
     topNewRoots: newRoots.slice(0, 20).map(r => r.root),
     topPatterns: topPatterns.map(([p, _]) => p),
     betaPath,

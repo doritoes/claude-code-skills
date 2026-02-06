@@ -91,6 +91,15 @@ export const DEFAULT_ATTACK_ORDER = [
   "hybrid-rockyou-special-digits",  // 1.0% - word + ! + digits
   //
   // ══════════════════════════════════════════════════════════════════════
+  // FEEDBACK TEST: Measure effectiveness of learned rules
+  // ══════════════════════════════════════════════════════════════════════
+  // test-unobtainium runs EVERY batch to validate feedback loop.
+  // unobtainium.rule contains ONLY rules NOT already in OneRule/nocap.
+  // Expected: ~0 cracks (if feedback working correctly, rules are redundant)
+  // Actual >0: Found genuinely new patterns worth investigating!
+  "test-unobtainium",
+  //
+  // ══════════════════════════════════════════════════════════════════════
   // REMOVED: ZERO/MINIMAL VALUE (< 0.2% combined)
   // ══════════════════════════════════════════════════════════════════════
   // ✗ mask-dddddddd         - Redundant (covered by brute-7)
