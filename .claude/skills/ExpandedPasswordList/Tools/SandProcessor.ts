@@ -319,7 +319,8 @@ function execSQL(config: ServerConfig, sql: string): string {
   const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN"`;
 
   try {
-    const shell = process.platform === "win32" ? "powershell.exe" : "/bin/bash";
+    // Use Git Bash on Windows to avoid PowerShell execution policy issues
+    const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
     return execSync(cmd, { encoding: "utf-8", timeout: 30000, shell }).trim();
   } catch (e) {
     console.error("SQL error:", (e as Error).message);
@@ -464,7 +465,8 @@ function validateFileDownloads(config: ServerConfig, fileIds: number[]): { valid
     // Download first 100 bytes to check for ERR3
     const testCmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "curl -s 'http://localhost:8080/getFile.php?file=${fileId}&token=${token}' | head -c 100"`;
     try {
-      const shell = process.platform === "win32" ? "powershell.exe" : "/bin/bash";
+      // Use Git Bash on Windows to avoid PowerShell execution policy issues
+      const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
       const content = execSync(testCmd, { encoding: "utf-8", timeout: 30000, shell }).trim();
 
       if (content.includes("ERR3")) {

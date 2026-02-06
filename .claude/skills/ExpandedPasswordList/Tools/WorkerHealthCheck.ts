@@ -88,7 +88,7 @@ function getWorkersFromAWS(): WorkerInfo[] {
     const result = execSync(cmd, {
       encoding: "utf-8",
       timeout: 30000,
-      shell: process.platform === "win32" ? "powershell.exe" : "/bin/bash",
+      shell: process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
       windowsHide: true,
     }).trim();
 
@@ -117,7 +117,7 @@ function sshExec(ip: string, command: string, timeout = 15000): string | null {
     return execSync(sshCmd, {
       encoding: "utf-8",
       timeout,
-      shell: process.platform === "win32" ? "powershell.exe" : "/bin/bash",
+      shell: process.platform === "win32" ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();

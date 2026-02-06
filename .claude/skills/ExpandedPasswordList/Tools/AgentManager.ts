@@ -86,7 +86,7 @@ function execSQL(config: ServerConfig, sql: string): string {
       return execSync(sshCmd, {
         encoding: "utf-8",
         timeout: 45000,
-        shell: "powershell.exe",
+        shell: "C:\Program Files\Git\bin\bash.exe",
         windowsHide: true,
       }).trim();
     } else {
@@ -122,7 +122,7 @@ function getInstancesByPrivateIp(region: string): Map<string, InstanceInfo> {
     const result = execSync(awsCmd, {
       encoding: "utf-8",
       timeout: 45000,
-      shell: isWindows ? "powershell.exe" : "/bin/bash",
+      shell: isWindows ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
       windowsHide: true,
     }).trim();
 
@@ -211,7 +211,7 @@ function rebootInstance(instanceId: string, region: string): boolean {
     execSync(`aws ec2 reboot-instances --instance-ids ${instanceId} --region ${region}`, {
       encoding: "utf-8",
       timeout: 45000,
-      shell: isWindows ? "powershell.exe" : "/bin/bash",
+      shell: isWindows ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
       windowsHide: true,
     });
     return true;

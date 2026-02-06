@@ -417,7 +417,7 @@ function getWorkerPublicIp(privateIp: string): string | null {
     const result = execSync(awsCmd, {
       encoding: "utf-8",
       timeout: 30000,
-      shell: isWindows ? "powershell.exe" : "/bin/bash",
+      shell: isWindows ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
       windowsHide: true,
     }).trim();
     return result && result !== "None" ? result : null;

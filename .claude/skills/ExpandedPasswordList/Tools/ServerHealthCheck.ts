@@ -85,7 +85,7 @@ function execSSH(serverIp: string, command: string): string {
     return execSync(sshCmd, {
       encoding: "utf-8",
       timeout: 30000,
-      shell: isWindows ? "powershell.exe" : "/bin/bash",
+      shell: isWindows ? "C:\Program Files\Git\bin\bash.exe" : "/bin/bash",
       windowsHide: true,
     }).trim();
   } catch (e) {
