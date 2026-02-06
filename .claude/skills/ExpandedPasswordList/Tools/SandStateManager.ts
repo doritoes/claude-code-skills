@@ -77,9 +77,10 @@ export const DEFAULT_ATTACK_ORDER = [
   // "feedback-rockyou-unobtainium", // Enabled when unobtainium.rule is generated
   // Phase 1: New wordlists (highest value - new root words!)
   "newwords-rizzyou-onerule",
-  "newwords-nocap-genz",
+  "newwords-rizzyou-nocap",  // GenZ words + nocap.rule (Still+bussin) - Feedback from DIAMOND analysis
+  // "newwords-nocap-genz",  // DISABLED: Missing files (5,6), causes keyspace errors - see Lesson #52
   // Phase 2: Brute force EARLY (guaranteed cracks → seeds feedback loop!)
-  "brute-1-5",   // Very fast, exhaustive 1-5 chars
+  "brute-5",     // 5 chars - fast (NOTE: --increment doesn't work with Hashtopolis)
   "brute-6",     // 6 chars - still reasonable time
   "brute-7",     // 7 chars - longer but valuable patterns
   // Phase 3: Hybrid attacks (append patterns)
@@ -87,8 +88,8 @@ export const DEFAULT_ATTACK_ORDER = [
   "hybrid-rockyou-year",
   "hybrid-rizzyou-4digit",
   "hybrid-rockyou-special-digits",
-  // Phase 4: Combinator
-  "combo-common-numbers",
+  // Phase 4: Combinator (disabled - files not uploaded)
+  // "combo-common-numbers",
   // Phase 5: Mask attacks (common patterns, longer keyspace)
   "mask-Ullllldd",
   "mask-lllllldd",
@@ -330,6 +331,35 @@ export class SandStateManager {
     if (batch) {
       batch.status = "failed";
       batch.error = error;
+    }
+
+    this.save();
+  }
+
+  /**
+   * Update cracked count for a batch (from DiamondCollector)
+   */
+  updateCracked(batchName: string, crackedCount: number): void {
+    const state = this.load();
+    const batch = state.batches[batchName];
+
+    if (batch) {
+      batch.cracked = crackedCount;
+    }
+
+    this.save();
+  }
+
+  /**
+   * Mark batch as complete (all attacks done, GLASS extracted)
+   */
+  completeBatch(batchName: string): void {
+    const state = this.load();
+    const batch = state.batches[batchName];
+
+    if (batch) {
+      batch.status = "completed";
+      batch.completedAt = new Date().toISOString();
     }
 
     this.save();

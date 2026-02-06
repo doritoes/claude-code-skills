@@ -180,40 +180,61 @@ function checkWorkerHealth(worker: WorkerInfo): WorkerHealth {
   const tmpInfo = sshExec(worker.publicIp, "du -sh /tmp 2>/dev/null | cut -f1");
   health.tmpSize = tmpInfo || "0";
 
-  // Check attack files for corruption (ERR3 - file not present)
-  // Expected: rockyou.txt ~139MB, OneRuleToRuleThemStill.rule ~486KB
+  // Check attack files for corruption (ERR3 - file not present, or 23-byte error files)
+  // Expected sizes: rockyou.txt ~139MB, OneRuleToRuleThemStill.rule ~486KB
+  // ERR3 error message is approximately 23 bytes
   const attackFilesInfo = sshExec(worker.publicIp,
-    "ls -la /opt/hashtopolis-agent/files/ 2>/dev/null && " +
-    "head -c 50 /opt/hashtopolis-agent/files/rockyou.txt 2>/dev/null && echo '|||' && " +
-    "head -c 50 /opt/hashtopolis-agent/files/OneRuleToRuleThemStill.rule 2>/dev/null"
+    "ls -la /opt/hashtopolis-agent/files/ 2>/dev/null"
   );
 
   if (attackFilesInfo) {
-    // Check for ERR3 error (corrupted download)
-    if (attackFilesInfo.includes("ERR3")) {
+    // Parse file sizes from ls -la output
+    const lines = attackFilesInfo.split("\n");
+    for (const line of lines) {
+      // ls -la format: -rw-r--r-- 1 user group SIZE DATE filename
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 9) {
+        const size = parseInt(parts[4]);
+        const filename = parts.slice(8).join(" ");
+
+        // Check for files that are suspiciously small (likely ERR3 error message)
+        // ERR3 error is ~23 bytes, so anything < 100 bytes is corrupted
+        if (size < 100 && size > 0) {
+          health.attackFilesOk = false;
+          health.attackFileIssues.push(`${filename}: CORRUPTED (${size} bytes - likely ERR3 error)`);
+          continue;
+        }
+
+        // Check expected minimum sizes for known files
+        if (filename === "rockyou.txt" && size < 100000000) {  // Expected ~139MB
+          health.attackFilesOk = false;
+          health.attackFileIssues.push(`rockyou.txt: truncated (${(size / 1024 / 1024).toFixed(1)}MB, expected ~139MB)`);
+        } else if (filename.includes("OneRule") && size < 100000) {  // Expected ~400-500KB
+          health.attackFilesOk = false;
+          health.attackFileIssues.push(`${filename}: truncated (${(size / 1024).toFixed(1)}KB, expected ~400-500KB)`);
+        } else if (filename.includes(".rule") && size < 1000) {  // Rule files should be >1KB
+          health.attackFilesOk = false;
+          health.attackFileIssues.push(`${filename}: truncated (${size} bytes, rules should be >1KB)`);
+        } else if (filename.includes(".txt") && size < 1000 && !filename.includes("hashlist")) {
+          // Wordlists should be larger than 1KB (but not hashlist files)
+          health.attackFilesOk = false;
+          health.attackFileIssues.push(`${filename}: truncated (${size} bytes, wordlists should be >1KB)`);
+        }
+      }
+    }
+
+    // Also check file content for ERR3 error message
+    const contentCheck = sshExec(worker.publicIp,
+      "head -c 50 /opt/hashtopolis-agent/files/rockyou.txt 2>/dev/null"
+    );
+    if (contentCheck && contentCheck.includes("ERR")) {
       health.attackFilesOk = false;
-      health.attackFileIssues.push("ERR3 - file download failed (getFile endpoint issue)");
+      health.attackFileIssues.push("rockyou.txt contains error message instead of passwords");
     }
-
-    // Check for truncated rockyou.txt (should be ~139MB, not 23 bytes)
-    const rockyouMatch = attackFilesInfo.match(/rockyou\.txt[^\n]*?(\d+)/);
-    if (rockyouMatch) {
-      const rockyouSize = parseInt(rockyouMatch[1]);
-      if (rockyouSize < 1000000) { // Less than 1MB means truncated/corrupt
-        health.attackFilesOk = false;
-        health.attackFileIssues.push(`rockyou.txt truncated (${rockyouSize} bytes, expected ~139MB)`);
-      }
-    }
-
-    // Check for truncated rule file (should be ~486KB)
-    const ruleMatch = attackFilesInfo.match(/OneRuleToRuleThemStill\.rule[^\n]*?(\d+)/);
-    if (ruleMatch) {
-      const ruleSize = parseInt(ruleMatch[1]);
-      if (ruleSize < 100000) { // Less than 100KB means truncated/corrupt
-        health.attackFilesOk = false;
-        health.attackFileIssues.push(`OneRuleToRuleThemStill.rule truncated (${ruleSize} bytes, expected ~486KB)`);
-      }
-    }
+  } else {
+    // No files directory means no attack files staged
+    health.attackFilesOk = false;
+    health.attackFileIssues.push("No attack files directory found");
   }
 
   // Determine status - attack file issues make worker "warning" at minimum

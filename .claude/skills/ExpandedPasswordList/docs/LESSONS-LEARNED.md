@@ -1373,3 +1373,121 @@ This is safer than manual intervention because:
 - Tries agent restart first (Hashtopolis handles transition)
 - Falls back to direct abort only when needed
 - Provides audit trail
+
+---
+
+## Lesson #51: File Validation Gates - Verify Attack Files Before Task Creation
+
+**Date:** 2026-02-06
+
+**What happened:** Tasks 1602, 1603, 1604 failed with "Keyspace measure failed!" errors. Agents 3, 6, 8 were stuck unable to process SAND batch-0001 attacks.
+
+**Root cause:** SandProcessor.ts created tasks referencing fileIds that didn't exist in Hashtopolis File table:
+- Task 1602 (rizzyou-onerule) referenced fileId 4 (rizzyou.txt) - FILE NOT IN DATABASE
+- Workers tried to download file 4, got ERR3 error, keyspace measure failed
+
+**Missing validation gates identified:**
+1. **SandProcessor.ts** - Created tasks with fileIds without verifying files exist
+2. **CrackSubmitter.ts GATE B** - Only tested file 1 (rockyou.txt), not ALL required files
+3. **WorkerHealthCheck.ts** - Only checked known files, not detecting 23-byte ERR3 corrupted files
+4. **WarmStart.ts** - Copied files but didn't verify all expected files present
+
+**Fix - Added validation gates:**
+
+**1. SandProcessor.ts now validates before task creation:**
+```typescript
+// GATE: Verify all files exist before creating task
+if (params.fileIds.length > 0) {
+  const fileCheck = validateFilesExist(config, params.fileIds);
+  if (!fileCheck.valid) {
+    throw new Error(`GATE FAILED: Missing files: ${fileCheck.missing.join(", ")}`);
+  }
+}
+```
+
+**2. CrackSubmitter.ts GATE B now tests ALL files:**
+```typescript
+// Test ALL files required for this attack preset
+for (const fileId of attackConfig.fileIds) {
+  // Download test each file, check for ERR3
+}
+```
+
+**3. WorkerHealthCheck.ts now detects corrupted files:**
+- Files < 100 bytes flagged as CORRUPTED (likely ERR3 error message)
+- Specific size thresholds for wordlists vs rule files
+
+**Prevention checklist:**
+- [ ] Before creating tasks with fileIds, verify each fileId exists in File table
+- [ ] Before submitting batch with attack preset, download-test all required files
+- [ ] After power-on, run WorkerHealthCheck to detect corrupted attack files
+- [ ] If "Keyspace measure failed!", check agent errors then verify File table
+
+**Query to check files:**
+```sql
+SELECT fileId, filename, size, isSecret FROM File;
+```
+
+**Error message to look for:**
+- Agent errors: "Keyspace measure failed!"
+- getFile.php returns: "ERR3" (file not present at expected path)
+
+---
+
+## Lesson #52: SAND Batch Processing - Complete Workflow (2026-02-06)
+
+**Context:** First SAND batch (batch-0001) was aborted after 12/13 attacks completed. Key lessons about the SAND processing workflow.
+
+### What Worked
+
+1. **SandStateManager.ts** - Tracked attack progress, cracked counts, and attack ordering correctly
+2. **SandProcessor.ts** - Successfully created tasks with correct attack configurations
+3. **File validation gates** - Caught missing files before wasting compute time
+4. **WarmStart.ts** - Copies files to correct Docker path after power-on
+
+### What Failed
+
+1. **nocap-genz attack** - 14M words × 48K rules caused "Keyspace measure failed!" errors
+   - Root cause: Keyspace calculation too large for hashcat to handle quickly
+   - Fix: Use smaller wordlist/rule combinations
+
+2. **brute-1-5 with --increment** - Hashtopolis chunking conflicts with hashcat --increment flag
+   - Fix: Changed to brute-5 (no increment, just 5-char mask)
+
+### SAND Batch Results (batch-0001)
+
+| Metric | Value |
+|--------|-------|
+| Total hashes | 351,124 |
+| Attacks completed | 12/13 |
+| Total cracked | 27,760 (7.9%) |
+| Best attack | brute-7 (8,636 cracked) |
+| Worst attack | mask-dddddddd (0 cracked) |
+
+**Attack effectiveness ranking:**
+1. brute-7: 8,636 cracked (2.46%)
+2. brute-6: 7,312 cracked (2.08%)
+3. hybrid-rockyou-4digit: 3,467 cracked (0.99%)
+4. mask-lllllldd: 1,216 cracked (0.35%)
+5. brute-5: 978 cracked (0.28%)
+
+### Key Learnings for Future SAND Batches
+
+1. **Run WarmStart after every power-on** - Files must be at `/usr/local/share/hashtopolis/files/`
+2. **Avoid massive wordlist × rule combinations** - Keep keyspace calculable
+3. **Don't use --increment** - Incompatible with Hashtopolis chunking
+4. **Brute force attacks are high-value** - Consistent 2-3% crack rate on SAND
+5. **Test file downloads before task creation** - GATE B catches ERR3 errors
+
+### Restart Path
+
+See `docs/SAND-RESTART-PATH.md` for complete restart procedure.
+
+```bash
+# Quick restart sequence
+bun Tools/WarmStart.ts                    # Fix file paths
+bun Tools/PipelineMonitor.ts --quick      # Check health
+bun Tools/SandStateManager.ts --reset     # Clear failed state
+bun Tools/SandProcessor.ts --batch 1      # Start fresh
+```
+

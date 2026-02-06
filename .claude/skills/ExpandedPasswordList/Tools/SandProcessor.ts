@@ -78,18 +78,29 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     name: "newwords-rizzyou-onerule",
     phase: "new-wordlists",
     attackCmd: "#HL# rizzyou.txt -r OneRuleToRuleThemStill.rule",
-    fileIds: [9, 3],  // rizzyou.txt=9, OneRuleToRuleThemStill.rule=3
+    fileIds: [4, 3],  // rizzyou.txt=4, OneRuleToRuleThemStill.rule=3
     maxAgents: 1,  // Rule attack requires maxAgents=1
     isSmall: 0,
     priority: 100,
     expectedRate: 0.02,
     description: "GenZ words + OneRule (NEW roots, proven rules)",
   },
+  "newwords-rizzyou-nocap": {
+    name: "newwords-rizzyou-nocap",
+    phase: "new-wordlists",
+    attackCmd: "#HL# rizzyou.txt -r nocap.rule",
+    fileIds: [4, 10],  // rizzyou.txt=4, nocap.rule=10 (OneRuleToRuleThemStill + bussin combined)
+    maxAgents: 1,  // Rule attack requires maxAgents=1
+    isSmall: 0,
+    priority: 98,
+    expectedRate: 0.03,
+    description: "GenZ words + nocap.rule (Still+bussin combined, modern years)",
+  },
   "newwords-nocap-genz": {
     name: "newwords-nocap-genz",
     phase: "new-wordlists",
-    attackCmd: "#HL# nocap.txt -r GenZ.rule",
-    fileIds: [5, 6],  // nocap.txt=5, GenZ.rule=6
+    attackCmd: "#HL# nocap.txt -r nocap.rule",
+    fileIds: [5, 6],  // nocap.txt=5, nocap.rule=6
     maxAgents: 1,
     isSmall: 0,
     priority: 95,
@@ -127,7 +138,7 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     name: "hybrid-rizzyou-4digit",
     phase: "hybrid",
     attackCmd: "#HL# -a 6 rizzyou.txt ?d?d?d?d",
-    fileIds: [9],  // rizzyou.txt
+    fileIds: [4],  // rizzyou.txt=4
     maxAgents: 0,
     isSmall: 1,  // Small wordlist = quick job
     priority: 75,
@@ -150,17 +161,18 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
   // Phase 4: COMBINATOR (word+word combinations - mode -a 1)
   // Creates compound passwords like "loveforever", "happyday"
   // ==========================================================================
-  "combo-common-numbers": {
-    name: "combo-common-numbers",
-    phase: "combinator",
-    attackCmd: "#HL# -a 1 common-words.txt numbers-1000.txt",
-    fileIds: [10, 11],  // common-words.txt, numbers-1000.txt
-    maxAgents: 0,
-    isSmall: 1,
-    priority: 65,
-    expectedRate: 0.008,
-    description: "Common words + numbers (love123, happy2024)",
-  },
+  // NOTE: Disabled - files not uploaded to Hashtopolis
+  // "combo-common-numbers": {
+  //   name: "combo-common-numbers",
+  //   phase: "combinator",
+  //   attackCmd: "#HL# -a 1 common-words.txt numbers-1000.txt",
+  //   fileIds: [10, 11],  // common-words.txt, numbers-1000.txt
+  //   maxAgents: 0,
+  //   isSmall: 1,
+  //   priority: 65,
+  //   expectedRate: 0.008,
+  //   description: "Common words + numbers (love123, happy2024)",
+  // },
 
   // ==========================================================================
   // Phase 5: MASK ATTACKS (common patterns, large keyspace)
@@ -215,16 +227,18 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
   // Phase 2: BRUTE FORCE (EARLY - guaranteed cracks seed feedback loop!)
   // Run early to get DIAMONDS for DiamondAnalyzer → UNOBTAINIUM.rule
   // ==========================================================================
-  "brute-1-5": {
-    name: "brute-1-5",
+  // NOTE: --increment mode doesn't work well with Hashtopolis chunking
+  // Split into individual length attacks instead
+  "brute-5": {
+    name: "brute-5",
     phase: "brute",
-    attackCmd: "#HL# -a 3 ?a?a?a?a?a --increment --increment-min=1",
+    attackCmd: "#HL# -a 3 ?a?a?a?a?a",
     fileIds: [],
     maxAgents: 0,
     isSmall: 1,  // Small job - quick completion
     priority: 92,  // HIGH - run early for feedback loop
     expectedRate: 0.005,
-    description: "Brute force 1-5 chars (fast, seeds feedback)",
+    description: "Brute force 5 characters",
   },
   "brute-6": {
     name: "brute-6",
@@ -384,6 +398,89 @@ function listSandBatches(): number[] {
 }
 
 // =============================================================================
+// File Validation (GATE: Verify attack files exist before task creation)
+// =============================================================================
+
+interface FileInfo {
+  fileId: number;
+  filename: string;
+  size: number;
+  isSecret: number;
+}
+
+/**
+ * GATE: Verify all required files exist in Hashtopolis File table
+ * This MUST pass before creating tasks, otherwise workers get "Keyspace measure failed!"
+ */
+function validateFilesExist(config: ServerConfig, fileIds: number[]): { valid: boolean; missing: number[]; files: FileInfo[] } {
+  if (fileIds.length === 0) {
+    return { valid: true, missing: [], files: [] };
+  }
+
+  const sql = `SELECT fileId, filename, size, isSecret FROM File WHERE fileId IN (${fileIds.join(",")})`;
+  const result = execSQL(config, sql);
+
+  const found: FileInfo[] = [];
+  if (result) {
+    for (const line of result.split("\n")) {
+      if (!line.trim()) continue;
+      const [id, name, size, secret] = line.split("\t");
+      found.push({
+        fileId: parseInt(id),
+        filename: name,
+        size: parseInt(size) || 0,
+        isSecret: parseInt(secret) || 0,
+      });
+    }
+  }
+
+  const foundIds = new Set(found.map(f => f.fileId));
+  const missing = fileIds.filter(id => !foundIds.has(id));
+
+  return {
+    valid: missing.length === 0,
+    missing,
+    files: found,
+  };
+}
+
+/**
+ * GATE: Verify file downloads work (not returning ERR3)
+ * ERR3 = "file not present" - means files exist in DB but not at expected path
+ */
+function validateFileDownloads(config: ServerConfig, fileIds: number[]): { valid: boolean; errors: string[] } {
+  if (fileIds.length === 0) {
+    return { valid: true, errors: [] };
+  }
+
+  // Get an agent token to test downloads
+  const token = execSQL(config, "SELECT token FROM Agent WHERE isActive=1 LIMIT 1");
+  if (!token) {
+    return { valid: false, errors: ["No active agents to test file downloads"] };
+  }
+
+  const errors: string[] = [];
+  for (const fileId of fileIds) {
+    // Download first 100 bytes to check for ERR3
+    const testCmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "curl -s 'http://localhost:8080/getFile.php?file=${fileId}&token=${token}' | head -c 100"`;
+    try {
+      const shell = process.platform === "win32" ? "powershell.exe" : "/bin/bash";
+      const content = execSync(testCmd, { encoding: "utf-8", timeout: 30000, shell }).trim();
+
+      if (content.includes("ERR3")) {
+        errors.push(`File ${fileId}: ERR3 (file not present at expected path)`);
+      } else if (content.length < 10) {
+        errors.push(`File ${fileId}: Empty or truncated response`);
+      }
+    } catch (e) {
+      errors.push(`File ${fileId}: Download test failed`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// =============================================================================
 // Task Creation
 // =============================================================================
 
@@ -400,6 +497,21 @@ async function createTaskViaDB(
   }
 ): Promise<{ wrapperId: number; taskId: number }> {
   const useNewBench = 0;  // ALWAYS use OLD format per Lesson #46
+
+  // GATE: Verify all files exist before creating task
+  if (params.fileIds.length > 0) {
+    const fileCheck = validateFilesExist(config, params.fileIds);
+    if (!fileCheck.valid) {
+      throw new Error(`GATE FAILED: Missing files in Hashtopolis: ${fileCheck.missing.join(", ")}. Upload files first.`);
+    }
+
+    // Check file sizes for corruption (files < 100 bytes are likely ERR3 error messages)
+    for (const file of fileCheck.files) {
+      if (file.size < 100) {
+        throw new Error(`GATE FAILED: File ${file.fileId} (${file.filename}) is corrupted (${file.size} bytes). Re-upload required.`);
+      }
+    }
+  }
 
   // 1. Create TaskWrapper
   const wrapperSQL = `INSERT INTO TaskWrapper (priority, taskType, hashlistId, accessGroupId, taskWrapperName, isArchived, cracked, maxAgents) VALUES (${params.priority}, 0, ${params.hashlistId}, 1, '${params.name}', 0, 0, ${params.maxAgents})`;
@@ -462,18 +574,29 @@ async function processBatch(
 
   // Create or reuse hashlist
   let hashlistId: number;
+  const hashlistName = `SAND-${batch.name}`;
 
   if (batchState?.hashlistId) {
     hashlistId = batchState.hashlistId;
-    console.log(`Reusing existing hashlist ${hashlistId} for ${batch.name}`);
+    console.log(`Reusing existing hashlist ${hashlistId} from state for ${batch.name}`);
   } else {
-    if (dryRun) {
-      console.log(`[DRY RUN] Would create hashlist: SAND-${batch.name}`);
+    // Check if hashlist already exists on server (recovery from timeout/crash)
+    console.log(`Checking for existing hashlist: ${hashlistName}...`);
+    const existingId = await client.findHashlistByName(hashlistName);
+
+    if (existingId) {
+      hashlistId = existingId;
+      console.log(`Found existing hashlist ${hashlistId} on server, recovering...`);
+      // Initialize batch state with recovered hashlist
+      stateManager.initBatch(batch.name, hashlistId, batch.hashes.length);
+      batchState = stateManager.getBatch(batch.name)!;
+    } else if (dryRun) {
+      console.log(`[DRY RUN] Would create hashlist: ${hashlistName}`);
       hashlistId = 0;
     } else {
-      console.log(`Creating new hashlist for ${batch.name}...`);
+      console.log(`Creating new hashlist: ${hashlistName} (${batch.hashes.length.toLocaleString()} hashes)...`);
       hashlistId = await client.createHashlist({
-        name: `SAND-${batch.name}`,
+        name: hashlistName,
         hashTypeId: HASH_TYPE_SHA1,
         hashes: batch.hashes,
       });
@@ -508,6 +631,67 @@ async function processBatch(
       console.log(`  - ${a}: ${preset.description}`);
     }
   }
+
+  // ==========================================================================
+  // PRE-FLIGHT GATE: Validate ALL required files exist before creating tasks
+  // This prevents "Keyspace measure failed!" errors from missing files
+  // ==========================================================================
+  console.log("\n--- PRE-FLIGHT: File Validation ---");
+
+  // Collect all unique fileIds needed for planned attacks
+  const allFileIds = new Set<number>();
+  for (const attack of attacksToRun) {
+    const preset = ATTACK_PRESETS[attack];
+    if (preset?.fileIds) {
+      for (const fid of preset.fileIds) {
+        allFileIds.add(fid);
+      }
+    }
+  }
+
+  if (allFileIds.size > 0) {
+    const fileIds = Array.from(allFileIds);
+    console.log(`Checking files: ${fileIds.join(", ")}`);
+
+    // GATE 1: Files exist in database
+    const existCheck = validateFilesExist(config, fileIds);
+    if (!existCheck.valid) {
+      console.error(`\n❌ GATE FAILED: Missing files in Hashtopolis File table:`);
+      for (const missing of existCheck.missing) {
+        console.error(`   - fileId ${missing} NOT FOUND`);
+      }
+      console.error(`\nFix: Upload missing files to Hashtopolis before running attacks.`);
+      console.error(`Query current files: SELECT fileId, filename FROM File;`);
+      return;
+    }
+
+    console.log(`✓ All ${existCheck.files.length} files exist in database:`);
+    for (const f of existCheck.files) {
+      const sizeStr = f.size > 1000000
+        ? `${(f.size / 1024 / 1024).toFixed(1)}MB`
+        : `${(f.size / 1024).toFixed(1)}KB`;
+      console.log(`   - ${f.fileId}: ${f.filename} (${sizeStr})`);
+    }
+
+    // GATE 2: Files are downloadable (not returning ERR3)
+    if (!dryRun) {
+      console.log("\nTesting file downloads...");
+      const downloadCheck = validateFileDownloads(config, fileIds);
+      if (!downloadCheck.valid) {
+        console.error(`\n❌ GATE FAILED: File download errors:`);
+        for (const err of downloadCheck.errors) {
+          console.error(`   - ${err}`);
+        }
+        console.error(`\nFix: Run 'bun Tools/WarmStart.ts' to copy files to correct location.`);
+        return;
+      }
+      console.log(`✓ All files downloadable`);
+    }
+  } else {
+    console.log("(No external files needed for selected attacks)");
+  }
+
+  console.log("--- PRE-FLIGHT COMPLETE ---\n");
 
   // Run each attack
   for (const attack of attacksToRun) {

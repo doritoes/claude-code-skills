@@ -80,6 +80,11 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 - `GRAVEL[N] = PEARLS[N] + SAND[N]`
 - `SAND[N] = DIAMONDS[N] + GLASS[N]`
 
+**CRITICAL - Result Collection Tools:**
+- **ResultCollector.ts** - Collects Stage 1 cracks (GRAVEL → PEARLS)
+- **DiamondCollector.ts** - Collects Stage 2 cracks (SAND → DIAMONDS + GLASS)
+- **NEVER mix these!** SAND cracks are DIAMONDS, not PEARLS!
+
 ## Value Proposition
 
 1. **PEARLS** - Real breach passwords NOT in rockyou (expanded wordlist)
@@ -110,7 +115,11 @@ UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
 | "worker disk", "worker health", "clean workers" | `bun Tools/WorkerHealthCheck.ts` |
 | "hashlist coverage", "multi-task coverage", "combined coverage" | `bun Tools/HashlistCoverageAnalyzer.ts` |
 | "process sand", "sand attack plan", "escalating attacks" | `bun Tools/SandProcessor.ts` |
-| "analyze diamonds", "extract patterns", "BETA words" | `bun Tools/DiamondAnalyzer.ts` |
+| "collect diamonds", "get sand cracks", "harvest diamonds" | `bun Tools/DiamondCollector.ts` |
+| "feedback loop", "analyze diamonds", "improve next batch" | `bun Tools/DiamondFeedback.ts` |
+| "extract patterns", "BETA words", "unobtainium" | `bun Tools/DiamondFeedback.ts` |
+| "extract glass", "uncrackable hashes", "finalize batch" | `bun Tools/DiamondCollector.ts --glass` |
+| "archive sand tasks", "archive completed", "sand archiver" | `bun Tools/SandArchiver.ts` |
 | "glass attacks", "untried attacks", "what attacks for glass" | `bun Tools/SandProcessor.ts --glass <batch>` |
 | "attack history", "which attacks tried" | `bun Tools/SandProcessor.ts --history <batch>` |
 
@@ -189,6 +198,24 @@ bun Tools/SandStateManager.ts --stats                # Show attack statistics
 bun Tools/SandStateManager.ts --reorder              # Reorder attacks by effectiveness
 bun Tools/SandStateManager.ts --reset                # Reset SAND state (careful!)
 
+# Collect DIAMONDS (Stage 2 cracks from SAND)
+bun Tools/DiamondCollector.ts                        # Collect DIAMONDS from all batches
+bun Tools/DiamondCollector.ts --batch batch-0001     # Collect specific batch
+bun Tools/DiamondCollector.ts --glass                # Also extract GLASS if complete
+bun Tools/DiamondCollector.ts --status               # Show collection status
+
+# Feedback Loop (analyze DIAMONDS → improve next batch)
+bun Tools/DiamondFeedback.ts                         # Analyze all DIAMONDS
+bun Tools/DiamondFeedback.ts --batch batch-0001      # Analyze specific batch
+bun Tools/DiamondFeedback.ts --upload                # Upload feedback to Hashtopolis
+bun Tools/DiamondFeedback.ts --dry-run               # Preview without writing
+
+# Archive completed SAND tasks (updates state + collects DIAMONDS)
+bun Tools/SandArchiver.ts                            # Archive all completed tasks
+bun Tools/SandArchiver.ts --batch batch-0001         # Archive specific batch
+bun Tools/SandArchiver.ts --dry-run                  # Preview without archiving
+bun Tools/SandArchiver.ts --no-collect               # Skip DiamondCollector
+
 # ============================================================================
 # INITIAL SETUP (Run once)
 # ============================================================================
@@ -212,7 +239,105 @@ bun Tools/PearlPrioritizer.ts --top 10000   # Top 10K most common
 bun Tools/PearlPrioritizer.ts --analyze     # Count distribution
 ```
 
-## Cracking Pipeline (SAND → PEARLS)
+## SAND Processing Feedback Loop
+
+The SAND processing pipeline includes a feedback loop that improves crack rates over time:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        SAND PROCESSING FEEDBACK LOOP                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  SAND batch-0001 ─────► SandProcessor ─────► Hashtopolis Tasks           │
+│        │                                            │                    │
+│        │                                            ▼                    │
+│        │                                     Workers crack               │
+│        │                                            │                    │
+│        │         ┌──────────────────────────────────┘                    │
+│        │         ▼                                                       │
+│        │    DiamondCollector ─────► DIAMONDS (cracked passwords)         │
+│        │                                  │                              │
+│        │                                  ▼                              │
+│        │                         DiamondFeedback                         │
+│        │                                  │                              │
+│        │              ┌───────────────────┴───────────────────┐          │
+│        │              ▼                                       ▼          │
+│        │         BETA.txt                            unobtainium.rule    │
+│        │      (new roots)                           (new patterns)       │
+│        │              │                                       │          │
+│        │              └───────────────────┬───────────────────┘          │
+│        │                                  ▼                              │
+│        │                         Upload to Hashtopolis                   │
+│        │                                  │                              │
+│        │                                  ▼                              │
+│        └──────────────────────►  SAND batch-0002 (uses feedback!)        │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Workflow Commands:**
+```bash
+# 1. Submit SAND batch for cracking
+bun Tools/SandProcessor.ts --batch 1
+
+# 2. Periodically collect DIAMONDS (while attacks run)
+bun Tools/DiamondCollector.ts --batch batch-0001
+
+# 3. Analyze DIAMONDS and generate feedback
+bun Tools/DiamondFeedback.ts --batch batch-0001
+
+# 4. Upload feedback files to Hashtopolis
+bun Tools/DiamondFeedback.ts --upload
+
+# 5. Register files in Hashtopolis UI and update SandProcessor file IDs
+
+# 6. Next batch automatically uses feedback attacks!
+bun Tools/SandProcessor.ts --batch 2
+```
+
+**Feedback Files:**
+- `data/feedback/BETA.txt` - New root words not in baseline wordlists
+- `data/feedback/unobtainium.rule` - Rules extracted from cracked patterns
+- `data/feedback/feedback-report.json` - Analysis report
+
+### How Feedback Uniqueness is Verified
+
+**For BETA.txt (new root words):**
+
+1. Extract root from each cracked password by stripping:
+   - Trailing digits (`password123` → `password`)
+   - Trailing specials (`password!@#` → `password`)
+   - Leading digits (`123password` → `password`)
+   - Convert to lowercase
+
+2. Load baseline wordlist roots (nocap.txt preferred, rockyou.txt fallback):
+   - Apply same root extraction to baseline
+   - Store in Set for O(1) lookup
+
+3. Filter DIAMOND roots:
+   - Only include roots that appear 2+ times (configurable via `--min-freq`)
+   - Only include roots NOT in baseline Set
+   - Result = genuinely NEW roots discovered from SAND cracking
+
+**For unobtainium.rule (new patterns):**
+
+Rules are generated from observed patterns, NOT from checking uniqueness against existing rules:
+- Detect patterns: suffixes, prefixes, leetspeak, case transformations
+- Generate hashcat rules from frequently-observed patterns (5+ occurrences)
+- Extract actual suffix values from data (top 100 most common)
+- Add year suffix rules for 2015-2026
+
+The rule file complements (not replaces) existing rules like OneRuleToRuleThemStill.
+
+**Baseline Wordlist Location:**
+```
+data/nocap.txt   (preferred - rockyou + rizzyou combined)
+data/rockyou.txt (fallback)
+```
+
+If no baseline exists, the tool warns and all roots appear as "new" - which defeats the purpose. Ensure a baseline wordlist is present before running feedback analysis.
+
+## Cracking Pipeline (SAND → DIAMONDS + GLASS)
 
 | Priority | Phase | Method | Est. Time |
 |----------|-------|--------|-----------|
