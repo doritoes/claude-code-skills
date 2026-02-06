@@ -73,8 +73,19 @@ GRAVEL      →  ROCKS minus rockyou.txt matches (~985M hashes)
                                   │
                                   └──► GLASS     →  Uncrackable (requires HIBP cleartext/rainbow)
 
-UNOBTAINIUM →  Enhanced rule derived from PEARLS+DIAMONDS analysis
+UNOBTAINIUM →  NEW rules from DIAMONDS (NOT in OneRule/nocap.rule)
+BETA        →  NEW root words from DIAMONDS (NOT in nocap.txt)
 ```
+
+**Feedback Loop Files:**
+- `unobtainium.rule` - Contains ONLY rules discovered from DIAMONDS that are NOT already in:
+  - OneRuleToRuleThemStill.rule
+  - nocap.rule
+
+  **Purpose:** If unobtainium cracks are ~0, the baseline rules already cover the patterns.
+  If unobtainium cracks are >0, we've found genuinely NEW patterns worth investigating!
+
+- `BETA.txt` - Contains root words from DIAMONDS NOT in nocap.txt (rockyou+rizzyou)
 
 **Per-batch invariants:**
 - `GRAVEL[N] = PEARLS[N] + SAND[N]`
