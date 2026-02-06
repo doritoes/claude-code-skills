@@ -545,9 +545,10 @@ async function processBatch(
     attackName?: string;
     dryRun?: boolean;
     skipExisting?: boolean;
+    numParts?: number;
   } = {}
 ): Promise<void> {
-  const { dryRun = false, skipExisting = true, attackName } = options;
+  const { dryRun = false, skipExisting = true, attackName, numParts = 1 } = options;
 
   console.log(`\n${"=".repeat(60)}`);
   console.log(`Processing SAND batch ${batchNumber}`);
@@ -562,6 +563,11 @@ async function processBatch(
 
   console.log(`Loaded ${batch.name}: ${batch.hashes.length.toLocaleString()} hashes`);
 
+  // Show parts mode
+  if (numParts > 1) {
+    console.log(`Parallel mode: Splitting into ${numParts} parts for faster rule attacks`);
+  }
+
   // Initialize state manager
   const stateManager = new SandStateManager(DATA_DIR);
   let batchState = stateManager.getBatch(batch.name);
@@ -574,41 +580,100 @@ async function processBatch(
   const { HashtopolisClient } = await getHashtopolisClient();
   const client = HashtopolisClient.fromEnv();
 
-  // Create or reuse hashlist
-  let hashlistId: number;
-  const hashlistName = `SAND-${batch.name}`;
+  // ==========================================================================
+  // BATCH PARTS LOGIC
+  // When numParts > 1, split hashes into multiple hashlists for parallel processing
+  // ==========================================================================
 
-  if (batchState?.hashlistId) {
-    hashlistId = batchState.hashlistId;
-    console.log(`Reusing existing hashlist ${hashlistId} from state for ${batch.name}`);
-  } else {
-    // Check if hashlist already exists on server (recovery from timeout/crash)
-    console.log(`Checking for existing hashlist: ${hashlistName}...`);
-    const existingId = await client.findHashlistByName(hashlistName);
+  interface PartInfo {
+    partNum: number;
+    hashlistId: number;
+    hashlistName: string;
+    hashCount: number;
+  }
 
-    if (existingId) {
-      hashlistId = existingId;
-      console.log(`Found existing hashlist ${hashlistId} on server, recovering...`);
-      // Initialize batch state with recovered hashlist
-      stateManager.initBatch(batch.name, hashlistId, batch.hashes.length);
-      batchState = stateManager.getBatch(batch.name)!;
-    } else if (dryRun) {
-      console.log(`[DRY RUN] Would create hashlist: ${hashlistName}`);
-      hashlistId = 0;
+  const parts: PartInfo[] = [];
+
+  if (numParts === 1) {
+    // SINGLE HASHLIST MODE (original behavior)
+    let hashlistId: number;
+    const hashlistName = `SAND-${batch.name}`;
+
+    if (batchState?.hashlistId) {
+      hashlistId = batchState.hashlistId;
+      console.log(`Reusing existing hashlist ${hashlistId} from state for ${batch.name}`);
     } else {
-      console.log(`Creating new hashlist: ${hashlistName} (${batch.hashes.length.toLocaleString()} hashes)...`);
-      hashlistId = await client.createHashlist({
-        name: hashlistName,
-        hashTypeId: HASH_TYPE_SHA1,
-        hashes: batch.hashes,
-      });
-      console.log(`Created hashlist ${hashlistId}`);
+      // Check if hashlist already exists on server (recovery from timeout/crash)
+      console.log(`Checking for existing hashlist: ${hashlistName}...`);
+      const existingId = await client.findHashlistByName(hashlistName);
 
-      // Initialize batch state
-      stateManager.initBatch(batch.name, hashlistId, batch.hashes.length);
+      if (existingId) {
+        hashlistId = existingId;
+        console.log(`Found existing hashlist ${hashlistId} on server, recovering...`);
+        stateManager.initBatch(batch.name, hashlistId, batch.hashes.length);
+        batchState = stateManager.getBatch(batch.name)!;
+      } else if (dryRun) {
+        console.log(`[DRY RUN] Would create hashlist: ${hashlistName}`);
+        hashlistId = 0;
+      } else {
+        console.log(`Creating new hashlist: ${hashlistName} (${batch.hashes.length.toLocaleString()} hashes)...`);
+        hashlistId = await client.createHashlist({
+          name: hashlistName,
+          hashTypeId: HASH_TYPE_SHA1,
+          hashes: batch.hashes,
+        });
+        console.log(`Created hashlist ${hashlistId}`);
+        stateManager.initBatch(batch.name, hashlistId, batch.hashes.length);
+        batchState = stateManager.getBatch(batch.name)!;
+      }
+    }
+    parts.push({ partNum: 0, hashlistId, hashlistName, hashCount: batch.hashes.length });
+  } else {
+    // MULTI-PART MODE: Split into numParts hashlists for parallel rule attacks
+    const hashesPerPart = Math.ceil(batch.hashes.length / numParts);
+    console.log(`\nCreating ${numParts} hashlist parts (~${hashesPerPart.toLocaleString()} hashes each)...`);
+
+    for (let p = 0; p < numParts; p++) {
+      const start = p * hashesPerPart;
+      const end = Math.min(start + hashesPerPart, batch.hashes.length);
+      const partHashes = batch.hashes.slice(start, end);
+      const hashlistName = `SAND-${batch.name}-part${p + 1}`;
+
+      if (partHashes.length === 0) continue;  // Skip empty parts
+
+      // Check if part already exists
+      let hashlistId: number;
+      const existingId = await client.findHashlistByName(hashlistName);
+
+      if (existingId) {
+        hashlistId = existingId;
+        console.log(`  Part ${p + 1}: Reusing existing hashlist ${hashlistId}`);
+      } else if (dryRun) {
+        console.log(`  Part ${p + 1}: [DRY RUN] Would create ${hashlistName} (${partHashes.length.toLocaleString()} hashes)`);
+        hashlistId = 0;
+      } else {
+        hashlistId = await client.createHashlist({
+          name: hashlistName,
+          hashTypeId: HASH_TYPE_SHA1,
+          hashes: partHashes,
+        });
+        console.log(`  Part ${p + 1}: Created hashlist ${hashlistId} (${partHashes.length.toLocaleString()} hashes)`);
+      }
+
+      parts.push({ partNum: p + 1, hashlistId, hashlistName, hashCount: partHashes.length });
+    }
+
+    // Initialize batch state with first part's hashlist (for backwards compat)
+    if (!batchState && parts.length > 0 && parts[0].hashlistId > 0) {
+      stateManager.initBatch(batch.name, parts[0].hashlistId, batch.hashes.length);
       batchState = stateManager.getBatch(batch.name)!;
     }
+
+    console.log(`Created ${parts.length} hashlist parts`);
   }
+
+  // For single-part mode, use the first (and only) part's hashlistId
+  const primaryHashlistId = parts[0]?.hashlistId || 0;
 
   // Determine which attacks to run
   let attacksToRun: string[];
@@ -695,7 +760,7 @@ async function processBatch(
 
   console.log("--- PRE-FLIGHT COMPLETE ---\n");
 
-  // Run each attack
+  // Run each attack (creating tasks for each part in multi-part mode)
   for (const attack of attacksToRun) {
     const preset = ATTACK_PRESETS[attack];
     if (!preset) {
@@ -715,33 +780,59 @@ async function processBatch(
     console.log(`maxAgents: ${preset.maxAgents}, isSmall: ${preset.isSmall}`);
 
     if (dryRun) {
-      console.log(`[DRY RUN] Would create task: SAND-${batch.name}-${attack}`);
+      if (parts.length > 1) {
+        console.log(`[DRY RUN] Would create ${parts.length} tasks for ${attack} (one per part)`);
+      } else {
+        console.log(`[DRY RUN] Would create task: SAND-${batch.name}-${attack}`);
+      }
       continue;
     }
 
-    // Check if task already exists
-    const taskName = `SAND-${batch.name}-${attack}`;
-    const existingTask = execSQL(config, `SELECT taskId FROM Task WHERE taskName = '${taskName}' AND isArchived = 0 LIMIT 1`);
-    if (existingTask) {
-      console.log(`Task ${taskName} already exists (ID: ${existingTask}), skipping`);
-      continue;
+    // Create task(s) - one per part in multi-part mode
+    let firstTaskId: number | undefined;
+
+    for (const part of parts) {
+      // Task name includes part number in multi-part mode
+      const taskName = parts.length > 1
+        ? `SAND-${batch.name}-part${part.partNum}-${attack}`
+        : `SAND-${batch.name}-${attack}`;
+
+      // Check if task already exists
+      const existingTask = execSQL(config, `SELECT taskId FROM Task WHERE taskName = '${taskName}' AND isArchived = 0 LIMIT 1`);
+      if (existingTask) {
+        if (parts.length > 1) {
+          console.log(`  Part ${part.partNum}: Task already exists (ID: ${existingTask}), skipping`);
+        } else {
+          console.log(`Task ${taskName} already exists (ID: ${existingTask}), skipping`);
+        }
+        if (!firstTaskId) firstTaskId = parseInt(existingTask);
+        continue;
+      }
+
+      // Create task
+      const { taskId } = await createTaskViaDB(config, {
+        name: taskName,
+        hashlistId: part.hashlistId,
+        attackCmd: preset.attackCmd,
+        maxAgents: preset.maxAgents,
+        priority: preset.priority,
+        fileIds: preset.fileIds,
+        isSmall: preset.isSmall,
+      });
+
+      if (parts.length > 1) {
+        console.log(`  Part ${part.partNum}: Created task ${taskId}`);
+      } else {
+        console.log(`Created task ${taskId}: ${taskName}`);
+      }
+
+      if (!firstTaskId) firstTaskId = taskId;
     }
 
-    // Create task
-    const { taskId } = await createTaskViaDB(config, {
-      name: taskName,
-      hashlistId,
-      attackCmd: preset.attackCmd,
-      maxAgents: preset.maxAgents,
-      priority: preset.priority,
-      fileIds: preset.fileIds,
-      isSmall: preset.isSmall,
-    });
-
-    console.log(`Created task ${taskId}: ${taskName}`);
-
-    // Update state
-    stateManager.startAttack(batch.name, attack, taskId);
+    // Update state (use first task ID for tracking)
+    if (firstTaskId) {
+      stateManager.startAttack(batch.name, attack, firstTaskId);
+    }
   }
 
   console.log(`\nBatch ${batchNumber} processing initiated.`);
@@ -896,23 +987,31 @@ if (import.meta.main) {
 SandProcessor - SAND Batch Processing Orchestrator
 
 Usage:
-  bun SandProcessor.ts --batch <n>              Process SAND batch N (all attacks)
-  bun SandProcessor.ts --batch <n> --attack <a> Process single attack on batch
-  bun SandProcessor.ts --batch <n> --dry-run    Preview without submitting
-  bun SandProcessor.ts --status                 Show processing status
-  bun SandProcessor.ts --history <n>            Show attack history for batch
-  bun SandProcessor.ts --analyze                Analyze attack effectiveness
-  bun SandProcessor.ts --attacks                List available attacks
-  bun SandProcessor.ts --list                   List available SAND batches
+  bun SandProcessor.ts --batch <n>                    Process SAND batch N (single hashlist)
+  bun SandProcessor.ts --batch <n> --parts <p>        Split into P parts for parallel rule attacks
+  bun SandProcessor.ts --batch <n> --workers <w>      Alias for --parts (split into W parts)
+  bun SandProcessor.ts --batch <n> --attack <a>       Process single attack on batch
+  bun SandProcessor.ts --batch <n> --dry-run          Preview without submitting
+  bun SandProcessor.ts --status                       Show processing status
+  bun SandProcessor.ts --history <n>                  Show attack history for batch
+  bun SandProcessor.ts --analyze                      Analyze attack effectiveness
+  bun SandProcessor.ts --attacks                      List available attacks
+  bun SandProcessor.ts --list                         List available SAND batches
 
 Options:
   --batch <n>      Batch number to process
+  --parts <n>      Split batch into N parts for parallel processing (default: 1)
+  --workers <n>    Alias for --parts (matches CrackSubmitter API)
   --attack <name>  Specific attack to run (see --attacks for list)
   --dry-run        Preview without creating tasks
   --status         Show overall status
   --history <n>    Show history for batch N
   --analyze        Analyze which attacks are effective
   --attacks        List all available attacks
+
+Parallelization:
+  With --parts 8, rule attacks run 8x faster by splitting the hashlist.
+  Each part gets its own hashlist and tasks, running in parallel.
 
 SAND Directory: ${SAND_DIR}
 `);
@@ -928,11 +1027,16 @@ SAND Directory: ${SAND_DIR}
   let analyzeFlag = false;
   let listAttacksFlag = false;
   let listBatchesFlag = false;
+  let numParts = 1;  // Default: single hashlist (no splitting)
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--batch":
         batchNumber = parseInt(args[++i]);
+        break;
+      case "--parts":
+      case "--workers":
+        numParts = parseInt(args[++i]);
         break;
       case "--attack":
         attackName = args[++i];
@@ -978,7 +1082,7 @@ SAND Directory: ${SAND_DIR}
         }
       }
     } else if (batchNumber !== undefined) {
-      await processBatch(batchNumber, { attackName, dryRun });
+      await processBatch(batchNumber, { attackName, dryRun, numParts });
     } else {
       console.error("Specify --batch <n>, --status, --history <n>, --analyze, --attacks, or --list");
       process.exit(1);
