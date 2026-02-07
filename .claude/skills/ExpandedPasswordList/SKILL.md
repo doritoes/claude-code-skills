@@ -210,6 +210,58 @@ hashcat -m 100 glass.txt wordlist.txt -r new_rules.rule --potfile-disable
 
 **Key Insight:** PACK's `statsgen` reveals which character class patterns dominate your cracked passwords. If 64% are `?l?l?l?l?l?l?d?d` (6 lower + 2 digits), that's a mask worth targeting.
 
+### Long Passphrase Templates (12+ Characters)
+
+Users creating long passphrases follow predictable linguistic/structural patterns. Target these with specific rules:
+
+| Pattern | Example | Hashcat Strategy |
+|---------|---------|------------------|
+| **CamelCase Join** | `GreenAppleBlueSky` | Wordlist + Rule: `TN` (capitalize every word) |
+| **Separator Swap** | `green-apple-blue-sky` | Wordlist + Rule: `s- ` (replace spaces with hyphens) |
+| **NIST Special** | `GreenAppleBlueSky1!` | Wordlist + Rule: `$1 $!` (append digit + symbol) |
+| **Title Strings** | `TheLastOfUs` | Scraped media lists (IMDb, Spotify, Wikipedia) |
+| **Leetspeak Phrasing** | `gr33n4ppl3` | Combinator + Leet Rule |
+| **Keyboard Walks** | `qwertyuiop123` | Keyboard walk wordlists |
+| **Year Suffix** | `MyDogBuster2024` | Wordlist + Rule: `$2 $0 $2 $4` |
+
+**Combinator Attack for Multi-Word:**
+```bash
+# Combine two wordlists to create phrases
+hashcat -a 1 -m 100 hashes.txt words1.txt words2.txt
+
+# With rules on each side
+hashcat -a 1 -m 100 hashes.txt words1.txt words2.txt -j 'c' -k '$1'
+# Left: capitalize, Right: append "1"
+```
+
+**Media/Pop Culture Wordlists:**
+- IMDb movie/TV titles
+- Spotify playlist names, song titles
+- Video game titles (Steam, IGN lists)
+- Sports teams, player names
+- Book titles, character names
+
+**Rule Examples for Passphrases:**
+```
+# CamelCase: capitalize each word boundary
+TN
+
+# Common separators
+s -    # space to hyphen
+s _    # space to underscore
+s .    # space to period
+
+# NIST suffix patterns (digit + symbol)
+$1 $!
+$1 $@
+$2 $0 $2 $4 $!
+
+# Leet substitutions
+sa@ se3 si1 so0
+```
+
+**Key Insight:** 12+ char passwords in DIAMONDS show word roots (see BRUTE8-ANALYSIS.md). Focus rule development here, not on random 8-char strings.
+
 ### Rainbow Tables
 
 | Source | Coverage | Hash Type | Size | Access |
