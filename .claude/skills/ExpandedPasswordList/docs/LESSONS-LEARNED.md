@@ -1708,41 +1708,67 @@ bun Tools/SandArchiver.ts --batch batch-000N
 ### Added to Skill.md
 Added "⚠️ SAND State Maintenance (CRITICAL)" section with clear documentation of the 3-tool workflow.
 
-## Lesson #57: SAND = System-Generated Passwords (2026-02-07)
+## Lesson #57: 8-Char Brute Force Finds Random Passwords (2026-02-07) - REVISED
 
-### Discovery
-Analysis of brute-8 cracks on SAND batch-0001 revealed that **52.7% of SAND passwords are lowercase + digits random strings**.
+### Original Discovery
+Analysis of brute-8 cracks on SAND batch-0001 showed 8-char passwords are predominantly random alphanumeric strings.
 
-### Key Data
-- 65,758 total cracked
-- 42,515 NEW from brute-8 alone
-- 34,684 (52.7%) are lowercase + digits
-- 99%+ have NO recognizable English word roots
+### Key Data (DIAMONDS batch-0001)
+- 23,295 total cracked (6.6% of batch)
+- 327,829 remain in GLASS (93.4% - unanalyzed)
+- 1,830 8-char passwords (7.9% of cracks) - mostly random
+- 907 12+ char passwords (3.9% of cracks) - mostly structured
 
-### Examples
+### What 8-Char Passwords Look Like
 ```
 7eknr2rq    c4w3wr72    p7zr3iyq    6t3s0u7i
 zhcuv7f8    kx5ct96k    cg28279p    lq9024fv
 ```
+These ARE system-generated (random, interleaved digits).
 
-These are NOT `password123` patterns. Digits are interleaved throughout.
+### What 12+ Char Passwords Look Like
+```
+controls8370    cooperative2264    arianagrande1965
+leagueoflegends26    strangerthings509    dragonmaster5262
+```
+These have **dictionary word roots** - rules CAN target these.
 
-### Root Cause
-SAND = passwords that survived rockyou + OneRule + all dictionary attacks.
-
-What remains are:
-1. **Password manager output** (random generators)
-2. **System-assigned credentials** (auto-generated)
-3. **API keys / tokens** (hex, base36, etc.)
-4. **Foreign language passwords** (transliterated)
-
-### Implications
-- **Rules cannot crack SAND** - no word roots to transform
-- **Brute force is the only option** for 90%+ of SAND
-- **Focus rule development on GRAVEL**, not SAND
-- **Brute-7 + Brute-8 = 70%+ of SAND cracks**
-
-### Recommendation
-Keep brute-8 in the SAND pipeline despite cost. It finds 42,000+ passwords that NO rule could ever find.
+### Key Correction
+**8-char random ≠ all of SAND**. We only analyzed what we cracked, not what remains in GLASS.
 
 See `docs/BRUTE8-ANALYSIS.md` for full analysis.
+
+---
+
+## Lesson #58: Analysis Bias - Limited Data = Limited Conclusions (2026-02-07)
+
+### What Happened
+Drew sweeping conclusions ("SAND = system-generated passwords") from limited data.
+
+### The Circular Reasoning Problem
+```
+Ran brute-8 → Found 8-char passwords → Concluded "SAND = random"
+                    ↑
+          This is what brute-8 FINDS
+```
+
+### The Numbers That Mattered
+- 23,295 passwords analyzed (DIAMONDS)
+- 327,829 passwords NOT analyzed (GLASS)
+- 39 16+ char passwords in sample - statistically meaningless
+- **93.4% of data was unexamined**
+
+### Cost Ignored
+- $1.8M to run brute-8 on all 4,307 GRAVEL batches
+- Goal is building wordlists, not exhaustive cracking
+- Longer passwords (12+, 16+) have word roots - cheaper to target with rules
+
+### Prevention
+1. **State sample sizes clearly** - "N=39 is insufficient for conclusions"
+2. **Acknowledge unknowns** - "We don't know what's in GLASS"
+3. **Question circular logic** - "We found X because we looked for X"
+4. **Consider cost/benefit** - $1.8M for brute force vs targeted attacks
+5. **Focus on the goal** - Building wordlists, not cracking all of HIBP
+
+### Key Insight
+Real findings come from 12+ and 16+ character passwords (structured, word-based), not 8-char brute force results (random noise).

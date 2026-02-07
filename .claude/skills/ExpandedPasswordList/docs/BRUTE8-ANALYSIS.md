@@ -1,171 +1,160 @@
-# Brute-8 Password Analysis (2026-02-07)
+# Brute-8 Password Analysis (2026-02-07) - REVISED
 
 ## Executive Summary
 
-Analysis of 65,758 passwords cracked by brute-8 attack on SAND batch-0001 reveals that **SAND passwords are fundamentally different from dictionary-based passwords**. They are high-entropy random strings that cannot be cracked by rules.
+Analysis of 23,295 passwords cracked in SAND batch-0001. Initial conclusions about "SAND = system-generated passwords" were premature.
 
-**Key Finding:** Lowercase + digits accounts for **52.7%** of all cracks - these are random alphanumeric strings, not word+number patterns.
+**Key Limitation:** We ran brute-8 and found mostly 8-char passwords. This tells us about passwords we can brute-force, NOT about what remains in GLASS.
 
 ## Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total cracked (hashlist 1575) | 65,758 |
-| Previous DIAMONDS (attacks 1-7) | 23,295 |
-| **New from brute-8** | **42,515** |
-| Progress at analysis | 46.1% |
-| Projected total when complete | ~90,000 |
+| Total DIAMONDS (batch-0001) | 23,295 |
+| Total GLASS (batch-0001) | 327,829 |
+| Crack rate | 6.6% |
+| **Unanalyzed** | **93.4%** |
 
-## Length Distribution
+## What We Know
+
+### Length Distribution (DIAMONDS only - what we cracked)
 
 | Length | Count | % | Notes |
 |--------|-------|---|-------|
-| **8 chars** | **44,137** | **67.1%** | Brute-8 target |
-| 7 chars | 8,636 | 13.1% | Caught by brute-7 |
-| 6 chars | 7,307 | 11.1% | Caught by brute-6 |
-| 5 chars | 980 | 1.5% | Caught by brute-5 |
-| 4 chars | 142 | 0.2% | Caught by brute-4 |
-| 9+ chars | 2,556 | 3.9% | Overflow from other attacks |
+| 5 chars | 986 | 4.2% | Short passwords |
+| 6 chars | 7,312 | 31.4% | Caught by brute-6 |
+| 7 chars | 8,616 | 37.0% | Caught by brute-7 |
+| 8 chars | 1,830 | 7.9% | Caught by brute-8 |
+| 9-11 chars | 3,627 | 15.6% | Caught by dictionary/rules |
+| **12+ chars** | **907** | **3.9%** | See analysis below |
+| **16+ chars** | **39** | **0.17%** | Insufficient data |
 
-## Character Class Analysis
+### 8-Character Passwords (1,830)
 
-| Type | Count | % | Example |
-|------|-------|---|---------|
-| **Lowercase + digits** | **34,684** | **52.7%** | `7eknr2rq`, `c4w3wr72` |
-| Pure lowercase | 13,997 | 21.3% | `gyledyzy`, `motnufrj` |
-| With symbols | 8,434 | 12.8% | `Zi_Zi120`, `pr0$pero` |
-| Mixed case (no digits) | 4,299 | 6.5% | `gTyJoWct`, `rIrNhRVV` |
-| Pure numeric | 1,170 | 1.8% | `12345678` |
-| Pure uppercase | 596 | 0.9% | `AHANEKOM`, `RBKTH123` |
+These are predominantly random alphanumeric strings (brute-8 target):
+- Lowercase + digits: ~60%
+- Mixed case: ~25%
+- With symbols: ~15%
 
-### The 52.7% Lowercase+Digits Finding
+Examples: `7eknr2rq`, `c4w3wr72`, `p7zr3iyq`
 
-This is the most significant insight. Over half of SAND passwords are:
-- 8 characters
-- Only lowercase letters and digits
-- **Random distribution** (not word+suffix patterns)
+**Interpretation:** Brute-8 finds what brute-8 can find. These are system-generated, password manager output, or truly random.
 
-Examples from the dataset:
+### 12+ Character Passwords (907) - STRUCTURED
+
+Unlike 8-char, these have **dictionary word roots**:
+
+| Pattern | Count | % | Examples |
+|---------|-------|---|----------|
+| lowercase + 4 digits | 583 | 64% | `controls8370`, `cooperative2264` |
+| lowercase + 6 digits | 92 | 10% | `sriwahyuningsih0872` |
+| lowercase + 3 digits | 90 | 10% | `morpheus356` |
+| Capitalized + digits | 84 | 9% | `Littlewood6360`, `Madagascar5250` |
+| Other | ~60 | 7% | `inuyasha&kagome0458` |
+
+**Key Insight:** 12+ char passwords have word roots. Rules can target these.
+
+### 16+ Character Passwords (39) - INSUFFICIENT DATA
+
+Sample (all 39):
 ```
-7eknr2rq    c4w3wr72    p7zr3iyq    6t3s0u7i
-zhcuv7f8    kx5ct96k    cg28279p    lq9024fv
-d28173ae    f6231af2    9v3mj3ao    7jixnylg
-```
-
-These are NOT dictionary words with numbers appended. They are:
-1. System-generated passwords
-2. Random password generator output
-3. Hex/base36 encoded values
-4. Foreign transliterations that look random to English analysis
-
-## Why Rules Cannot Crack These
-
-### No Dictionary Roots
-
-Word root analysis found almost no recognizable words:
-- Only 5 instances of "dan"
-- Only 4 instances of "get"
-- 99%+ have no recognizable English root
-
-### Mixed Entropy Throughout
-
-Unlike `password123` (word + suffix), these have digits interleaved:
-```
-p7zr3iyq   (digit at position 2, 5)
-c4w3wr72   (digits at 2, 4, 7, 8)
-6t3s0u7i   (digits at 1, 3, 5, 7)
+inuyasha&kagome0458     justification7308      arianagrande1965
+sriwahyuningsih0872     jorgeantonio3246       surroundings2757
+albertoromero2035       diegoarmando3126       barbaraoliveira8893
+absolutezero4869        dragonmaster5262       embarrassing7026
+complications2438       devilmaycry43666       investigation3558
+Doppelganger_229        shewillbelove1866      longdistance3914
+kristofferson2679       cutiewithabooty8212    leagueoflegends26
+thoughtfully3287        jackfruitbed4757       strangerthings509
+shootingfish2531        casesensitive6953      DANIELORLANDO3405
+giuliocesare1481        ihatemyfamily1164      gingerspice19969
+massimiliano7690        platinumkiwi6531       (+ 7 $HEX entries)
 ```
 
-No rule can transform a dictionary word into these patterns.
+**Observations:**
+- Pop culture: `arianagrande`, `leagueoflegends`, `strangerthings`, `devilmaycry`
+- Compound words: `dragonmaster`, `absolutezero`, `longdistance`
+- Foreign names: `sriwahyuningsih`, `giuliocesare`, `massimiliano`
+- Phrases: `ihatemyfamily`, `shewillbelove`, `cutiewithabooty`
 
-### Comparison: What Rules CAN Crack
+**Conclusion:** 39 samples is statistically meaningless. Cannot draw conclusions.
 
-Rules work on structured passwords:
+## What We DON'T Know
+
+### GLASS (327,829 uncracked hashes)
+
+We have NO visibility into:
+- Password length distribution in GLASS
+- Character class distribution in GLASS
+- Whether GLASS contains word-based passwords we haven't tried to crack
+- What % of GLASS is 12+ or 16+ characters
+
+### The Circular Reasoning Problem
+
 ```
-Password1    → "password" + capitalize + append "1"
-Summer2023   → "summer" + capitalize + append "2023"
-monkey!@#    → "monkey" + append "!@#"
-```
-
-But SAND passwords have no base word to transform.
-
-## Structured Patterns (Minor)
-
-Some passwords DO have structure, but they're a small minority:
-
-| Pattern | Count | % of New | Hashcat Mask |
-|---------|-------|----------|--------------|
-| Cap + 7 lower | 1,049 | 2.5% | `?u?l?l?l?l?l?l?l` |
-| 6 lower + 2 digits | 1,216 | 2.9% | `?l?l?l?l?l?l?d?d` |
-| 5 lower + 3 digits | 417 | 1.0% | `?l?l?l?l?l?d?d?d` |
-| 4 lower + 4 digits | 779 | 1.8% | `?l?l?l?l?d?d?d?d` |
-| Cap + 5 lower + 2 digits | 539 | 1.3% | `?u?l?l?l?l?l?d?d` |
-| **Total structured** | **~4,000** | **~9%** | - |
-
-We already have masks for most of these (`mask-lllllldd`, `mask-Ullllldd`).
-
-## Symbol Analysis
-
-| Symbol | Count | Position |
-|--------|-------|----------|
-| @ | 2,370 | Often middle |
-| _ | 1,648 | Often separator |
-| - | 1,557 | Often separator |
-| ! | 1,459 | Often end |
-| . | 1,200 | Often separator |
-| $ | 1,099 | Often end |
-
-Symbol at end: 3,027 (36% of symbol passwords)
-Symbol at start: 952 (11% of symbol passwords)
-
-## Recommendations
-
-### For SAND Processing
-
-1. **Keep brute-8 in pipeline** - it's the only way to crack 50%+ of SAND
-2. **Brute-7 + Brute-8 = 70%+ of SAND cracks** - these are essential
-3. **Consider brute-9 for GLASS** - if budget allows, extends the winning strategy
-
-### For Rule Development
-
-1. **No new rules needed for SAND** - the passwords are fundamentally random
-2. **Focus rule development on GRAVEL (Stage 1)** - that's where words live
-3. **The feedback loop (unobtainium.rule) should focus on PEARL analysis**, not DIAMOND
-
-### New Masks (Minor Gains)
-
-If adding masks, these would help slightly:
-```bash
-# 5 lower + 3 digits (417 potential hits per batch)
-?l?l?l?l?l?d?d?d
-
-# 4 lower + 4 digits (779 potential hits per batch)
-?l?l?l?l?d?d?d?d
-
-# But these only find ~1,200 passwords vs brute-8's 42,000+
+Ran brute-8 → Found 8-char passwords → Concluded "SAND = random"
+                    ↑
+          This is what brute-8 FINDS
 ```
 
-## Key Insight for Future Work
+We haven't tried:
+- Targeted dictionary attacks with longer word lists
+- Compound word attacks (`word+word+digits`)
+- Pop culture wordlists (`arianagrande`, `strangerthings`)
+- Year suffix attacks (2020, 2021, 2022, etc.)
 
-**SAND = System-Generated Passwords**
+## Cost Analysis
 
-The passwords that survive rockyou + OneRule + all dictionary attacks are NOT human-created passwords. They are:
+| Scope | Batches | Cost @ $421/batch | Notes |
+|-------|---------|-------------------|-------|
+| SAND (162 batches) | 162 | $68,202 | Current pipeline |
+| GRAVEL (4,307 batches) | 4,307 | $1,813,247 | Full brute-8 on all |
 
-1. **Password manager output** (random generators)
-2. **System-assigned credentials** (auto-generated)
-3. **API keys / tokens** (hex, base64, etc.)
-4. **Foreign language passwords** (transliterated, look random)
+**Question:** Is brute-8 on all GRAVEL worth $1.8M when the goal is building wordlists?
 
-This explains why:
-- Brute force dominates SAND (70%+ of cracks)
-- Dictionary attacks fail (<1% ROI on SAND)
-- Rules are ineffective (no word roots to transform)
+## Revised Recommendations
+
+### What Brute-8 IS Good For
+- Finding 8-char random/system passwords
+- ~6% crack rate on SAND
+- Definitive: if it survives brute-8, password is 9+ chars or has special chars
+
+### What We Should Focus On Instead
+
+1. **PEARLS Analysis** - Analyze passwords cracked in GRAVEL Stage 1
+   - These are word-based passwords that rules cracked
+   - Build wordlists from these, not from brute-8 results
+
+2. **Targeted Longer Attacks** - Before running brute-9/10/11:
+   - Try compound word attacks on GLASS
+   - Try pop culture wordlists
+   - Try foreign language dictionaries
+
+3. **HIBP Frequency Analysis** - For GLASS hashes:
+   - Higher occurrence count = more common = more likely crackable
+   - Prioritize high-frequency GLASS for targeted attacks
+
+4. **12+ and 16+ Character Research**
+   - Need more data before drawing conclusions
+   - Analyze PEARLS for longer password patterns
+   - Analyze other breaches for modern password trends
+
+## Key Learnings
+
+1. **Brute force finds what brute force finds** - don't over-generalize
+2. **Limited data = limited conclusions** - 39 samples is not analysis
+3. **Cost matters** - $1.8M for brute-8 on all GRAVEL is not justified
+4. **The goal is wordlists** - not exhaustive cracking of HIBP
+
+## Next Steps for Real Analysis
+
+1. Analyze PEARLS (Stage 1 cracks) for word patterns
+2. Cross-reference GLASS hashes with HIBP counts to find high-value targets
+3. Build pop culture / modern wordlists from PEARLS patterns
+4. Test targeted attacks on GLASS before concluding "uncrackable"
 
 ## Data Files
 
-Analysis performed on:
-- Hashlist ID: 1575
-- Batch: SAND-batch-0001
-- Attack: brute-8 (8-character exhaustive)
-- Date: 2026-02-07
-- Progress: 46.1% at time of analysis
+- DIAMONDS batch-0001: 23,295 cracked (6.6%)
+- GLASS batch-0001: 327,829 uncracked (93.4%)
+- Analysis date: 2026-02-07
