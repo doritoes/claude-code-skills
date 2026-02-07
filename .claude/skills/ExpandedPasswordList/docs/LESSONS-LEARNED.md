@@ -1707,3 +1707,42 @@ bun Tools/SandArchiver.ts --batch batch-000N
 
 ### Added to Skill.md
 Added "⚠️ SAND State Maintenance (CRITICAL)" section with clear documentation of the 3-tool workflow.
+
+## Lesson #57: SAND = System-Generated Passwords (2026-02-07)
+
+### Discovery
+Analysis of brute-8 cracks on SAND batch-0001 revealed that **52.7% of SAND passwords are lowercase + digits random strings**.
+
+### Key Data
+- 65,758 total cracked
+- 42,515 NEW from brute-8 alone
+- 34,684 (52.7%) are lowercase + digits
+- 99%+ have NO recognizable English word roots
+
+### Examples
+```
+7eknr2rq    c4w3wr72    p7zr3iyq    6t3s0u7i
+zhcuv7f8    kx5ct96k    cg28279p    lq9024fv
+```
+
+These are NOT `password123` patterns. Digits are interleaved throughout.
+
+### Root Cause
+SAND = passwords that survived rockyou + OneRule + all dictionary attacks.
+
+What remains are:
+1. **Password manager output** (random generators)
+2. **System-assigned credentials** (auto-generated)
+3. **API keys / tokens** (hex, base36, etc.)
+4. **Foreign language passwords** (transliterated)
+
+### Implications
+- **Rules cannot crack SAND** - no word roots to transform
+- **Brute force is the only option** for 90%+ of SAND
+- **Focus rule development on GRAVEL**, not SAND
+- **Brute-7 + Brute-8 = 70%+ of SAND cracks**
+
+### Recommendation
+Keep brute-8 in the SAND pipeline despite cost. It finds 42,000+ passwords that NO rule could ever find.
+
+See `docs/BRUTE8-ANALYSIS.md` for full analysis.
