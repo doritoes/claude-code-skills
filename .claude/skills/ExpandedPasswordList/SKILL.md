@@ -142,6 +142,92 @@ BETA        →  NEW root words extracted from DIAMONDS (NOT in nocap.txt)
 4. **Self-maintaining** - Pipeline can be re-run as HIBP updates
 5. **Feedback loop** - Cracked passwords enhance future attacks
 
+---
+
+## Plaintext Password Sources (Phase 2 Preparation)
+
+Alternative paths to unmask HIBP hashes without brute force. These sources can be deduplicated against GLASS to recover plaintext.
+
+### Mega-Compilations (Plaintext)
+
+| Source | Size | Description | Legitimacy | Access |
+|--------|------|-------------|------------|--------|
+| **RockYou2024** | 9.9B passwords | Largest compilation (July 2024). Adds 1.5B passwords from 2021-2024 to previous compilations. | Public leak | Torrents, forums |
+| **16B Credential Leak** | 16B records | June 2025 mega-compilation from 30+ datasets, heavily sourced from infostealer malware logs. | Dark web origin | Forums, markets |
+| **Collection #1-5** | 2.7B+ records | 2019 compilation by Troy Hunt. 773M unique emails, 21M unique passwords. | Public leak | Archive sites |
+| **BreachCompilation** | 1.4B credentials | 2017 compilation of multiple breaches. | Public leak | Archive sites |
+
+**Value:** Cross-reference SHA-1 hashes against these to unmask GLASS entries.
+
+### Rainbow Tables
+
+| Source | Coverage | Hash Type | Size | Access |
+|--------|----------|-----------|------|--------|
+| **CrackStation** | 15B entries | MD5, SHA1 | 190GB | [crackstation.net](https://crackstation.net/) |
+| **FreeRainbowTables** | Various | Multiple | Large | [freerainbowtables.com](https://freerainbowtables.com/) (offline) |
+| **RainbowCrackalack** | 93% of 8-char NTLM | NTLM | - | [GitHub](https://github.com/jtesta/rainbowcrackalack) |
+| **Project RainbowCrack** | Configurable | Multiple | Varies | [project-rainbowcrack.com](http://project-rainbowcrack.com/) |
+
+**Limitation:** HIBP uses unsalted SHA-1, so rainbow tables ARE applicable (no salt defense).
+
+### Hash Lookup Services (Online)
+
+| Service | Database Size | API | Notes |
+|---------|--------------|-----|-------|
+| **CrackStation** | 190GB / 15B | Web only | Free, rate-limited |
+| **Hashes.org** | Large | Web + API | Community-sourced |
+| **NTLM.PW** | Focused | Web | NTLM-focused |
+| **Weakpass** | Curated | API available | [weakpass.com](https://zzzteph.github.io/weakpass/) |
+
+**Use case:** Batch lookup of high-value GLASS hashes before committing GPU time.
+
+### Academic/Research Datasets
+
+| Dataset | Size | Source | Access |
+|---------|------|--------|--------|
+| **70M Yahoo Corpus** | 70M passwords | Cambridge research | Academic request |
+| **220M Multi-site Study** | 220M passwords | 12 leaked sites | Research papers |
+| **1.4B TensorFlow Analysis** | 1.4B passwords | [GitHub](https://github.com/philipperemy/tensorflow-1.4-billion-password-analysis) | Public |
+| **Pwdb-Public** | 1B+ credentials | [GitHub](https://github.com/ignis-sec/Pwdb-Public) | Public |
+
+**Value:** Cleaned, deduplicated datasets for pattern analysis.
+
+### HIBP Direct Access
+
+| Method | Description | Effort |
+|--------|-------------|--------|
+| **K-Anonymity API** | Query by SHA-1 prefix, get all matching hashes + counts | Free, no key |
+| **Bulk Download** | Download all 1B+ hashes via [hibp-downloader](https://github.com/threatpatrols/hibp-downloader) | ~35GB |
+| **Pwned Passwords Downloader** | Official .NET tool from Troy Hunt | [GitHub](https://github.com/HaveIBeenPwned/PwnedPasswordsDownloader) |
+
+**Note:** HIBP provides HASHES only, not plaintext. But occurrence counts help prioritize high-value targets.
+
+### Deduplication Strategy
+
+```
+1. Download mega-compilation (RockYou2024, Collection#1-5)
+2. Hash each plaintext password to SHA-1
+3. Compare against GLASS hashes
+4. Matches = unmasked passwords → add to DIAMONDS
+5. Remaining GLASS = truly uncrackable or not in any leak
+```
+
+**Estimated coverage:** Mega-compilations may unmask 30-60% of GLASS depending on overlap.
+
+### Ethical & Legal Considerations
+
+| Consideration | Guidance |
+|---------------|----------|
+| **Data origin** | Compilations are from unauthorized breaches - handle appropriately |
+| **Storage** | Store hashes, not plaintext where possible |
+| **Sharing** | Do not redistribute raw breach data |
+| **Purpose** | Security research, password strength analysis, tool improvement |
+| **HIBP model** | Troy Hunt's approach: hashes only, k-anonymity, no PII exposure |
+
+**This skill's purpose:** Improve cracking tools, not exploit credentials. Plaintext is intermediate data for rule/wordlist development, not an end product.
+
+---
+
 ## Workflow Routing
 
 **⚠️ ALWAYS run `bun Tools/PipelineMonitor.ts --quick` FIRST before any other operation.**
