@@ -1491,6 +1491,66 @@ bun Tools/SandStateManager.ts --reset     # Clear failed state
 bun Tools/SandProcessor.ts --batch 1      # Start fresh
 ```
 
+## Lesson #54: Hashcat Keyspace vs Actual Candidates (2026-02-07)
+
+**Context:** During brute-8 attack on SAND batch-0001, keyspace showed 7.74B but expected 6.63 quadrillion for 8-char ?a mask.
+
+### The Discovery
+
+1. **hashcat --keyspace is NOT the actual candidate count**
+   - It's optimized for work distribution, excludes "mod loop" portion
+   - For `-a 3 ?a?a?a?a?a?a?a?a`: keyspace = 95^5 = 7,737,809,375
+   - Actual candidates = 95^8 = 6,634,204,312,890,625
+
+2. **The mod loop handles remaining iterations internally**
+   - Ratio: 95^8 / 95^5 = 95^3 = 857,375
+   - Each "keyspace unit" = 857,375 actual password tests
+
+3. **Time calculations must account for this**
+   - At 35.86 GH/s, full 8-char brute takes ~51 hours, not minutes
+
+### Reference
+
+- [hashcat issue #2736](https://github.com/hashcat/hashcat/issues/2736)
+- [hashcat mask attack wiki](https://hashcat.net/wiki/doku.php?id=mask_attack)
+
+---
+
+## Lesson #55: Missing brute-1 through brute-4 (2026-02-07)
+
+**Context:** When --increment flag failed with Hashtopolis chunking, the "fix" was to use brute-5 only - dropping 1-4 char brute entirely.
+
+### The Gap
+
+| Attack | Keyspace | Time @ 35 GH/s | Status |
+|--------|----------|----------------|--------|
+| brute-1 | 95 | <1ms | **NEVER IMPLEMENTED** |
+| brute-2 | 9,025 | <1ms | **NEVER IMPLEMENTED** |
+| brute-3 | 857,375 | <1ms | **NEVER IMPLEMENTED** |
+| brute-4 | 81,450,625 | ~2ms | **NEVER IMPLEMENTED** |
+
+**Total 1-4 char keyspace: 82,317,120** - trivially crackable in <1 second!
+
+### Fix Required
+
+Add to SandProcessor.ts:
+```typescript
+"brute-1-4": {
+  name: "brute-1-4",
+  phase: "brute",
+  attackCmd: "#HL# -a 3 ?a?a?a?a --increment --increment-min 1",
+  // ... OR split into individual tasks
+}
+```
+
+Or create 4 separate tasks if --increment still fails with Hashtopolis.
+
+### Key Learning
+
+When fixing a bug, don't just remove the failing feature - implement an alternative that covers the same ground.
+
+---
+
 ## Lesson #53: Use SandArchiver for SAND Tasks, Not SafeArchiver (2026-02-06)
 
 **Context:** Batch-0002 was archived using SafeArchiver directly, causing SAND state to become out of sync (attacksApplied=[], attacksRemaining=[all], status=in_progress even though all tasks were archived).

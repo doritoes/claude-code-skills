@@ -74,7 +74,11 @@ export interface SandState {
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
   // OPTIMIZED ATTACK ORDER - Based on Batch 2 ROI Analysis (2026-02-06)
+  // Updated 2026-02-07: Added brute-1-4 (was missing! Lesson #55)
   // ══════════════════════════════════════════════════════════════════════
+  //
+  // TIER 0: INSTANT (trivial keyspace, <1 second)
+  "brute-1-4",   // 82M keyspace - INSTANT, run first!
   //
   // TIER 1: HIGH ROI (70.6% of cracks) - Brute force dominates SAND
   "brute-7",     // 38.5% of cracks - TOP PERFORMER

@@ -229,6 +229,19 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
   // ==========================================================================
   // NOTE: --increment mode doesn't work well with Hashtopolis chunking
   // Split into individual length attacks instead
+  // LESSON #55: brute-1-4 were missing! Added 2026-02-07.
+  "brute-1-4": {
+    name: "brute-1-4",
+    phase: "brute",
+    // Combined 1-4 char into single task - total keyspace only 82M, trivial
+    attackCmd: "#HL# -a 3 ?a?a?a?a --increment --increment-min 1",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 1,  // Tiny job - completes in <1 second
+    priority: 95,  // HIGHEST - run first, instant results
+    expectedRate: 0.001,
+    description: "Brute force 1-4 characters (trivial keyspace)",
+  },
   "brute-5": {
     name: "brute-5",
     phase: "brute",
