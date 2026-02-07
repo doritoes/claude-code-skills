@@ -180,6 +180,36 @@ Curated wordlists already converted to plaintext by researchers. Best for patter
 
 **Recommendation:** Start with curated lists (Probable-Wordlists, CrackStation) for pattern analysis, use mega-compilations for coverage testing.
 
+### Analysis Tools (Pattern Extraction)
+
+Tools to reverse-engineer password patterns from plaintext lists and generate Hashcat rules.
+
+| Tool | Purpose | Output | Access |
+|------|---------|--------|--------|
+| **PACK (statsgen)** | Password Analysis and Cracking Kit. Analyzes wordlists to find common masks. | Mask frequency (e.g., `?u?l?l?l?d?d?d?s`) | [GitHub](https://github.com/iphelix/pack) |
+| **pcfg_cracker** | Probabilistic Context-Free Grammars. Learns the "grammar" of how users build passwords from specific datasets. | PCFG training data, grammar rules | [GitHub](https://github.com/lakiw/pcfg_cracker) |
+| **Hashcat-Rules (T0XIC0DER)** | Pre-optimized rules for long passwords that Best64/OneRule miss. | Ready-to-use .rule files | [GitHub](https://github.com/T0XIC0DER/Hashcat-Rules) |
+| **Pipal** | Password statistics analyzer. Generates reports on length, charset, patterns. | HTML/text reports | [GitHub](https://github.com/digininja/pipal) |
+| **Mentalist** | GUI for building wordlists with custom rules and chains. | Wordlists, rule chains | [GitHub](https://github.com/sc0tfree/mentalist) |
+
+**Workflow for Rule Development:**
+```bash
+# 1. Analyze DIAMONDS to find common masks
+python statsgen.py diamonds-batch-0001.txt -o masks.txt
+
+# 2. Train PCFG on cracked passwords
+python pcfg_trainer.py --input diamonds-batch-0001.txt --output training/
+
+# 3. Generate candidate rules from patterns
+# Manual: Convert top masks to Hashcat rules
+# Or use T0XIC0DER rules for long password coverage
+
+# 4. Test new rules against GLASS
+hashcat -m 100 glass.txt wordlist.txt -r new_rules.rule --potfile-disable
+```
+
+**Key Insight:** PACK's `statsgen` reveals which character class patterns dominate your cracked passwords. If 64% are `?l?l?l?l?l?l?d?d` (6 lower + 2 digits), that's a mask worth targeting.
+
 ### Rainbow Tables
 
 | Source | Coverage | Hash Type | Size | Access |
