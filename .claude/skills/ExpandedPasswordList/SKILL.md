@@ -159,6 +159,27 @@ Alternative paths to unmask HIBP hashes without brute force. These sources can b
 
 **Value:** Cross-reference SHA-1 hashes against these to unmask GLASS entries.
 
+### Reliable Plaintext Sources (For Rule Development)
+
+Curated wordlists already converted to plaintext by researchers. Best for pattern analysis and Hashcat rule generation.
+
+| Dataset | Size | Description | Access |
+|---------|------|-------------|--------|
+| **RockYou.txt** | 14.3M | The "OG" list from 2009 RockYou breach. Perfect for learning basic patterns. | Included with Kali, widely available |
+| **RockYou2021/2024** | 8B-10B | Massive compilations of various leaks. **Note:** Contains "garbage" data (non-passwords) - requires cleaning. | Torrents, forums |
+| **Probable-Wordlists** | Various | Curated lists based on real-world leaks by berzerk0. Quality over quantity. | [GitHub](https://github.com/berzerk0/Probable-Wordlists) |
+| **Weakpass** | Terabytes | Massive repository specifically for Hashcat and John the Ripper. | [weakpass.com](https://weakpass.com/) |
+| **SecLists** | Various | Collection of security testing lists including passwords. | [GitHub](https://github.com/danielmiessler/SecLists) |
+| **CrackStation Wordlist** | 1.5B | Human-only passwords (no random strings). | [crackstation.net](https://crackstation.net/crackstation-wordlist-password-cracking-dictionary.htm) |
+
+**Quality Note:** RockYou2021/2024 mega-compilations contain significant noise:
+- Random strings from password managers
+- Hashes mistakenly included as passwords
+- Corrupted/truncated entries
+- Non-password data (URLs, emails, etc.)
+
+**Recommendation:** Start with curated lists (Probable-Wordlists, CrackStation) for pattern analysis, use mega-compilations for coverage testing.
+
 ### Rainbow Tables
 
 | Source | Coverage | Hash Type | Size | Access |
