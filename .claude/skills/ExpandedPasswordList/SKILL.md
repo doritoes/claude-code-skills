@@ -5,7 +5,43 @@ description: Generate expanded password wordlists from HIBP Pwned Passwords. USE
 
 # ExpandedPasswordList
 
-Automated pipeline to extract real breach passwords from HIBP Pwned Passwords that supplement rockyou.txt.
+Research pipeline to study password cracking effectiveness and improve tools.
+
+## Purpose & Vision
+
+**Goal:** Improve password cracking rules, wordlists, and strategies by studying what current tools miss.
+
+**Input:** HIBP Pwned Passwords (~1B SHA-1 hashes) - the best available sample of real-world passwords.
+
+**Method:** Measure effectiveness of current tools (Hashtopolis, rockyou.txt, OneRuleToRuleThemStill), then analyze what survives to find improvement opportunities.
+
+### Phased Approach
+
+| Phase | Focus | Status |
+|-------|-------|--------|
+| **1. Skill Building** | Run pipeline on HIBP sample, learn patterns, refine strategies | Current |
+| **2. Cleartext Acquisition** | Locate fresh dumps, rainbow tables, unmask methods | Future |
+| **3. Full Analysis** | Complete HIBP cleartext corpus → next-level tool improvement | Goal |
+
+### Constraints
+
+- **Cannot brute force all HIBP** - Too expensive ($1.8M+ for 8-char on all batches)
+- **Sample-based learning** - Brute force affordable batches to gain insight
+- **Alternative paths** - Fresh cleartext dumps, rainbow tables, HIBP unmask methods
+
+### What We Learn From Each Stage
+
+| Output | Insight |
+|--------|---------|
+| **PEARLS** | Validates current tools work (rockyou + OneRule) |
+| **SAND** | Reveals gaps in current approach |
+| **DIAMONDS** | Shows what additional attacks find (improvement opportunities) |
+| **GLASS** | Either truly random OR patterns we haven't figured out |
+
+**Actionable analysis focuses on:**
+- 12+ char DIAMONDS with word roots → enhance wordlists
+- Suffix/prefix patterns → enhance rules
+- 8-char random → learning exercise, not scalable to all HIBP
 
 ## ⛔ MANDATORY RULES (Read First - Non-Negotiable)
 
@@ -71,10 +107,12 @@ GRAVEL      →  ROCKS minus rockyou.txt matches (~985M hashes)
                                   │
                                   ├──► DIAMONDS  →  Stage 2+ cracked (escalating attacks)
                                   │
-                                  └──► GLASS     →  Uncrackable (requires HIBP cleartext/rainbow)
+                                  └──► GLASS     →  Uncrackable with current tools
+                                       │
+                                       └──► Future: cleartext dumps, rainbow tables, HIBP unmask
 
-UNOBTAINIUM →  NEW rules from DIAMONDS (NOT in OneRule/nocap.rule)
-BETA        →  NEW root words from DIAMONDS (NOT in nocap.txt)
+UNOBTAINIUM →  NEW rules derived from DIAMONDS (NOT in OneRule/nocap.rule)
+BETA        →  NEW root words extracted from DIAMONDS (NOT in nocap.txt)
 ```
 
 **Feedback Loop Files:**
