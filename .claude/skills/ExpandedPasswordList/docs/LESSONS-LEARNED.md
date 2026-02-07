@@ -1666,3 +1666,44 @@ DEFERRED TO GLASS:
 3. **Upload feedback files** (BETA.txt, unobtainium.rule) when batch count is sufficient
 4. **Track cumulative DIAMONDS** to measure feedback loop effectiveness
 
+
+## Lesson #56: SAND State Requires 3-Tool Workflow (2026-02-07)
+
+### Problem
+The `sand-state.json` was not being properly maintained. Batches were showing as "in_progress" even after attacks completed, cracked counts were wrong, and attack statistics weren't being recorded.
+
+### Root Cause
+**The sand-state.json is maintained across THREE separate tools, not just SandProcessor:**
+
+| Tool | State Updates |
+|------|---------------|
+| `SandProcessor` | `initBatch`, `startAttack` |
+| `DiamondCollector` | `updateCracked`, `completeBatch` |
+| `SandArchiver` | `completeAttack` (records stats) |
+
+Running only `SandProcessor` leaves the state incomplete.
+
+### Solution
+**ALWAYS run the complete 3-step cycle:**
+
+```bash
+# Step 1: Submit attacks
+bun Tools/SandProcessor.ts --batch N
+
+# ... wait for workers to finish ...
+
+# Step 2: Collect DIAMONDS (updates cracked count, marks batch complete)
+bun Tools/DiamondCollector.ts --batch batch-000N
+
+# Step 3: Archive tasks (records attack completion stats)
+bun Tools/SandArchiver.ts --batch batch-000N
+```
+
+### Key Takeaway
+- SandProcessor alone does NOT complete the state
+- DiamondCollector updates cracked counts and batch completion
+- SandArchiver records attack-level statistics for optimization
+- **All 3 tools must be run in sequence for accurate state**
+
+### Added to Skill.md
+Added "⚠️ SAND State Maintenance (CRITICAL)" section with clear documentation of the 3-tool workflow.

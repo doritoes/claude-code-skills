@@ -286,6 +286,38 @@ The SAND processing pipeline includes a feedback loop that improves crack rates 
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+## ⚠️ SAND State Maintenance (CRITICAL)
+
+**The sand-state.json is maintained across THREE tools - you MUST use all of them:**
+
+| Step | Tool | State Updates | When to Run |
+|------|------|---------------|-------------|
+| 1 | `SandProcessor` | `initBatch`, `startAttack` | When submitting new attacks |
+| 2 | `DiamondCollector` | `updateCracked`, `completeBatch` | After attacks finish, to harvest results |
+| 3 | `SandArchiver` | `completeAttack` | After collecting, to archive and update stats |
+
+**⛔ SandProcessor alone does NOT complete the state!** You must run the full cycle:
+
+```bash
+# COMPLETE SAND PROCESSING CYCLE (all 3 steps required!)
+
+# Step 1: Submit attacks (updates: initBatch, startAttack)
+bun Tools/SandProcessor.ts --batch 5
+
+# ... wait for Hashtopolis workers to finish ...
+
+# Step 2: Collect DIAMONDS (updates: updateCracked, completeBatch)
+bun Tools/DiamondCollector.ts --batch batch-0005
+
+# Step 3: Archive completed tasks (updates: completeAttack, attack stats)
+bun Tools/SandArchiver.ts --batch batch-0005
+```
+
+**If you skip steps 2-3:**
+- `sand-state.json` will show attacks as "in_progress" forever
+- Cracked counts will be wrong
+- Attack statistics won't be recorded for optimization
+
 **Workflow Commands:**
 ```bash
 # 1. Submit SAND batch for cracking
@@ -294,15 +326,18 @@ bun Tools/SandProcessor.ts --batch 1
 # 2. Periodically collect DIAMONDS (while attacks run)
 bun Tools/DiamondCollector.ts --batch batch-0001
 
-# 3. Analyze DIAMONDS and generate feedback
+# 3. Archive completed tasks (updates state with completion stats)
+bun Tools/SandArchiver.ts --batch batch-0001
+
+# 4. Analyze DIAMONDS and generate feedback
 bun Tools/DiamondFeedback.ts --batch batch-0001
 
-# 4. Upload feedback files to Hashtopolis
+# 5. Upload feedback files to Hashtopolis
 bun Tools/DiamondFeedback.ts --upload
 
-# 5. Register files in Hashtopolis UI and update SandProcessor file IDs
+# 6. Register files in Hashtopolis UI and update SandProcessor file IDs
 
-# 6. Next batch automatically uses feedback attacks!
+# 7. Next batch automatically uses feedback attacks!
 bun Tools/SandProcessor.ts --batch 2
 ```
 
@@ -358,7 +393,19 @@ If no baseline exists, the tool warns and all roots appear as "new" - which defe
 | 50 | Hybrid | dict+mask (password123) | 12-48 hours |
 | 35 | Mask | common patterns | 2-7 days |
 | 25 | PRINCE | probabilistic word combo | 3-10 days |
-| 15 | Brute Force | 1-8 char exhaustive | weeks |
+| 15 | Brute Force | 1-7 char exhaustive | days |
+
+### Brute Force Notes
+
+**Separate tasks per length (NOT --increment):**
+- Hashtopolis cannot calculate keyspace for `--increment` flag masks
+- Use separate brute-1, brute-2, brute-3, ..., brute-7 attacks instead
+- Each attack has fixed keyspace that workers can benchmark
+
+**brute-8 excluded from standard pipeline:**
+- 8-character brute force takes ~51 hours per batch
+- Too expensive for routine processing
+- Use `QuickAttack.ts` for one-off experiments on specific batches
 
 ## Storage Requirements
 
@@ -369,6 +416,29 @@ If no baseline exists, the tool warns and all roots appear as "new" - which defe
 | SAND | ~25GB |
 | PEARLS | ~1-5GB |
 | **Total** | **~65GB** |
+
+## Data Directory Configuration
+
+The skill uses a **network share** for large data files. The `data` directory is a symlink to the network share:
+
+```
+.claude/skills/ExpandedPasswordList/data -> \\192.168.99.252\files\Passwords\ExpandedPasswordList\data
+```
+
+**How it works:**
+1. `data/` is a Windows directory symlink to the network share
+2. All tools import paths from `Tools/config.ts` (DATA_DIR, SAND_DIR, etc.)
+3. Tools access `data/sand/`, `data/diamonds/`, etc. directly through the symlink
+
+**Config resolution order:**
+1. `EPL_DATA_PATH` environment variable (if set)
+2. `data` directory/symlink (preferred)
+3. `data` file containing a path (legacy fallback)
+
+**To set up on a new machine (run as Administrator):**
+```powershell
+cmd /c mklink /D "C:\Users\sethh\AI-Projects\.claude\skills\ExpandedPasswordList\data" "\\your-server\share\path\to\data"
+```
 
 ## Key Files
 
@@ -508,12 +578,31 @@ nocap.txt + OneRuleToRuleThemStill.rule
 
 - **Configuration (READ FIRST)**: `data/CONFIG.md` - Immutable settings (useNewBench=0)
 - **Lessons Learned (READ SECOND)**: `docs/LESSONS-LEARNED.md` - 49 critical lessons from failures
+- **Cohort Analysis**: `docs/COHORT-ANALYSIS.md` - Predicting unseen password roots by cohort
 - Architecture: `Architecture.md`
 - Cracking Pipeline: `Workflows/CrackingPipeline.md`
 - Generational Analysis: See above + `data/GenZ.rule` comments
 - Setup: `SETUP.md`
 - Permissions: `docs/PERMISSIONS.md` (reduce manual approvals)
 - Post-Power-On: `Workflows/PostPowerOn.md` (agent recovery after VM restart)
+
+## Cohort Discovery Strategy
+
+**Key Insight:** Brute force attacks reveal COHORTS, not just individual passwords.
+
+When we crack `oguz1234`, we're not just finding one password - we're discovering that **Turkish names** are a cohort missing from our wordlists. This predicts THOUSANDS of unseen passwords.
+
+### Discovered Cohorts (Feb 2026)
+
+| Cohort | Evidence | Est. Gap | Priority |
+|--------|----------|----------|----------|
+| Indian names | abhi, anuj, anup, arif, ashu | 2000-5000 | HIGH |
+| Turkish names | oguz, elif, yekta | 500-2000 | HIGH |
+| Arabic names | umer, ehab, afroz | 1000-3000 | MEDIUM |
+| Slavic diminutives | olia, maks | 500-1500 | MEDIUM |
+| Chinese Pinyin | xiao, zhou | 1000-3000 | MEDIUM |
+
+**See `docs/COHORT-ANALYSIS.md` for full analysis and recommended wordlists.**
 
 ## Reducing Manual Intervention
 

@@ -12,6 +12,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DATA_DIR as CONFIG_DATA_DIR } from "./config";
 
 // =============================================================================
 // Types
@@ -154,9 +155,7 @@ export class SandStateManager {
   private pendingSave = false;
 
   constructor(dataDir?: string) {
-    const currentFile = fileURLToPath(import.meta.url);
-    const skillDir = dirname(dirname(currentFile));
-    const dir = dataDir || resolve(skillDir, "data");
+    const dir = dataDir || CONFIG_DATA_DIR;
     this.statePath = resolve(dir, "sand-state.json");
 
     if (!existsSync(dir)) {

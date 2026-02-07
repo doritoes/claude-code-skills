@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { execSync } from "node:child_process";
 import { SandStateManager, DEFAULT_ATTACK_ORDER } from "./SandStateManager";
+import { DATA_DIR, SAND_DIR, DIAMONDS_DIR, GLASS_DIR, HASH_TYPE_SHA1 } from "./config";
 
 // =============================================================================
 // Configuration
@@ -28,13 +29,7 @@ import { SandStateManager, DEFAULT_ATTACK_ORDER } from "./SandStateManager";
 
 const CURRENT_FILE = fileURLToPath(import.meta.url);
 const SKILL_DIR = dirname(dirname(CURRENT_FILE));
-const DATA_DIR = resolve(SKILL_DIR, "data");
-const SAND_DIR = resolve(DATA_DIR, "sand");
-const DIAMONDS_DIR = resolve(DATA_DIR, "diamonds");
-const GLASS_DIR = resolve(DATA_DIR, "glass");
 const HASHCRACK_DIR = resolve(SKILL_DIR, "..", "Hashcrack", "tools");
-
-const HASH_TYPE_SHA1 = 100;
 
 // =============================================================================
 // Attack Presets
