@@ -17,6 +17,7 @@ const __dirname = dirname(__filename);
 const SKILL_DIR = dirname(__dirname);
 
 // Attack presets
+// NOTE: --increment flag does NOT work with Hashtopolis - use separate tasks
 const ATTACKS: Record<string, {
   name: string;
   cmd: string;
@@ -24,12 +25,34 @@ const ATTACKS: Record<string, {
   isSmall: boolean;
   description: string;
 }> = {
-  "brute-1-4": {
-    name: "brute-1-4",
-    cmd: "#HL# -a 3 ?a?a?a?a --increment --increment-min 1",
-    priority: 95,
+  // Individual brute force lengths (increment doesn't work with Hashtopolis)
+  "brute-1": {
+    name: "brute-1",
+    cmd: "#HL# -a 3 ?a",
+    priority: 99,
     isSmall: true,
-    description: "Brute force 1-4 characters (trivial keyspace)",
+    description: "Brute force 1 character (95 candidates)",
+  },
+  "brute-2": {
+    name: "brute-2",
+    cmd: "#HL# -a 3 ?a?a",
+    priority: 98,
+    isSmall: true,
+    description: "Brute force 2 characters (9,025 candidates)",
+  },
+  "brute-3": {
+    name: "brute-3",
+    cmd: "#HL# -a 3 ?a?a?a",
+    priority: 97,
+    isSmall: true,
+    description: "Brute force 3 characters (857,375 candidates)",
+  },
+  "brute-4": {
+    name: "brute-4",
+    cmd: "#HL# -a 3 ?a?a?a?a",
+    priority: 96,
+    isSmall: true,
+    description: "Brute force 4 characters (81,450,625 candidates)",
   },
   "brute-5": {
     name: "brute-5",
@@ -59,6 +82,11 @@ const ATTACKS: Record<string, {
     isSmall: false,
     description: "Brute force 8 characters (~51 hours)",
   },
+};
+
+// Attack groups (creates multiple tasks)
+const ATTACK_GROUPS: Record<string, string[]> = {
+  "brute-1-4": ["brute-1", "brute-2", "brute-3", "brute-4"],
 };
 
 interface ServerConfig {
@@ -177,6 +205,11 @@ Examples:
       console.log(`  Priority: ${attack.priority}`);
       console.log("");
     }
+    console.log("\nAttack Groups (creates multiple tasks):");
+    console.log("========================================\n");
+    for (const [key, attacks] of Object.entries(ATTACK_GROUPS)) {
+      console.log(`${key}: ${attacks.join(", ")}`);
+    }
     return;
   }
 
@@ -216,38 +249,54 @@ Examples:
   }
 
   const attackName = args[attackIdx + 1];
-  const attack = ATTACKS[attackName];
 
-  if (!attack) {
-    console.error(`Error: Unknown attack '${attackName}'`);
-    console.error(`Available: ${Object.keys(ATTACKS).join(", ")}`);
-    process.exit(1);
+  // Check if it's an attack group (like brute-1-4)
+  const attackGroup = ATTACK_GROUPS[attackName];
+  const attacksToRun = attackGroup || [attackName];
+
+  // Validate all attacks exist
+  for (const name of attacksToRun) {
+    if (!ATTACKS[name]) {
+      console.error(`Error: Unknown attack '${name}'`);
+      console.error(`Available: ${Object.keys(ATTACKS).join(", ")}`);
+      console.error(`Groups: ${Object.keys(ATTACK_GROUPS).join(", ")}`);
+      process.exit(1);
+    }
   }
 
-  const priority = priorityIdx !== -1 ? parseInt(args[priorityIdx + 1], 10) : attack.priority;
-  const taskName = `${hashlistInfo.name}-${attackName}`;
+  const basePriority = priorityIdx !== -1 ? parseInt(args[priorityIdx + 1], 10) : null;
 
-  console.log(`\nCreating task:`);
-  console.log(`  Name: ${taskName}`);
-  console.log(`  Attack: ${attack.cmd}`);
-  console.log(`  Priority: ${priority}`);
-  console.log(`  Small: ${attack.isSmall}`);
+  console.log(`\nCreating ${attacksToRun.length} task(s):`);
 
-  if (dryRun) {
-    console.log("\n[DRY RUN] Would create task");
-    return;
+  for (const name of attacksToRun) {
+    const attack = ATTACKS[name];
+    const priority = basePriority ?? attack.priority;
+    const taskName = `${hashlistInfo.name}-${name}`;
+
+    console.log(`\n  ${taskName}:`);
+    console.log(`    Attack: ${attack.cmd}`);
+    console.log(`    Priority: ${priority}`);
+    console.log(`    Small: ${attack.isSmall}`);
+
+    if (dryRun) {
+      console.log("    [DRY RUN] Would create task");
+      continue;
+    }
+
+    const { taskId, wrapperId } = await createTask(config, {
+      hashlistId,
+      name: taskName,
+      attackCmd: attack.cmd,
+      priority,
+      isSmall: attack.isSmall,
+    });
+
+    console.log(`    ✓ Created TaskWrapper ${wrapperId}, Task ${taskId}`);
   }
 
-  const { taskId, wrapperId } = await createTask(config, {
-    hashlistId,
-    name: taskName,
-    attackCmd: attack.cmd,
-    priority,
-    isSmall: attack.isSmall,
-  });
-
-  console.log(`\n✓ Created TaskWrapper ${wrapperId}, Task ${taskId}`);
-  console.log(`  View: ${config.serverUrl}/tasks.php`);
+  if (!dryRun) {
+    console.log(`\nView tasks: ${config.serverUrl}/tasks.php`);
+  }
 }
 
 main().catch((err) => {

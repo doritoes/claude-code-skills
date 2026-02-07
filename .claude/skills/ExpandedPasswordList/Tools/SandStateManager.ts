@@ -74,11 +74,15 @@ export interface SandState {
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
   // OPTIMIZED ATTACK ORDER - Based on Batch 2 ROI Analysis (2026-02-06)
-  // Updated 2026-02-07: Added brute-1-4 (was missing! Lesson #55)
+  // Updated 2026-02-07: Split brute-1-4 into separate tasks (--increment broken)
   // ══════════════════════════════════════════════════════════════════════
   //
-  // TIER 0: INSTANT (trivial keyspace, <1 second)
-  "brute-1-4",   // 82M keyspace - INSTANT, run first!
+  // TIER 0: INSTANT (trivial keyspace, <1 second total)
+  // NOTE: --increment does NOT work with Hashtopolis, must be separate tasks
+  "brute-1",     // 95 candidates - INSTANT
+  "brute-2",     // 9K candidates - INSTANT
+  "brute-3",     // 857K candidates - <1 second
+  "brute-4",     // 81M candidates - ~2 seconds
   //
   // TIER 1: HIGH ROI (70.6% of cracks) - Brute force dominates SAND
   "brute-7",     // 38.5% of cracks - TOP PERFORMER

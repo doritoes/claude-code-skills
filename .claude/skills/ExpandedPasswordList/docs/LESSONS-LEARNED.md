@@ -1531,23 +1531,35 @@ bun Tools/SandProcessor.ts --batch 1      # Start fresh
 
 **Total 1-4 char keyspace: 82,317,120** - trivially crackable in <1 second!
 
-### Fix Required
+### Fix Implemented (2026-02-07)
 
-Add to SandProcessor.ts:
+**Confirmed: --increment flag does NOT work with Hashtopolis.** The agent gets stuck in `clientError` state trying to benchmark because Hashtopolis cannot calculate keyspace for variable-length masks.
+
+**Solution: Create 4 separate tasks** - Updated QuickAttack.ts with:
 ```typescript
-"brute-1-4": {
-  name: "brute-1-4",
-  phase: "brute",
-  attackCmd: "#HL# -a 3 ?a?a?a?a --increment --increment-min 1",
-  // ... OR split into individual tasks
-}
+"brute-1": { cmd: "#HL# -a 3 ?a", priority: 99, isSmall: true },
+"brute-2": { cmd: "#HL# -a 3 ?a?a", priority: 98, isSmall: true },
+"brute-3": { cmd: "#HL# -a 3 ?a?a?a", priority: 97, isSmall: true },
+"brute-4": { cmd: "#HL# -a 3 ?a?a?a?a", priority: 96, isSmall: true },
 ```
 
-Or create 4 separate tasks if --increment still fails with Hashtopolis.
+Also added attack group `brute-1-4` that creates all 4 tasks at once.
 
-### Key Learning
+### Results from SAND batch-0001
 
-When fixing a bug, don't just remove the failing feature - implement an alternative that covers the same ground.
+| Task | Keyspace | Cracked | Time |
+|------|----------|---------|------|
+| brute-1 | 95 | 0 | instant |
+| brute-2 | 9,025 | 0 | instant |
+| brute-3 | 857,375 | 21 | ~1s |
+| brute-4 | 81,450,625 | 142 | ~2s |
+| **Total** | 82,317,120 | **163** | <5s |
+
+### Key Learnings
+
+1. **--increment is incompatible with Hashtopolis** - Use separate tasks for each password length
+2. When fixing a bug, don't just remove the failing feature - implement an alternative
+3. Short passwords are rare in breach data (only 163 out of 351K SAND hashes)
 
 ---
 

@@ -227,20 +227,52 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
   // Phase 2: BRUTE FORCE (EARLY - guaranteed cracks seed feedback loop!)
   // Run early to get DIAMONDS for DiamondAnalyzer → UNOBTAINIUM.rule
   // ==========================================================================
-  // NOTE: --increment mode doesn't work well with Hashtopolis chunking
-  // Split into individual length attacks instead
-  // LESSON #55: brute-1-4 were missing! Added 2026-02-07.
-  "brute-1-4": {
-    name: "brute-1-4",
+  // NOTE: --increment mode does NOT work with Hashtopolis (agent gets stuck in clientError)
+  // LESSON #55: Must use separate tasks for each password length
+  // LESSON #55 UPDATE: Confirmed 2026-02-07 - separate tasks work, 163 passwords cracked
+  "brute-1": {
+    name: "brute-1",
     phase: "brute",
-    // Combined 1-4 char into single task - total keyspace only 82M, trivial
-    attackCmd: "#HL# -a 3 ?a?a?a?a --increment --increment-min 1",
+    attackCmd: "#HL# -a 3 ?a",
     fileIds: [],
     maxAgents: 0,
-    isSmall: 1,  // Tiny job - completes in <1 second
-    priority: 95,  // HIGHEST - run first, instant results
-    expectedRate: 0.001,
-    description: "Brute force 1-4 characters (trivial keyspace)",
+    isSmall: 1,
+    priority: 99,  // HIGHEST - instant
+    expectedRate: 0.0001,
+    description: "Brute force 1 character (95 candidates)",
+  },
+  "brute-2": {
+    name: "brute-2",
+    phase: "brute",
+    attackCmd: "#HL# -a 3 ?a?a",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 1,
+    priority: 98,
+    expectedRate: 0.0001,
+    description: "Brute force 2 characters (9,025 candidates)",
+  },
+  "brute-3": {
+    name: "brute-3",
+    phase: "brute",
+    attackCmd: "#HL# -a 3 ?a?a?a",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 1,
+    priority: 97,
+    expectedRate: 0.0001,
+    description: "Brute force 3 characters (857,375 candidates)",
+  },
+  "brute-4": {
+    name: "brute-4",
+    phase: "brute",
+    attackCmd: "#HL# -a 3 ?a?a?a?a",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 1,
+    priority: 96,
+    expectedRate: 0.0005,
+    description: "Brute force 4 characters (81,450,625 candidates)",
   },
   "brute-5": {
     name: "brute-5",
@@ -275,6 +307,8 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     expectedRate: 0.002,
     description: "Brute force 7 characters",
   },
+  // NOTE: brute-8 intentionally excluded - ~51 hours is too expensive for standard pipeline
+  // Use QuickAttack.ts for one-off brute-8 experiments when analyzing patterns
 
   // ==========================================================================
   // FEEDBACK LOOP: Test rules/words learned from DIAMONDS
