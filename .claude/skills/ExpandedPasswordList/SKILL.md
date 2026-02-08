@@ -634,6 +634,27 @@ If no baseline exists, the tool warns and all roots appear as "new" - which defe
 - Too expensive for routine processing
 - Use `QuickAttack.ts` for one-off experiments on specific batches
 
+### Task ETA Calculation
+
+**Use remaining keyspace, NOT chunk count.** Hashtopolis creates chunks dynamically so active chunk count is always ~equal to worker count. Counting active chunks gives a wrong ETA.
+
+```sql
+-- CORRECT: ETA from remaining keyspace
+SELECT
+  t.keyspaceProgress,
+  t.keyspace,
+  t.keyspace - t.keyspaceProgress as remaining,
+  ROUND((UNIX_TIMESTAMP() - MIN(c.dispatchTime)) / 3600, 2) as hours_elapsed
+FROM Task t JOIN Chunk c ON c.taskId = t.taskId
+WHERE t.taskId = <TASK_ID>;
+
+-- Then calculate:
+-- rate = keyspaceProgress / hours_elapsed
+-- eta_hours = remaining / rate
+```
+
+**WRONG:** `remaining_chunks / chunks_per_hour` (chunks are created on the fly, active count is always ~8)
+
 ## Storage Requirements
 
 | Data | Size |
