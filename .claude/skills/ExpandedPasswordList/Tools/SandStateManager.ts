@@ -269,11 +269,17 @@ export class SandStateManager {
       state.startedAt = new Date().toISOString();
     }
 
+    // Always use the latest DEFAULT_ATTACK_ORDER from code, not the persisted
+    // state.attackOrder which may be stale from older batches.
+    // Also sync state.attackOrder so it stays current.
+    const currentOrder = [...DEFAULT_ATTACK_ORDER];
+    state.attackOrder = currentOrder;
+
     state.batches[batchName] = {
       hashlistId,
       hashCount,
       attacksApplied: [],
-      attacksRemaining: [...state.attackOrder],
+      attacksRemaining: [...currentOrder],
       taskIds: {},
       cracked: 0,
       startedAt: new Date().toISOString(),

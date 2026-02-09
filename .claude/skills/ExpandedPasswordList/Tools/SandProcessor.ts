@@ -885,6 +885,37 @@ async function processBatch(
     console.log("(No external files needed for selected attacks)");
   }
 
+  // GATE 3: Database health — Hash table bloat causes getHashlist timeout
+  if (!dryRun) {
+    console.log("\nChecking database health...");
+    try {
+      const hashTableSize = execSQL(config,
+        "SELECT ROUND(data_length / 1024 / 1024, 1) FROM information_schema.tables WHERE table_schema='hashtopolis' AND table_name='Hash'"
+      );
+      const hashTableMB = parseFloat(hashTableSize) || 0;
+      const hashlistCount = parseInt(execSQL(config,
+        "SELECT COUNT(*) FROM Hashlist WHERE isArchived = 0"
+      )) || 0;
+
+      if (hashTableMB > 1000 && hashlistCount > 10) {
+        console.error(`\n❌ GATE FAILED: Hash table bloated (${hashTableMB}MB, ${hashlistCount} hashlists)`);
+        console.error(`   getHashlist.php will timeout and agents will be stuck!`);
+        console.error(`\nFix: Clean up BEFORE submitting batch:`);
+        console.error(`   1. bun Tools/PasswordExporter.ts export`);
+        console.error(`   2. bun Tools/HashlistArchiver.ts`);
+        return;
+      }
+
+      if (hashTableMB > 500) {
+        console.log(`⚠ Hash table: ${hashTableMB}MB (consider cleanup soon)`);
+      } else {
+        console.log(`✓ Hash table healthy (${hashTableMB}MB)`);
+      }
+    } catch {
+      console.log("⚠ Could not check database health (non-blocking)");
+    }
+  }
+
   console.log("--- PRE-FLIGHT COMPLETE ---\n");
 
   // Run each attack (creating tasks for each part in multi-part mode)

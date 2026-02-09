@@ -7,7 +7,14 @@
  * 2. Updates .claude/.env with the new server URL
  * 3. Validates SSH connectivity to server
  * 4. Checks Docker containers are running
- * 5. Verifies all agents are online
+ * 5. Checks database health (Hash table bloat → getHashlist timeout)
+ * 6. Copies attack files to expected locations
+ * 7. Worker health reference
+ * 8. Verifies agents are online
+ *
+ * CRITICAL: Step 5 prevents wasted GPU time. If Hash table > 1GB with
+ * old hashlists, getHashlist.php will hang and agents will be stuck.
+ * Must run PasswordExporter + HashlistArchiver BEFORE powering on workers.
  *
  * USAGE:
  *   bun Tools/WarmStart.ts           # Full warm start with validation
@@ -45,6 +52,7 @@ interface WarmStartResult {
   terraformRefreshed: boolean;
   serverReachable: boolean;
   dockerHealthy: boolean;
+  dbHealthy: boolean;
   filesReady: boolean;
   agentsOnline: number;
   agentsTotal: number;
@@ -115,7 +123,7 @@ function getServerInstanceId(): string | null {
 
 function refreshTerraform(): boolean {
   try {
-    console.log(`${CYAN}[1/5]${RESET} Refreshing terraform state...`);
+    console.log(`${CYAN}[1/8]${RESET} Refreshing terraform state...`);
     execSync("terraform apply -refresh-only -auto-approve", {
       cwd: TERRAFORM_DIR,
       stdio: ["pipe", "pipe", "pipe"],
@@ -131,7 +139,7 @@ function refreshTerraform(): boolean {
 
 function updateEnvFile(newIp: string): boolean {
   try {
-    console.log(`${CYAN}[2/5]${RESET} Updating .claude/.env...`);
+    console.log(`${CYAN}[2/8]${RESET} Updating .claude/.env...`);
 
     if (!existsSync(ENV_FILE)) {
       console.log(`      ${RED}✗${RESET} .env file not found at ${ENV_FILE}`);
@@ -159,7 +167,7 @@ function updateEnvFile(newIp: string): boolean {
 
 function checkServerReachable(ip: string): boolean {
   try {
-    console.log(`${CYAN}[3/5]${RESET} Testing SSH connectivity to ${ip}...`);
+    console.log(`${CYAN}[3/8]${RESET} Testing SSH connectivity to ${ip}...`);
     const result = execSync(
       `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ubuntu@${ip} "hostname && uptime"`,
       { encoding: "utf-8", timeout: 20000 }
@@ -174,7 +182,7 @@ function checkServerReachable(ip: string): boolean {
 
 function checkDockerHealth(ip: string): boolean {
   try {
-    console.log(`${CYAN}[4/6]${RESET} Checking Docker containers...`);
+    console.log(`${CYAN}[4/8]${RESET} Checking Docker containers...`);
     const result = execSync(
       `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ubuntu@${ip} "sudo docker ps --format '{{.Names}}:{{.Status}}'"`,
       { encoding: "utf-8", timeout: 20000 }
@@ -207,7 +215,7 @@ function checkDockerHealth(ip: string): boolean {
  */
 function copyAttackFiles(ip: string): boolean {
   try {
-    console.log(`${CYAN}[5/6]${RESET} Copying attack files to expected location...`);
+    console.log(`${CYAN}[6/8]${RESET} Copying attack files to expected location...`);
     console.log(`      (Docker mounts to /var/www, Hashtopolis expects /usr/local/share)`);
 
     // Copy files from Docker mount to expected location
@@ -256,11 +264,67 @@ function copyAttackFiles(ip: string): boolean {
   }
 }
 
+/**
+ * Check DB health: Hash table size and archivable hashlists.
+ * If Hash table > 1GB and archivable hashlists exist, getHashlist.php
+ * will hang and agents will be stuck. MUST clean up before submitting.
+ */
+function checkDbHealth(ip: string, dbPassword: string): { healthy: boolean; hashTableMB: number; archivable: number } {
+  try {
+    console.log(`${CYAN}[5/8]${RESET} Checking database health...`);
+
+    // Check Hash table size
+    const sizeResult = execSync(
+      `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 ubuntu@${ip} "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'${dbPassword}' hashtopolis -sNe \\"SELECT ROUND(data_length / 1024 / 1024, 1) as MB FROM information_schema.tables WHERE table_schema='hashtopolis' AND table_name='Hash'\\""`,
+      { encoding: "utf-8", timeout: 30000 }
+    ).trim();
+    const hashTableMB = parseFloat(sizeResult) || 0;
+
+    // Check archivable hashlists (completed tasks, not active batch)
+    const archResult = execSync(
+      `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 ubuntu@${ip} "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'${dbPassword}' hashtopolis -sNe \\"SELECT COUNT(*) FROM Hashlist WHERE isArchived = 0 AND hashlistId NOT IN (SELECT DISTINCT hashlistId FROM TaskWrapper WHERE taskType = 0)\\""`,
+      { encoding: "utf-8", timeout: 30000 }
+    ).trim();
+    const archivable = parseInt(archResult) || 0;
+
+    // Count total non-archived hashlists
+    const totalResult = execSync(
+      `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 ubuntu@${ip} "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'${dbPassword}' hashtopolis -sNe \\"SELECT COUNT(*) FROM Hashlist WHERE isArchived = 0\\""`,
+      { encoding: "utf-8", timeout: 30000 }
+    ).trim();
+    const totalHashlists = parseInt(totalResult) || 0;
+
+    console.log(`      Hash table: ${hashTableMB}MB, ${totalHashlists} active hashlists`);
+
+    // GATE: If Hash table > 1GB and old hashlists exist, getHashlist will hang
+    if (hashTableMB > 1000 && totalHashlists > 10) {
+      console.log(`      ${RED}✗${RESET} Hash table bloated (${hashTableMB}MB) — getHashlist.php will timeout!`);
+      console.log(`      ${RED}  MUST clean up before submitting batches:${RESET}`);
+      console.log(`      ${YELLOW}  1. bun Tools/PasswordExporter.ts export${RESET}`);
+      console.log(`      ${YELLOW}  2. bun Tools/HashlistArchiver.ts${RESET}`);
+      return { healthy: false, hashTableMB, archivable };
+    }
+
+    if (hashTableMB > 500) {
+      console.log(`      ${YELLOW}⚠${RESET} Hash table growing (${hashTableMB}MB) — consider cleanup soon`);
+    } else {
+      console.log(`      ${GREEN}✓${RESET} Hash table healthy (${hashTableMB}MB)`);
+    }
+
+    return { healthy: true, hashTableMB, archivable };
+  } catch (e) {
+    console.log(`      ${YELLOW}⚠${RESET} DB health check failed: ${e}`);
+    return { healthy: true, hashTableMB: 0, archivable: 0 }; // Don't block on check failure
+  }
+}
+
 function checkAgentStatus(ip: string, dbPassword: string): { online: number; total: number } {
   try {
-    console.log(`${CYAN}[6/6]${RESET} Checking agent status...`);
+    console.log(`${CYAN}[8/8]${RESET} Checking agent status...`);
 
-    const sql = "SELECT agentId, agentName, TIMESTAMPDIFF(SECOND, lastTime, NOW()) as secAgo FROM Agent WHERE isActive=1 ORDER BY agentId";
+    // lastTime is stored as Unix epoch integer, NOT MySQL datetime
+    // Must use UNIX_TIMESTAMP(NOW()) - lastTime, not TIMESTAMPDIFF
+    const sql = "SELECT agentId, agentName, lastAct, CASE WHEN lastTime IS NULL OR lastTime = 0 THEN -1 ELSE UNIX_TIMESTAMP(NOW()) - lastTime END as secAgo FROM Agent WHERE isActive=1 ORDER BY agentId";
     const result = execSync(
       `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 ubuntu@${ip} "sudo docker exec hashtopolis-db mysql -u hashtopolis -p'${dbPassword}' hashtopolis -sNe \\"${sql}\\""`,
       { encoding: "utf-8", timeout: 30000 }
@@ -271,14 +335,25 @@ function checkAgentStatus(ip: string, dbPassword: string): { online: number; tot
 
     for (const line of lines) {
       const parts = line.split('\t');
-      if (parts.length >= 3) {
+      if (parts.length >= 4) {
         const name = parts[1];
-        const secAgo = parseInt(parts[2], 10);
-        const status = secAgo < 60 ? `${GREEN}online${RESET}` :
-                       secAgo < 300 ? `${YELLOW}stale (${secAgo}s)${RESET}` :
-                       `${RED}critical (${secAgo}s)${RESET}`;
-        console.log(`      ${secAgo < 60 ? '✓' : '⚠'} ${name}: ${status}`);
-        if (secAgo < 60) online++;
+        const lastAct = parts[2];
+        const secAgo = parseInt(parts[3], 10);
+
+        let status: string;
+        if (secAgo < 0 || isNaN(secAgo)) {
+          status = `${RED}never connected${RESET}`;
+        } else if (secAgo < 60) {
+          status = `${GREEN}online${RESET} (${lastAct})`;
+          online++;
+        } else if (secAgo < 300) {
+          status = `${YELLOW}stale (${secAgo}s, ${lastAct})${RESET}`;
+        } else {
+          status = `${RED}offline (${secAgo}s)${RESET}`;
+        }
+
+        const icon = secAgo >= 0 && secAgo < 60 ? '✓' : '⚠';
+        console.log(`      ${icon} ${name}: ${status}`);
       }
     }
 
@@ -329,6 +404,7 @@ async function main() {
     terraformRefreshed: false,
     serverReachable: false,
     dockerHealthy: false,
+    dbHealthy: true,
     agentsOnline: 0,
     agentsTotal: 0,
     errors: [],
@@ -396,7 +472,7 @@ async function main() {
   if (result.oldServerIp !== awsIp) {
     result.envUpdated = updateEnvFile(awsIp);
   } else {
-    console.log(`${CYAN}[2/6]${RESET} .env already up to date`);
+    console.log(`${CYAN}[2/8]${RESET} .env already up to date`);
     result.envUpdated = true;
   }
 
@@ -407,25 +483,37 @@ async function main() {
   if (result.serverReachable) {
     result.dockerHealthy = checkDockerHealth(awsIp);
   } else {
-    console.log(`${CYAN}[4/6]${RESET} Skipping Docker check (server unreachable)`);
+    console.log(`${CYAN}[4/8]${RESET} Skipping Docker check (server unreachable)`);
   }
 
-  // Step 5: Copy attack files to expected location (LESSONS-LEARNED #30)
+  // Step 5: Check database health (MUST come before file copy/agents)
+  const dbPassword = getDbPassword();
+  if (result.serverReachable && result.dockerHealthy && dbPassword) {
+    const dbHealth = checkDbHealth(awsIp, dbPassword);
+    result.dbHealthy = dbHealth.healthy;
+  } else {
+    console.log(`${CYAN}[5/8]${RESET} Skipping DB health check (prerequisites not met)`);
+    result.dbHealthy = true; // Don't block on missing prereqs
+  }
+
+  // Step 6: Copy attack files to expected location (LESSONS-LEARNED #30)
   if (result.serverReachable && result.dockerHealthy) {
     result.filesReady = copyAttackFiles(awsIp);
   } else {
-    console.log(`${CYAN}[5/6]${RESET} Skipping file copy (prerequisites not met)`);
+    console.log(`${CYAN}[6/8]${RESET} Skipping file copy (prerequisites not met)`);
     result.filesReady = false;
   }
 
-  // Step 6: Check agents
-  const dbPassword = getDbPassword();
+  // Step 7: Worker health check
+  console.log(`${CYAN}[7/8]${RESET} Worker health check — use: bun Tools/WorkerHealthCheck.ts`);
+
+  // Step 8: Check agents
   if (result.serverReachable && result.dockerHealthy && dbPassword) {
     const agents = checkAgentStatus(awsIp, dbPassword);
     result.agentsOnline = agents.online;
     result.agentsTotal = agents.total;
   } else {
-    console.log(`${CYAN}[6/6]${RESET} Skipping agent check (prerequisites not met)`);
+    console.log(`${CYAN}[8/8]${RESET} Skipping agent check (prerequisites not met)`);
   }
 
   // Summary
@@ -437,6 +525,7 @@ async function main() {
                    result.envUpdated &&
                    result.serverReachable &&
                    result.dockerHealthy &&
+                   result.dbHealthy &&
                    result.filesReady;
 
   const checkMark = (ok: boolean) => ok ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
@@ -445,8 +534,17 @@ async function main() {
   console.log(`${checkMark(result.envUpdated)} .env file updated`);
   console.log(`${checkMark(result.serverReachable)} Server SSH reachable`);
   console.log(`${checkMark(result.dockerHealthy)} Docker containers healthy (3/3)`);
+  console.log(`${checkMark(result.dbHealthy)} Database healthy (Hash table not bloated)`);
   console.log(`${checkMark(result.filesReady)} Attack files in expected location`);
   console.log(`${checkMark(result.agentsOnline === result.agentsTotal)} Agents online (${result.agentsOnline}/${result.agentsTotal})`);
+
+  if (!result.dbHealthy) {
+    console.log(`\n${RED}✗ DATABASE CLEANUP REQUIRED before powering on workers!${RESET}`);
+    console.log(`  1. bun Tools/PasswordExporter.ts export`);
+    console.log(`  2. bun Tools/HashlistArchiver.ts`);
+    console.log(`  3. Re-run: bun Tools/WarmStart.ts`);
+    process.exit(1);
+  }
 
   if (result.success) {
     console.log(`\n${GREEN}✓ Warm start complete!${RESET}`);

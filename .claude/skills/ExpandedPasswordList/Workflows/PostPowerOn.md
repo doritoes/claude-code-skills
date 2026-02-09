@@ -8,19 +8,34 @@ Restore full cluster functionality after AWS GPU VMs are powered on.
 ```bash
 cd .claude/skills/ExpandedPasswordList
 
-# Step 1: Run WarmStart to update IPs and validate connectivity
+# Step 1: Run WarmStart (DO NOT power on workers yet!)
+# WarmStart checks DB health — if bloated, it will BLOCK and tell you to clean up
 bun Tools/WarmStart.ts
 
-# Step 2: Verify pipeline health
+# Step 2: If WarmStart says "DATABASE CLEANUP REQUIRED":
+bun Tools/PasswordExporter.ts export      # Export cracked passwords
+bun Tools/HashlistArchiver.ts             # Archive old hashlists, reclaim DB space
+bun Tools/WarmStart.ts                    # Re-run to confirm DB is clean
+
+# Step 3: NOW power on GPU workers (not before DB is clean!)
+
+# Step 4: Verify pipeline health
 bun Tools/PipelineMonitor.ts --quick
 ```
 
-That's it for most cases. The WarmStart tool handles:
-- Refreshing terraform state with new public IPs
-- Updating `.claude/.env` with the new server URL
-- Validating SSH connectivity to the server
-- Checking Docker containers are running
-- Verifying all 8 agents are online
+**CRITICAL: Do NOT power on GPU workers before WarmStart passes DB health check.**
+Workers at $0.526/hr each = $4.21/hr for 8 workers. If getHashlist.php hangs because
+the Hash table is bloated, all workers sit idle burning money.
+
+The WarmStart tool handles (8 steps):
+1. Refreshing terraform state with new public IPs
+2. Updating `.claude/.env` with the new server URL
+3. Validating SSH connectivity to the server
+4. Checking Docker containers are running
+5. **Checking database health** (Hash table bloat → getHashlist timeout)
+6. Copying attack files to expected locations
+7. Worker health reference
+8. Verifying agents are online
 
 ## Manual Workflow (If WarmStart Fails)
 

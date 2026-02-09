@@ -179,9 +179,9 @@ async function bulkDeleteHashlists(config: Config, hashlistIds: number[]): Promi
 
   console.log(`\nBulk deleting ${hashlistIds.length} hashlists...`);
 
-  // Delete in batches of 100 hashlists at a time
+  // Delete in batches of 50 hashlists at a time (smaller to avoid transaction timeout)
   let totalDeleted = 0;
-  const batchSize = 100;
+  const batchSize = 50;
   const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
 
   for (let i = 0; i < hashlistIds.length; i += batchSize) {
@@ -315,6 +315,7 @@ Safety:
 
   let totalDeleted = 0;
   let totalArchived = 0;
+  const needsDeleteIds: number[] = [];
 
   for (const hashlist of toProcess) {
     const result = await archiveHashlist(config, hashlist, {
@@ -323,6 +324,14 @@ Safety:
     });
     totalDeleted += result.deleted;
     if (result.archived) totalArchived++;
+    if ((result as any).needsDelete) needsDeleteIds.push(result.hashlistId);
+  }
+
+  // Bulk delete Hash rows and archive hashlists
+  if (!dryRun && needsDeleteIds.length > 0) {
+    const deleted = await bulkDeleteHashlists(config, needsDeleteIds);
+    totalDeleted += deleted;
+    totalArchived = needsDeleteIds.length;
   }
 
   // Get disk usage after
