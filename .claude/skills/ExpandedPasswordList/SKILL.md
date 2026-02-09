@@ -636,7 +636,11 @@ If no baseline exists, the tool warns and all roots appear as "new" - which defe
 
 ### Task ETA Calculation
 
-**Use remaining keyspace, NOT chunk count.** Hashtopolis creates chunks dynamically so active chunk count is always ~equal to worker count. Counting active chunks gives a wrong ETA.
+**Use remaining keyspace for ETA, NOT chunk count.** Hashtopolis creates chunks dynamically so active chunk count is always ~equal to worker count. Counting active chunks gives a wrong ETA.
+
+**⚠️ NEVER declare a task complete based on keyspaceProgress alone.**
+`keyspaceProgress = keyspace` means all work is DISPATCHED, not FINISHED.
+Always check chunk states before declaring completion.
 
 ```sql
 -- CORRECT: ETA from remaining keyspace
@@ -651,9 +655,19 @@ WHERE t.taskId = <TASK_ID>;
 -- Then calculate:
 -- rate = keyspaceProgress / hours_elapsed
 -- eta_hours = remaining / rate
+
+-- COMPLETION CHECK: Task is ONLY done when ALL chunks are finished
+SELECT
+  SUM(CASE WHEN state IN (4,9) THEN 1 ELSE 0 END) as finished,
+  SUM(CASE WHEN state = 2 THEN 1 ELSE 0 END) as still_running,
+  COUNT(*) as total
+FROM Chunk WHERE taskId = <TASK_ID>;
+-- Task is complete ONLY when still_running = 0
 ```
 
-**WRONG:** `remaining_chunks / chunks_per_hour` (chunks are created on the fly, active count is always ~8)
+**WRONG:**
+- `remaining_chunks / chunks_per_hour` (chunks are created on the fly, active count is always ~8)
+- `keyspaceProgress = keyspace` → "task is done" (dispatched ≠ finished)
 
 ## Storage Requirements
 
