@@ -2,16 +2,19 @@
 /**
  * DiamondFeedback.ts - Analyze DIAMONDS to Extract Feedback for Next Batch
  *
- * This tool creates a feedback loop by analyzing cracked passwords (DIAMONDS)
- * to discover:
- * 1. NEW ROOT WORDS - Not in rockyou/nocap → becomes BETA.txt
- * 2. NEW PATTERNS - Common transformations → becomes unobtainium.rule
+ * REFACTORED 2026-02-09: Aligned with DiamondAnalyzer v2.0 approach.
  *
- * The feedback files can then be uploaded to Hashtopolis and used in
- * subsequent SAND batch attacks, improving crack rates over time.
+ * Previous approach FAILED because extractRoot() stripped suffixes from ALL
+ * passwords including random brute-force garbage. Now uses entropy-based
+ * classification from DiamondAnalyzer to separate structured from random.
+ *
+ * Creates a feedback loop by analyzing cracked passwords (DIAMONDS):
+ * 1. NEW ROOT WORDS - Entropy-filtered, cohort-classified → BETA.txt
+ * 2. NEW PATTERNS - Common transformations → unobtainium.rule
+ * 3. COHORT WORDLISTS - Loaded from data/cohorts/ and merged into BETA.txt
  *
  * WORKFLOW:
- *   DiamondCollector → DiamondFeedback → Upload to Hashtopolis → Next batch uses feedback
+ *   DiamondCollector → DiamondFeedback → Upload to Hashtopolis → Next batch
  *
  * @author PAI (Personal AI Infrastructure)
  * @license MIT
@@ -35,14 +38,20 @@ const FEEDBACK_DIR = resolve(DATA_DIR, "feedback");
 const HASHCRACK_DIR = resolve(SKILL_DIR, "..", "Hashcrack", "tools");
 
 // Thresholds for inclusion
-const MIN_ROOT_LENGTH = 4;
+const MIN_ROOT_LENGTH = 3;
 const MIN_ROOT_FREQUENCY = 2;  // Must appear in at least 2 passwords
 const MIN_PATTERN_FREQUENCY = 5;  // Pattern must appear at least 5 times
 const MIN_SUFFIX_FREQUENCY = 3;
 
+// Entropy threshold: passwords above this are likely random/brute-force
+const ENTROPY_THRESHOLD = 3.8;
+
 // Baseline wordlists to compare against
 const NOCAP_PATH = resolve(DATA_DIR, "nocap.txt");
 const ROCKYOU_PATH = resolve(DATA_DIR, "rockyou.txt");
+
+// Cohort wordlists directory
+const COHORTS_DIR = resolve(DATA_DIR, "cohorts");
 
 // Baseline rule files to compare against (avoid duplicating existing rules)
 const ONERULE_PATH = resolve(SKILL_DIR, "..", "..", "..", "OneRuleToRuleThemStill.rule");
@@ -96,30 +105,60 @@ interface FeedbackReport {
 // =============================================================================
 
 /**
- * Extract potential root word from password
+ * Calculate Shannon entropy per character.
+ * Random strings: ~4.0-5.0 bits/char, Structured passwords: ~2.0-3.5 bits/char
+ */
+function entropyPerChar(s: string): number {
+  if (s.length === 0) return 0;
+  const freq = new Map<string, number>();
+  for (const c of s) freq.set(c, (freq.get(c) || 0) + 1);
+  let entropy = 0;
+  for (const count of freq.values()) {
+    const p = count / s.length;
+    entropy -= p * Math.log2(p);
+  }
+  return entropy;
+}
+
+/**
+ * Extract root from a password using entropy-based classification.
+ * Only returns roots from STRUCTURED passwords (word+suffix pattern).
+ * Returns null for random/brute-force passwords.
+ *
+ * REFACTORED: Aligned with DiamondAnalyzer v2.0 approach.
  */
 function extractRoot(password: string): string | null {
-  // Remove common suffixes and prefixes
-  let root = password
-    .replace(/\d+$/, "")           // trailing digits
-    .replace(/[!@#$%^&*()]+$/, "") // trailing specials
-    .replace(/^\d+/, "")           // leading digits
-    .toLowerCase();
+  // Strip prefix digits
+  let root = password;
+  const prefixMatch = root.match(/^(\d+)(.*)/);
+  if (prefixMatch) root = prefixMatch[2];
 
-  // Must be at least MIN_ROOT_LENGTH chars
-  if (root.length < MIN_ROOT_LENGTH) {
-    return null;
-  }
+  // Strip trailing digits
+  const digitSuffix = root.match(/^(.*?)(\d+)$/);
+  if (digitSuffix) root = digitSuffix[1];
 
-  // Must contain at least some letters
-  if (!/[a-z]/i.test(root)) {
-    return null;
-  }
+  // Strip trailing specials
+  const specialSuffix = root.match(/^(.*?)([!@#$%^&*()_\-+=.]+)$/);
+  if (specialSuffix) root = specialSuffix[1];
 
-  // Skip if it's just a common pattern
-  if (/^(pass|word|qwer|asdf|zxcv|1234|abcd)/i.test(root)) {
-    return null;
-  }
+  root = root.toLowerCase();
+
+  // Must be at least MIN_ROOT_LENGTH chars of only letters
+  if (root.length < MIN_ROOT_LENGTH || !/^[a-z]+$/i.test(root)) return null;
+
+  // Must have vowels (real words have vowels)
+  if (!/[aeiouy]/i.test(root)) return null;
+
+  // Root entropy check for short roots (filter random fragments)
+  const vowelRatio = (root.match(/[aeiouy]/gi) || []).length / root.length;
+  const rootEnt = entropyPerChar(root);
+  const isLongRoot = root.length >= 5;
+  const isShortButWordLike = root.length >= 3 && root.length <= 4 && vowelRatio >= 0.25 && rootEnt < 2.5;
+
+  if (!isLongRoot && !isShortButWordLike) return null;
+
+  // Skip common patterns
+  if (/^(qwer|asdf|zxcv|abcd|pass|word|test|admin|user|login|1234)/.test(root)) return null;
 
   return root;
 }
@@ -356,7 +395,12 @@ interface BaselineResult {
 }
 
 /**
- * Load baseline wordlist roots for comparison
+ * Load baseline wordlist as raw lowercased words for O(1) lookup.
+ *
+ * REFACTORED: Load raw words instead of extracting roots from baseline.
+ * The old approach extracted roots from 13.8M baseline entries, which
+ * swallowed every real root. Now we check if the root word exists AS-IS
+ * in the baseline (e.g., "minecraft" is in rockyou, so it's not new).
  */
 async function loadBaselineRoots(): Promise<BaselineResult> {
   const roots = new Set<string>();
@@ -370,15 +414,14 @@ async function loadBaselineRoots(): Promise<BaselineResult> {
   }
 
   if (!baselinePath) {
-    console.warn(`\n⚠ WARNING: No baseline wordlist found!`);
+    console.warn(`\nWARNING: No baseline wordlist found!`);
     console.warn(`  Expected: ${NOCAP_PATH}`);
     console.warn(`  Or: ${ROCKYOU_PATH}`);
     console.warn(`  Without a baseline, ALL roots will appear as "new".`);
-    console.warn(`  This defeats the purpose of feedback analysis.\n`);
     return { roots, loaded: false, path: null, count: 0 };
   }
 
-  console.log(`\nLoading baseline roots from: ${baselinePath}`);
+  console.log(`\nLoading baseline words from: ${baselinePath}`);
 
   const rl = createInterface({
     input: createReadStream(baselinePath),
@@ -386,13 +429,30 @@ async function loadBaselineRoots(): Promise<BaselineResult> {
   });
 
   for await (const line of rl) {
-    const root = extractRoot(line);
-    if (root) {
-      roots.add(root);
+    if (line.length >= MIN_ROOT_LENGTH) {
+      roots.add(line.toLowerCase().trim());
     }
   }
 
-  console.log(`  Loaded ${roots.size.toLocaleString()} unique baseline roots`);
+  // Also load cohort wordlists as baseline (roots we already know about)
+  if (existsSync(COHORTS_DIR)) {
+    const cohortFiles = readdirSync(COHORTS_DIR).filter(f => f.endsWith(".txt"));
+    for (const file of cohortFiles) {
+      const cohortPath = resolve(COHORTS_DIR, file);
+      const rl2 = createInterface({
+        input: createReadStream(cohortPath),
+        crlfDelay: Infinity,
+      });
+      for await (const line of rl2) {
+        const trimmed = line.trim().toLowerCase();
+        if (trimmed && !trimmed.startsWith("#")) {
+          roots.add(trimmed);
+        }
+      }
+    }
+  }
+
+  console.log(`  Loaded ${roots.size.toLocaleString()} unique baseline words`);
   return { roots, loaded: true, path: baselinePath, count: roots.size };
 }
 
@@ -552,24 +612,51 @@ async function generateFeedback(options: {
   const baseline = await loadBaselineRoots();
 
   // Find NEW roots (not in baseline)
+  // REFACTORED: Only keep high-confidence roots that are genuinely new
   const newRoots: Array<{ root: string; count: number }> = [];
   for (const [root, count] of aggregated.rootWords) {
     if (count >= minRootFreq && !baseline.roots.has(root)) {
-      newRoots.push({ root, count });
+      // Additional filtering: require length >= 5 for unclassified roots
+      // Short roots (3-4 chars) are almost always noise unless very high frequency
+      if (root.length >= 5 || count >= 5) {
+        newRoots.push({ root, count });
+      }
     }
   }
   newRoots.sort((a, b) => b.count - a.count);
 
   console.log(`\nTotal roots extracted: ${aggregated.rootWords.size.toLocaleString()}`);
-  console.log(`Baseline comparison: ${baseline.loaded ? `${baseline.count.toLocaleString()} roots from ${baseline.path}` : "NOT LOADED (all roots appear new)"}`);
+  console.log(`Baseline comparison: ${baseline.loaded ? `${baseline.count.toLocaleString()} words from ${baseline.path}` : "NOT LOADED (all roots appear new)"}`);
   console.log(`New roots discovered: ${newRoots.length.toLocaleString()}`);
 
-  // Generate BETA.txt (new root words)
+  // Generate BETA.txt (new root words + cohort wordlists)
   const betaPath = resolve(FEEDBACK_DIR, "BETA.txt");
   if (!dryRun) {
-    const betaContent = newRoots.map(r => r.root).join("\n") + "\n";
+    // Start with discovered roots
+    const betaWords = new Set(newRoots.map(r => r.root));
+
+    // Merge cohort wordlists (the real value — comprehensive name lists)
+    // Always include cohort words regardless of baseline — they ARE the payload
+    let cohortWordsAdded = 0;
+    if (existsSync(COHORTS_DIR)) {
+      const cohortFiles = readdirSync(COHORTS_DIR).filter(f => f.endsWith(".txt"));
+      for (const file of cohortFiles) {
+        const cohortPath = resolve(COHORTS_DIR, file);
+        const content = readFileSync(cohortPath, "utf-8");
+        for (const line of content.split("\n")) {
+          const word = line.trim().toLowerCase();
+          if (word && !word.startsWith("#")) {
+            betaWords.add(word);
+            cohortWordsAdded++;
+          }
+        }
+      }
+      console.log(`  Merged ${cohortWordsAdded.toLocaleString()} words from cohort wordlists`);
+    }
+
+    const betaContent = Array.from(betaWords).join("\n") + "\n";
     writeFileSync(betaPath, betaContent);
-    console.log(`  Wrote ${newRoots.length} roots to ${betaPath}`);
+    console.log(`  Wrote ${betaWords.size.toLocaleString()} total words to ${betaPath}`);
   }
 
   // Load baseline rules to filter against

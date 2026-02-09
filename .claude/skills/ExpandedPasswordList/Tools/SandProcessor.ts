@@ -51,7 +51,7 @@ interface AttackPreset {
  * Attack presets organized by phase.
  * File IDs reference files uploaded to Hashtopolis.
  *
- * IMPORTANT: SAND = hashes that SURVIVED rockyou.txt + OneRuleToRuleThemStill
+ * IMPORTANT: SAND = hashes that SURVIVED rockyou.txt + nocap.rule (OneRule+bussin)
  * DO NOT repeat attacks that are subsets of what was already tried!
  *
  * Strategy:
@@ -69,16 +69,16 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
   // Phase 1: NEW WORDLISTS (highest value - completely new root words!)
   // SAND survived rockyou, so try words NOT in rockyou
   // ==========================================================================
-  "newwords-rizzyou-onerule": {
-    name: "newwords-rizzyou-onerule",
+  "newwords-rizzyou-nocaprule": {
+    name: "newwords-rizzyou-nocaprule",
     phase: "new-wordlists",
-    attackCmd: "#HL# rizzyou.txt -r OneRuleToRuleThemStill.rule",
-    fileIds: [4, 3],  // rizzyou.txt=4, OneRuleToRuleThemStill.rule=3
+    attackCmd: "#HL# rizzyou.txt -r nocap.rule",
+    fileIds: [4, 10],  // rizzyou.txt=4, nocap.rule=10 (replaces OneRule)
     maxAgents: 1,  // Rule attack requires maxAgents=1
     isSmall: 0,
     priority: 100,
     expectedRate: 0.02,
-    description: "GenZ words + OneRule (NEW roots, proven rules)",
+    description: "GenZ words + nocap.rule (replaces OneRule — OneRule+bussin combined)",
   },
   "newwords-rizzyou-nocap": {
     name: "newwords-rizzyou-nocap",
@@ -94,13 +94,76 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
   "newwords-nocap-genz": {
     name: "newwords-nocap-genz",
     phase: "new-wordlists",
-    attackCmd: "#HL# nocap.txt -r nocap.rule",
-    fileIds: [5, 6],  // nocap.txt=5, nocap.rule=6
+    attackCmd: "#HL# nocap-plus.txt -r nocap.rule",
+    fileIds: [11, 10],  // nocap-plus.txt=11 (superset of nocap.txt), nocap.rule=10
     maxAgents: 1,
     isSmall: 0,
     priority: 95,
     expectedRate: 0.015,
     description: "Combined wordlist + GenZ patterns (2015-2025 years)",
+  },
+  // Added 2026-02-09: batch-0005 strategy - test new assets against SAND
+  "newwords-nocap-nocaprule": {
+    name: "newwords-nocap-nocaprule",
+    phase: "new-wordlists",
+    attackCmd: "#HL# nocap-plus.txt -r nocap.rule",
+    fileIds: [11, 10],  // nocap-plus.txt=11 (superset of nocap.txt), nocap.rule=10
+    maxAgents: 1,
+    isSmall: 0,
+    priority: 93,
+    expectedRate: 0.015,
+    description: "Combined wordlist + modern rules (OneRule+bussin, modern years)",
+  },
+  "newwords-nocap-unobtainium": {
+    name: "newwords-nocap-unobtainium",
+    phase: "new-wordlists",
+    attackCmd: "#HL# nocap-plus.txt -r UNOBTAINUM.rule",
+    fileIds: [11, 8],  // nocap-plus.txt=11 (superset of nocap.txt), UNOBTAINUM.rule=8
+    maxAgents: 1,
+    isSmall: 0,
+    priority: 91,
+    expectedRate: 0.005,
+    description: "Combined wordlist + DIAMOND-learned rules (cross-pollination test)",
+  },
+
+  // ==========================================================================
+  // Phase 1b: NOCAP-PLUS ATTACKS (nocap.txt + cohort roots + BETA roots)
+  // nocap-plus.txt = working copy with 3,509 new roots from cohort analysis
+  // IMPORTANT: Upload nocap-plus.txt to Hashtopolis BEFORE running batch-0005
+  //            then update NOCAP_PLUS_FILE_ID below with the assigned file ID
+  // ==========================================================================
+  "nocapplus-nocaprule": {
+    name: "nocapplus-nocaprule",
+    phase: "new-wordlists",
+    attackCmd: "#HL# nocap-plus.txt -r nocap.rule",
+    fileIds: [11, 10],  // nocap-plus.txt=11, nocap.rule=10
+    maxAgents: 1,
+    isSmall: 0,
+    priority: 105,  // Higher than base nocap — new roots are the differentiator
+    expectedRate: 0.02,
+    description: "nocap + 3.5K cohort roots + nocap.rule (PRIMARY batch-0005+ attack)",
+  },
+  "nocapplus-unobtainium": {
+    name: "nocapplus-unobtainium",
+    phase: "new-wordlists",
+    attackCmd: "#HL# nocap-plus.txt -r UNOBTAINUM.rule",
+    fileIds: [11, 8],  // nocap-plus.txt=11, UNOBTAINUM.rule=8
+    maxAgents: 1,
+    isSmall: 0,
+    priority: 90,
+    expectedRate: 0.005,
+    description: "nocap + cohort roots + DIAMOND rules (feedback cross-pollination)",
+  },
+  "hybrid-nocapplus-4digit": {
+    name: "hybrid-nocapplus-4digit",
+    phase: "hybrid",
+    attackCmd: "#HL# -a 6 nocap-plus.txt ?d?d?d?d",
+    fileIds: [11],  // nocap-plus.txt=11
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 82,  // Slightly higher than rockyou hybrid (new roots)
+    expectedRate: 0.02,
+    description: "nocap + cohort roots + 4 digit suffix (oguz1234, kohli2024)",
   },
 
   // ==========================================================================
@@ -331,27 +394,27 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     expectedRate: 0.001,  // Expected low (most patterns already covered)
     description: "TEST: rockyou + NEW rules not in OneRule/nocap (measures feedback effectiveness)",
   },
-  "feedback-beta-onerule": {
-    name: "feedback-beta-onerule",
+  "feedback-beta-nocaprule": {
+    name: "feedback-beta-nocaprule",
     phase: "feedback",
-    attackCmd: "#HL# beta.txt -r OneRuleToRuleThemStill.rule",
-    fileIds: [12, 3],  // beta.txt=12 (uploaded after generation), OneRule=3
+    attackCmd: "#HL# BETA.txt -r nocap.rule",
+    fileIds: [12, 10],  // BETA.txt=12, nocap.rule=10 (replaces OneRule)
     maxAgents: 1,
     isSmall: 1,  // BETA is small list of new roots
     priority: 110,  // Higher than NEW-WORDLISTS when available
     expectedRate: 0.01,
-    description: "TEST: New root words from DIAMONDS + proven rules",
+    description: "TEST: New root words from DIAMONDS + nocap.rule (replaces OneRule)",
   },
-  "feedback-rockyou-unobtainium": {
-    name: "feedback-rockyou-unobtainium",
+  "feedback-nocapplus-unobtainium": {
+    name: "feedback-nocapplus-unobtainium",
     phase: "feedback",
-    attackCmd: "#HL# rockyou.txt -r unobtainium.rule",
-    fileIds: [1, 13],  // rockyou.txt=1, unobtainium.rule=13 (uploaded after generation)
+    attackCmd: "#HL# nocap-plus.txt -r UNOBTAINUM.rule",
+    fileIds: [11, 8],  // nocap-plus.txt=11, UNOBTAINUM.rule=8
     maxAgents: 1,
     isSmall: 0,
     priority: 108,
     expectedRate: 0.01,
-    description: "TEST: rockyou + rules learned from DIAMONDS patterns",
+    description: "TEST: nocap+cohorts + rules learned from DIAMONDS (full feedback cross)",
   },
 };
 

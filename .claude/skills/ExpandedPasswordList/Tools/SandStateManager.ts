@@ -60,65 +60,85 @@ export interface SandState {
  *
  * IMPORTANT: SAND = hashes that SURVIVED rockyou.txt + OneRuleToRuleThemStill
  *
- * Strategy (optimized for feedback loop):
- * 1. FEEDBACK LOOP - Rules/words learned from previous DIAMONDS (when available)
- * 2. NEW WORDLISTS - rizzyou has GenZ terms NOT in rockyou
- * 3. BRUTE FORCE - exhaustive short passwords (EARLY for guaranteed cracks!)
- *    → Provides DIAMONDS to seed the feedback loop
- *    → Reveals actual password patterns people use
- * 4. HYBRID ATTACKS - append patterns NOT covered by rule attacks
- * 5. COMBINATOR - word+word combinations
- * 6. MASK - pure pattern-based attacks (longer, less guaranteed)
+ * Strategy (budget-aware tiering, batch-0005+):
+ * 1. BRUTE FORCE 1-4 - instant, trivial keyspace
+ * 2. BRUTE FORCE 6+7 - 70% of historical cracks, guaranteed ROI
+ * 3. NEW ASSET TESTS - BETA.txt, nocap+nocap.rule, nocap+unobtainium (EXPERIMENT)
+ * 4. PROVEN MEDIUM ROI - hybrid, mask, brute-5
+ * 5. LOW ROI - remaining mask/hybrid (run if budget allows)
+ * 6. FEEDBACK VALIDATION - test-unobtainium (measures feedback loop effectiveness)
  *
- * Feedback attacks are prepended when BETA.txt and unobtainium.rule exist.
+ * Decision gates after each tier: stop if AWS spend exceeds budget.
+ * Feedback attacks (BETA+OneRule) promoted to Tier 2 when BETA.txt exists.
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // OPTIMIZED ATTACK ORDER - Based on Batch 2 ROI Analysis (2026-02-06)
-  // Updated 2026-02-07: Split brute-1-4 into separate tasks (--increment broken)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v3.0 (2026-02-09)
+  // Applies to: batch-0005+ | nocap.rule replaces OneRule everywhere
+  // Assets: nocap-plus.txt (14.3M + 3.5K cohort roots), nocap.rule, UNOBTAINIUM.rule
+  // Success: each batch crack rate > previous batch
+  // Based on: batches 1-4 ROI, DIAMOND analysis, COHORT-ANALYSIS, budget
   // ══════════════════════════════════════════════════════════════════════
   //
   // TIER 0: INSTANT (trivial keyspace, <1 second total)
-  // NOTE: --increment does NOT work with Hashtopolis, must be separate tasks
   "brute-1",     // 95 candidates - INSTANT
   "brute-2",     // 9K candidates - INSTANT
   "brute-3",     // 857K candidates - <1 second
   "brute-4",     // 81M candidates - ~2 seconds
   //
-  // TIER 1: HIGH ROI (70.6% of cracks) - Brute force dominates SAND
-  "brute-7",     // 38.5% of cracks - TOP PERFORMER
-  "brute-6",     // 32.1% of cracks - SECOND BEST
+  // TIER 1: HIGH ROI (70.6% of cracks) — brute force dominates SAND
+  "brute-6",     // 32.1% of cracks - ~10 min
+  "brute-7",     // 38.5% of cracks - ~4-6 hrs (TOP PERFORMER)
   //
-  // TIER 2: MEDIUM ROI (21.3% of cracks)
-  "hybrid-rockyou-4digit",  // 13.6% - word + 4 digits (e.g., password1234)
-  "mask-lllllldd",          //  5.3% - 6 lowercase + 2 digits (e.g., abcdef12)
-  "brute-5",                //  4.1% - 5-char exhaustive
-  "mask-Ullllllld",         //  2.8% - Capital + 7 lower + 1 digit
+  // ── GATE 1: If <4% after Tier 1, STOP — something is broken ──────
   //
-  // TIER 3: LOW ROI (8.1% of cracks) - Run if time permits
+  // TIER 2: COHORT + FEEDBACK ATTACKS (NEW for batch-0005)
+  // nocap-plus.txt = nocap.txt + 3,509 new cohort roots (Turkish, Indian,
+  // Arabic, Slavic, Chinese Pinyin, cricket, K-pop, sports, streetwear)
+  // nocap.rule replaces OneRule — it's OneRule + bussin combined
+  "feedback-beta-nocaprule",       // BETA.txt (55 roots) + nocap.rule [FEEDBACK VALIDATION]
+  "nocapplus-nocaprule",           // nocap-plus.txt + nocap.rule [PRIMARY NEW ATTACK]
+  "nocapplus-unobtainium",         // nocap-plus.txt + DIAMOND rules [CROSS-POLLINATION]
+  "feedback-nocapplus-unobtainium", // nocap-plus.txt + unobtainium.rule [FULL FEEDBACK]
+  //
+  // ── GATE 2: Evaluate Tier 2 yields. If >1%, lock in for all batches ─
+  //
+  // TIER 3: PROVEN MEDIUM ROI (21.3% of historical cracks)
+  "hybrid-nocapplus-4digit",  // nocap-plus + 4 digits (oguz1234, kohli2024) [NEW]
+  "hybrid-rockyou-4digit",    // 13.6% - word + 4 digits (password1234) [PROVEN]
+  "mask-lllllldd",            //  5.3% - 6 lowercase + 2 digits
+  "brute-5",                  //  4.1% - 5-char exhaustive
+  "mask-Ullllllld",           //  2.8% - Capital + 7 lower + 1 digit
+  //
+  // ── GATE 3: ~95% of achievable cracks done. Stop if >$30 for batch ─
+  //
+  // TIER 4: LOW ROI (3.4%) — run only if budget allows
   "mask-Ullllldd",                  // 2.4% - Capital + 4 lower + 2 digits
   "hybrid-rockyou-special-digits",  // 1.0% - word + ! + digits
   //
-  // ══════════════════════════════════════════════════════════════════════
-  // FEEDBACK TEST: Measure effectiveness of learned rules
-  // ══════════════════════════════════════════════════════════════════════
-  // test-unobtainium runs EVERY batch to validate feedback loop.
-  // unobtainium.rule contains ONLY rules NOT already in OneRule/nocap.
-  // Expected: ~0 cracks (if feedback working correctly, rules are redundant)
-  // Actual >0: Found genuinely new patterns worth investigating!
-  "test-unobtainium",
+  // TIER 5: FEEDBACK MEASUREMENT
+  "test-unobtainium",  // Validates feedback loop effectiveness (expected ~0)
   //
   // ══════════════════════════════════════════════════════════════════════
   // REMOVED: ZERO/MINIMAL VALUE (< 0.2% combined)
   // ══════════════════════════════════════════════════════════════════════
-  // ✗ mask-dddddddd         - Redundant (covered by brute-7)
-  // ✗ newwords-rizzyou-*    - GenZ words ineffective on SAND (<0.2%)
-  // ✗ hybrid-rizzyou-4digit - Minimal ROI (<0.1%)
-  // ✗ hybrid-rockyou-year   - Minimal ROI (<0.1%)
+  // ✗ mask-dddddddd            - Redundant (covered by brute-7)
+  // ✗ newwords-rizzyou-*       - GenZ words ineffective on SAND (<0.2%)
+  // ✗ newwords-nocap-genz      - Superseded by nocapplus-nocaprule
+  // ✗ newwords-nocap-nocaprule - Superseded by nocapplus-nocaprule (same rules, fewer words)
+  // ✗ newwords-nocap-unobtainium - Superseded by nocapplus-unobtainium
+  // ✗ hybrid-rizzyou-4digit    - Minimal ROI (<0.1%)
+  // ✗ hybrid-rockyou-year      - Minimal ROI (<0.1%)
+  // ✗ brute-8                  - 52 hrs, too expensive at current budget
+  // ✗ feedback-beta-onerule    - Renamed: feedback-beta-nocaprule (OneRule replaced)
+  // ✗ feedback-rockyou-unobtainium - Replaced: feedback-nocapplus-unobtainium
   //
-  // KEY INSIGHT: SAND = passwords that SURVIVED rockyou+OneRule
-  // They're short random strings, NOT cultural references.
-  // Brute force wins because these aren't dictionary-based passwords.
+  // CONTINUOUS IMPROVEMENT: After each batch completes:
+  // 1. Collect DIAMONDS → DiamondAnalyzer → new roots + UNOBTAINIUM rules
+  // 2. Update nocap-plus.txt with new cohort discoveries
+  // 3. Regenerate UNOBTAINIUM.rule from cumulative feedback
+  // 4. Prune attacks below 0.1% threshold after 3+ attempts
+  // 5. Next batch benefits from all prior discoveries
 ];
 
 /**
