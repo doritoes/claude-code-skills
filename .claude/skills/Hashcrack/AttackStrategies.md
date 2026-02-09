@@ -359,6 +359,116 @@ Higher values run first.
 - `0` = Unlimited (recommended)
 - `N` = Limit to N workers (for CPU-only tasks)
 
+## Tiered Attack Escalation Plan (Empirical)
+
+**Based on real-world password strength testing (2026-01-28):**
+
+Testing 3,581 passwords (pre-filtered to remove exact rockyou matches):
+- **rockyou+OneRuleToRuleThemStill**: 67% cracked (2,406/3,581)
+- **Diminishing returns**: 95%+ of cracks occurred in first 5 minutes
+- **Remaining 8-char passwords**: Still vulnerable to mask brute-force
+
+### Escalation Decision Tree
+
+```
+START: Hash file received
+    │
+    ├─► PHASE 1: Straight Wordlist (rockyou)
+    │   └─► Expected: 20-30% of weak passwords
+    │   └─► Time: ~4 seconds per worker (MD5)
+    │   └─► GATE: Continue if uncracked > 0
+    │
+    ├─► PHASE 2: Rules Attack (rockyou + best64 or OneRule)
+    │   └─► Expected: Additional 40-50% (cumulative 60-70%)
+    │   └─► Time: Variable (monitor diminishing returns)
+    │   └─► GATE: Stop when <10 new cracks per 2 minutes
+    │
+    ├─► PHASE 3: Short Password Brute Force (≤8 chars)
+    │   └─► Extract uncracked hashes
+    │   └─► Run targeted masks on remaining short passwords
+    │   └─► Expected: Catches weak short passwords missed by rules
+    │   └─► Time: ~35 min for 62^8 keyspace (4x T4 GPU, MD5)
+    │
+    └─► PHASE 4: Extended Attacks (optional)
+        └─► Hybrid attacks, larger wordlists, custom masks
+        └─► Only if high-value target justifies compute cost
+```
+
+### Diminishing Returns Monitoring
+
+**CRITICAL:** Most cracks happen early due to:
+1. Common passwords appear at start of rockyou
+2. Popular rule transformations fire early in rule files
+3. Keyspace coverage increases linearly but crack rate drops exponentially
+
+**Monitoring Query:**
+```sql
+-- Run every 2 minutes during attack
+SELECT
+  COUNT(*) as total_cracked,
+  (SELECT COUNT(*) FROM Hash WHERE isCracked=1 AND
+   crackPos > (SELECT MAX(crackPos) - 1000 FROM Hash WHERE isCracked=1)) as recent_cracks
+FROM Hash WHERE isCracked=1;
+```
+
+**Decision Gates:**
+| Recent Cracks (2 min) | Action |
+|-----------------------|--------|
+| > 100 | Continue current phase |
+| 10-100 | Continue, but prepare next phase |
+| < 10 | Move to next phase |
+| 0 | Stop or escalate to targeted attacks |
+
+### Post-Rule 8-Character Brute Force Strategy
+
+After rule attacks complete, remaining 8-char passwords are high-value targets:
+
+**Step 1: Extract remaining short passwords**
+```sql
+SELECT hash FROM Hash WHERE isCracked=0
+AND hashlistId IN (SELECT hashlistId FROM Hashlist WHERE hashTypeId = 0);
+-- Then filter locally by original password length if known
+```
+
+**Step 2: Targeted Masks for 8-char passwords**
+
+| Pattern | Mask | Keyspace | Time (4x T4, MD5) |
+|---------|------|----------|-------------------|
+| CamelCase | `?u?l?l?l?l?l?l?l` | 8B | ~0.3 sec |
+| Mixed + digits | `?u?l?l?l?l?l?d?d` | 2.6B | ~0.1 sec |
+| Full alphanumeric | `?1?1?1?1?1?1?1?1` (-1 ?l?u?d) | 218T | ~35 min |
+| With special | `?a?a?a?a?a?a?a?a` | 6.6Q | ~18 hours |
+
+**Recommended 8-char attack sequence:**
+```
+#HL# -a 3 ?u?l?l?l?l?l?l?l                    # CamelCase (most common)
+#HL# -a 3 ?l?l?l?l?l?l?l?l                    # All lowercase
+#HL# -a 3 ?u?l?l?l?l?l?l?d                    # CamelCase + digit
+#HL# -a 3 ?u?l?l?l?l?l?d?d                    # CamelCase + 2 digits
+#HL# -a 3 -1 ?l?u?d ?1?1?1?1?1?1?1?1          # Full mixed (longer)
+```
+
+### Password Strength Tiers (Post-Analysis)
+
+Use this classification for password audit reports:
+
+| Tier | Definition | Attack Survived |
+|------|------------|-----------------|
+| **WEAK** | In rockyou.txt | None |
+| **LOW** | Cracked by straight wordlist | - |
+| **MEDIUM** | Cracked by wordlist+rules | Straight wordlist |
+| **STRONG** | 8 chars, survived rules | Rules (but brute-forceable) |
+| **HARD** | 9+ chars, survived rules | Rules + practical brute force |
+| **RESISTANT** | 12+ chars, complex, survived all | All practical attacks |
+
+**Empirical Distribution (from 4,836 test passwords):**
+- WEAK: 26% (1,255) - exact rockyou matches
+- MEDIUM: 50% (2,406) - cracked by rules
+- STRONG: 0.7% (35) - 8 chars, survived rules
+- HARD: 24% (1,140) - 9+ chars, survived rules
+
+---
+
 ## Sample Attack Plans
 
 ### NTLM from Domain Dump
@@ -391,4 +501,45 @@ const tasks = [
   { name: "bcrypt-top10k", cmd: "#HL# -a 0 darkweb2017-top10000.txt", priority: 100, isCpuTask: false },
   { name: "bcrypt-common", cmd: "#HL# -a 0 10-million-password-list-top-100000.txt", priority: 90 }
 ];
+```
+
+### Password Strength Audit (Tiered Escalation)
+
+Comprehensive audit with diminishing returns monitoring. Uses parallel hash splitting for rule attacks.
+
+```javascript
+// Phase 1: Straight wordlist (parallel, all workers)
+const phase1 = [
+  { name: "P1-rockyou", cmd: "#HL# -a 0 rockyou.txt", priority: 100 }
+];
+
+// Phase 2: Rules attack (split hashes for parallelism, maxAgents=1 per task)
+// For 4 workers: split hashes into 4 hashlists, create 4 tasks
+const phase2 = [
+  { name: "P2-rules-chunk0", cmd: "#HL# rockyou.txt -r OneRuleToRuleThemStill.rule", priority: 90, maxAgents: 1 },
+  { name: "P2-rules-chunk1", cmd: "#HL# rockyou.txt -r OneRuleToRuleThemStill.rule", priority: 90, maxAgents: 1 },
+  { name: "P2-rules-chunk2", cmd: "#HL# rockyou.txt -r OneRuleToRuleThemStill.rule", priority: 90, maxAgents: 1 },
+  { name: "P2-rules-chunk3", cmd: "#HL# rockyou.txt -r OneRuleToRuleThemStill.rule", priority: 90, maxAgents: 1 }
+];
+
+// Phase 3: 8-char brute force (run AFTER extracting uncracked 8-char passwords)
+const phase3 = [
+  { name: "P3-8char-camel", cmd: "#HL# -a 3 ?u?l?l?l?l?l?l?l", priority: 80 },
+  { name: "P3-8char-lower", cmd: "#HL# -a 3 ?l?l?l?l?l?l?l?l", priority: 79 },
+  { name: "P3-8char-mixed", cmd: "#HL# -a 3 -1 ?l?u?d ?1?1?1?1?1?1?1?1", priority: 70 }
+];
+```
+
+**Monitoring Script (run during Phase 2):**
+```bash
+# Check every 2 minutes, stop when <10 new cracks
+PREV=0
+while true; do
+  sleep 120
+  CRACKED=$(mysql ... -sNe "SELECT COUNT(*) FROM Hash WHERE isCracked=1;")
+  DELTA=$((CRACKED - PREV))
+  echo "[$(date)] Cracked: $CRACKED (+$DELTA)"
+  [ "$DELTA" -lt 10 ] && echo "Diminishing returns - move to Phase 3" && break
+  PREV=$CRACKED
+done
 ```

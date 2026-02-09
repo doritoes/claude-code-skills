@@ -38,6 +38,7 @@ export interface TaskCreateParams {
   priority?: number;
   maxAgents?: number;
   isCpuTask?: boolean;
+  files?: number[]; // File IDs for wordlists/rules
 }
 
 export interface TaskStatus {
@@ -113,13 +114,59 @@ export class HashtopolisClient {
   constructor(config: HashtopolisConfig) {
     this.serverUrl = config.serverUrl.replace(/\/$/, "");
     this.apiKey = config.apiKey;
-    this.timeout = config.timeout || 30000;
+    this.timeout = config.timeout || 300000; // 5 minutes for large uploads
   }
 
   /**
    * Create client from environment variables
    */
   static fromEnv(): HashtopolisClient {
+    // Check multiple possible .env locations (Windows and Unix)
+    const possiblePaths = [
+      resolve(process.env.USERPROFILE || "", "AI-Projects/.claude/.env"),
+      resolve(process.env.HOME || "", ".claude/.env"),
+      resolve(process.env.HOME || "", "AI-Projects/.claude/.env"),
+      resolve(__dirname, "../../../.env"),
+    ];
+
+    for (const envPath of possiblePaths) {
+      if (existsSync(envPath)) {
+        const envContent = readFileSync(envPath, "utf-8");
+        const env: Record<string, string> = {};
+
+        for (const line of envContent.split("\n")) {
+          const match = line.match(/^([^=]+)=(.*)$/);
+          if (match) {
+            env[match[1].trim()] = match[2].trim().replace(/^["']|["']$/g, "");
+          }
+        }
+
+        if (env.HASHCRACK_SERVER_URL && env.HASHCRACK_API_KEY) {
+          return new HashtopolisClient({
+            serverUrl: env.HASHCRACK_SERVER_URL,
+            apiKey: env.HASHCRACK_API_KEY,
+          });
+        }
+      }
+    }
+
+    // Fallback: check process.env directly
+    if (process.env.HASHCRACK_SERVER_URL && process.env.HASHCRACK_API_KEY) {
+      return new HashtopolisClient({
+        serverUrl: process.env.HASHCRACK_SERVER_URL,
+        apiKey: process.env.HASHCRACK_API_KEY,
+      });
+    }
+
+    throw new Error(
+      "Hashtopolis credentials not found. Set HASHCRACK_SERVER_URL and HASHCRACK_API_KEY in .claude/.env"
+    );
+  }
+
+  /**
+   * DEPRECATED: Old fromEnv implementation
+   */
+  static fromEnvLegacy(): HashtopolisClient {
     const envPath = resolve(process.env.HOME || "", ".claude/.env");
 
     if (existsSync(envPath)) {
@@ -196,10 +243,11 @@ export class HashtopolisClient {
 
     const response = await this.request("hashlist", "createHashlist", {
       name: params.name,
-      hashTypeId: params.hashTypeId,
+      hashtypeId: params.hashTypeId, // Note: lowercase 't' required by API
       format: 0, // text format
       separator: params.separator || ":",
       isSalted: params.isSalted || false,
+      isSecret: false, // REQUIRED - allows agents to access the hashes
       isHexSalt: false,
       accessGroupId: 1,
       data: hashData,
@@ -226,6 +274,16 @@ export class HashtopolisClient {
   async listHashlists(): Promise<Array<Record<string, unknown>>> {
     const response = await this.request("hashlist", "listHashlists");
     return (response.hashlists as Array<Record<string, unknown>>) || [];
+  }
+
+  /**
+   * Find hashlist by name
+   * Returns hashlistId if found, null if not
+   */
+  async findHashlistByName(name: string): Promise<number | null> {
+    const hashlists = await this.listHashlists();
+    const found = hashlists.find((h) => h.hashlistName === name);
+    return found ? (found.hashlistId as number) : null;
   }
 
   /**
@@ -267,6 +325,7 @@ export class HashtopolisClient {
       skipKeyspace: 0,
       crackerBinaryId: 1,
       crackerBinaryTypeId: 1,
+      files: params.files || [], // Wordlist and rule file IDs
     });
 
     return response.taskId as number;
