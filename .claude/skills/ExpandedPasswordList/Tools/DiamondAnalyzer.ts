@@ -2,6 +2,8 @@
 /**
  * DiamondAnalyzer.ts - Analyze Cracked Passwords to Extract Actionable Feedback
  *
+ * v2.2 - 2026-02-10: Promoted korean-romanized + portuguese-brazilian to COHORT_PATTERNS.
+ *   Fixed double-call bug in growExistingCohorts (was called in both main and generateCohortReport).
  * REFACTORED 2026-02-09: Complete rewrite based on THEALGORITHM analysis.
  *
  * Previous approach FAILED because:
@@ -21,7 +23,7 @@
  * @license MIT
  */
 
-import { createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,6 +126,21 @@ const COHORT_PATTERNS: Record<string, { description: string; patterns: RegExp[];
     ],
     examples: ["bape", "yeezy", "vlone", "supreme"],
   },
+  "korean-romanized": {
+    description: "Korean romanized names (surnames + given names)",
+    patterns: [
+      /^(kim|lee|park|choi|jung|kang|cho|yoon|jang|lim|han|shin|seo|kwon|hwang|ahn|song|jeon|moon|bae|baek|nam|noh|ryu|yoo|cha|hong|ko|woo|byun|goo|heo|uhm|chung|minjun|seonho|jiwon|seojin|dohyun|hajin|yejun|siwoo|jihoon|jaemin|jinho|taehyun|eunwoo|hyunjin|sunwoo|gunwoo|yejin|soeun|chaewon|haerin|minji|haeun|seoyeon|jiyeon)$/i,
+    ],
+    examples: ["minjun", "jiwon", "hyunjin", "chaewon", "minji"],
+  },
+  "portuguese-brazilian": {
+    description: "Portuguese/Brazilian names and cultural terms",
+    patterns: [
+      /^(joao|thiago|mateus|rafael|felipe|gabriel|gustavo|henrique|leandro|marcelo|flavio|caio|vitor|renan|danilo|fabio|renato|bruna|fernanda|juliana|larissa|leticia|camila|beatriz|luana|raquel|priscila|aline|monique|thaisa|neymar|ronaldinho|rivaldo|kaka|robinho|adriano|saudade|futebol|capoeira|carnaval|samba|bossa|coxinha|brigadeiro|acai)$/i,
+      /^.*(inho|inha|zinho|zinha)$/i,
+    ],
+    examples: ["joao", "thiago", "neymar", "saudade", "capoeira"],
+  },
   "compound-word": {
     description: "Compound words (two dictionary words joined)",
     patterns: [
@@ -133,6 +150,87 @@ const COHORT_PATTERNS: Record<string, { description: string; patterns: RegExp[];
     examples: ["dragonmaster", "strangerthings", "leagueoflegends"],
   },
 };
+
+// =============================================================================
+// Discovery Patterns — Languages/Themes NOT Yet in COHORT_PATTERNS
+// =============================================================================
+//
+// These are fingerprints for detecting potential NEW cohorts in unclassified
+// roots. When enough unclassified roots match a discovery pattern, it's
+// surfaced in the cohort report as a "Potential New Cohort" for human review.
+//
+// Once validated, a discovery pattern graduates to COHORT_PATTERNS above
+// and gets a dedicated wordlist file in data/cohorts/.
+
+const DISCOVERY_PATTERNS: Record<string, { description: string; patterns: RegExp[]; minMatches: number }> = {
+  // korean-romanized: GRADUATED to COHORT_PATTERNS (batch-0006)
+  // portuguese-brazilian: GRADUATED to COHORT_PATTERNS (batch-0006)
+  "japanese-romanized": {
+    description: "Japanese romanized names and words",
+    patterns: [
+      /^(hiroshi|takeshi|yuki|kenji|satoshi|haruki|akira|daiki|kaito|ren|yuto|sota|haruto|minato|riku|aoi|sakura|hana|mei|yui|mio|rin|sora|miku|kento|shota|ryota|naoki|yusuke|daisuke|takuya|shunsuke|kazuki)$/i,
+      /^(naruto|sasuke|kakashi|itachi|goku|vegeta|ichigo|luffy|zoro|levi|eren|todoroki|deku|gojo|sukuna|tanjiro|nezuko|pikachu|charizard|gengar|snorlax)$/i,
+    ],
+    minMatches: 3,
+  },
+  "spanish-latam": {
+    description: "Spanish/Latin American names",
+    patterns: [
+      /^(alejandro|santiago|mateo|camilo|andres|sergio|javier|fernando|raul|pablo|adriana|valentina|catalina|mariana|natalia|daniela|ximena|paola|lorena|rocio|marisol|guadalupe|esperanza)$/i,
+    ],
+    minMatches: 3,
+  },
+  "french": {
+    description: "French names and words",
+    patterns: [
+      /^(jean|pierre|jacques|philippe|nicolas|franck|stephane|christophe|baptiste|guillaume|mathieu|cedric|nathalie|sylvie|valerie|aurelie|virginie|clemence|amour|bisou|cherie|soleil)$/i,
+    ],
+    minMatches: 3,
+  },
+  "thai-romanized": {
+    description: "Thai romanized names",
+    patterns: [
+      /^(somchai|somsak|somporn|wichai|piyapong|nattapong|thanat|siriporn|supaporn|siriwan|wannee)$/i,
+      /^.*(porn|chai|kul|wut|sak|pon|wit|pong|phon|sri|siri)$/i,
+    ],
+    minMatches: 3,
+  },
+  "vietnamese": {
+    description: "Vietnamese names (romanized)",
+    patterns: [
+      /^(nguyen|tran|pham|hoang|phan|huong|dang|bui|duong|dinh|minh|anh|linh|dung|hieu|tuan|thanh|trung|quang|hung|phong|thinh|khoa|tien|cuong|duc|vinh|hai|long|nam|bao|nhat|khanh)$/i,
+    ],
+    minMatches: 3,
+  },
+  "filipino": {
+    description: "Filipino names and words",
+    patterns: [
+      /^(jhun|jeric|jayson|marlon|rodel|arnel|aldrin|jennylyn|angeline|precious|divine|princess|jhoan|jonalyn|maricris|maricel|marites|rodalyn|maryjane|jomari|ronaldo|reynaldo|rizalino)$/i,
+    ],
+    minMatches: 3,
+  },
+  "anime-manga": {
+    description: "Anime/manga/Japanese pop culture",
+    patterns: [
+      /^(onepiece|dragonball|jujutsu|demonslayer|attackontitan|myheroacademia|deathnode|tokyoghoul|hunterxhunter|bleach|cowboy|samurai|shinobi|rasengan|kamehameha|sharingan|bankai|chakra|senpai|waifu|kawaii|sugoi|baka|otaku|weeb|neko|chan|sama|sensei|shonen|seinen|isekai)$/i,
+    ],
+    minMatches: 3,
+  },
+  "german": {
+    description: "German names and words",
+    patterns: [
+      /^(hans|fritz|karl|ludwig|friedrich|heinrich|wolfgang|helmut|dieter|gunther|manfred|rainer|bernd|uwe|jorg|steffen|thorsten|matthias|florian|stefan|katrin|heike|monika|sabine|petra|andrea|birgit|ingrid)$/i,
+      /^(schatz|liebe|stern|engel|blume|freund|herz|traum|nacht|feuer|donner|blitz)$/i,
+    ],
+    minMatches: 3,
+  },
+};
+
+interface CohortDiscovery {
+  pattern: string;
+  description: string;
+  matchedRoots: { root: string; count: number; examples: string[] }[];
+}
 
 // =============================================================================
 // Types
@@ -456,6 +554,131 @@ function buildCohortReport(
 }
 
 // =============================================================================
+// New Cohort Discovery
+// =============================================================================
+
+/**
+ * Scan unclassified roots for patterns matching DISCOVERY_PATTERNS.
+ * Returns potential new cohorts with enough evidence to warrant investigation.
+ */
+function discoverNewCohorts(
+  unclassified: CohortMatch[]
+): CohortDiscovery[] {
+  const discoveries: CohortDiscovery[] = [];
+
+  for (const [name, fingerprint] of Object.entries(DISCOVERY_PATTERNS)) {
+    const matched: { root: string; count: number; examples: string[] }[] = [];
+
+    for (const item of unclassified) {
+      for (const pattern of fingerprint.patterns) {
+        if (pattern.test(item.root)) {
+          matched.push({ root: item.root, count: item.count, examples: item.examples });
+          break;
+        }
+      }
+    }
+
+    if (matched.length >= fingerprint.minMatches) {
+      discoveries.push({
+        pattern: name,
+        description: fingerprint.description,
+        matchedRoots: matched.sort((a, b) => b.count - a.count),
+      });
+    }
+  }
+
+  return discoveries.sort((a, b) => b.matchedRoots.length - a.matchedRoots.length);
+}
+
+// =============================================================================
+// Existing Cohort Growth — Add New Members to Cohort Wordlists
+// =============================================================================
+
+// Map cohort pattern names → cohort wordlist filenames in data/cohorts/
+const COHORT_FILE_MAP: Record<string, string> = {
+  "turkish": "turkish-names.txt",
+  "indian": "indian-names.txt",
+  "arabic": "arabic-names.txt",
+  "slavic": "slavic-names.txt",
+  "chinese-pinyin": "chinese-pinyin.txt",
+  "korean-romanized": "korean-romanized.txt",
+  "portuguese-brazilian": "portuguese-brazilian.txt",
+  "cricket": "culture-sports-music.txt",
+  "kpop-music": "culture-sports-music.txt",
+  "gaming-streaming": "culture-sports-music.txt",
+  "sports-current": "culture-sports-music.txt",
+  "streetwear-culture": "culture-sports-music.txt",
+};
+
+/**
+ * Load all words from a cohort wordlist file into a Set.
+ */
+function loadCohortFile(filename: string): Set<string> {
+  const cohortPath = resolve(DATA_DIR, "cohorts", filename);
+  const words = new Set<string>();
+  if (!existsSync(cohortPath)) return words;
+  const content = readFileSync(cohortPath, "utf-8");
+  for (const line of content.split("\n")) {
+    const word = line.trim().toLowerCase();
+    if (word && !word.startsWith("#")) words.add(word);
+  }
+  return words;
+}
+
+interface CohortGrowthResult {
+  cohort: string;
+  file: string;
+  newMembers: string[];
+}
+
+/**
+ * Find cohort-matched roots that aren't already in their cohort wordlist file.
+ * Appends new members to the file and returns what was added.
+ */
+function growExistingCohorts(
+  cohortReport: Map<string, CohortMatch[]>
+): CohortGrowthResult[] {
+  const results: CohortGrowthResult[] = [];
+
+  // Cache loaded files (multiple cohorts may share a file)
+  const fileCache = new Map<string, Set<string>>();
+
+  for (const [cohortName, matches] of cohortReport) {
+    if (cohortName === "unclassified" || cohortName === "compound-word") continue;
+    if (matches.length === 0) continue;
+
+    const filename = COHORT_FILE_MAP[cohortName];
+    if (!filename) continue;
+
+    // Load the file (cached)
+    if (!fileCache.has(filename)) {
+      fileCache.set(filename, loadCohortFile(filename));
+    }
+    const existing = fileCache.get(filename)!;
+
+    const newMembers: string[] = [];
+    for (const match of matches) {
+      const root = match.root.toLowerCase();
+      if (!existing.has(root)) {
+        newMembers.push(root);
+        existing.add(root); // prevent duplicates across cohorts sharing a file
+      }
+    }
+
+    if (newMembers.length > 0) {
+      // Append to file
+      const cohortPath = resolve(DATA_DIR, "cohorts", filename);
+      if (existsSync(cohortPath)) {
+        appendFileSync(cohortPath, newMembers.join("\n") + "\n");
+      }
+      results.push({ cohort: cohortName, file: filename, newMembers });
+    }
+  }
+
+  return results;
+}
+
+// =============================================================================
 // Output Generation
 // =============================================================================
 
@@ -557,6 +780,7 @@ function generateUnobtainium(
 function generateCohortReport(
   result: AnalysisResult,
   cohortReport: Map<string, CohortMatch[]>,
+  growthResults: CohortGrowthResult[],
   outputPath: string
 ): void {
   const lines: string[] = [
@@ -631,6 +855,52 @@ function generateCohortReport(
   // Use actionableCohorts for the rest of the report
   const sortedCohorts = actionableCohorts;
 
+  // ── NEW COHORT DISCOVERY ──────────────────────────────────────────────
+  // Scan unclassified roots for patterns suggesting undiscovered cohorts
+  const discoveries = discoverNewCohorts(unclassified);
+  if (discoveries.length > 0) {
+    lines.push(`## Potential New Cohorts`);
+    lines.push(``);
+    lines.push(`Unclassified roots matching discovery fingerprints for language/culture groups **not yet** in COHORT_PATTERNS.`);
+    lines.push(`Review these and create a dedicated wordlist in \`data/cohorts/\` if the cohort is valuable.`);
+    lines.push(``);
+
+    for (const disc of discoveries) {
+      const rootList = disc.matchedRoots.map(r => r.root).join(", ");
+      lines.push(`### ${disc.pattern} — ${disc.description} (${disc.matchedRoots.length} matches)`);
+      lines.push(``);
+      for (const r of disc.matchedRoots.slice(0, 20)) {
+        const exStr = r.examples.slice(0, 3).join(", ");
+        lines.push(`- **${r.root}** (${r.count}x) — e.g. ${exStr}`);
+      }
+      if (disc.matchedRoots.length > 20) {
+        lines.push(`- ... and ${disc.matchedRoots.length - 20} more`);
+      }
+      lines.push(``);
+      lines.push(`**Action:** Research full ${disc.description} list, build \`data/cohorts/${disc.pattern}.txt\`, promote to COHORT_PATTERNS.`);
+      lines.push(``);
+    }
+  }
+
+  // ── EXISTING COHORT GROWTH ──────────────────────────────────────────
+  // Report growth results (passed in from main, not re-run here to avoid double-append)
+  if (growthResults.length > 0) {
+    lines.push(`## Cohort Growth — New Members Added`);
+    lines.push(``);
+    lines.push(`Roots matching existing cohort patterns that were **not already** in the cohort wordlist file.`);
+    lines.push(`These have been auto-appended to the corresponding file in \`data/cohorts/\`.`);
+    lines.push(``);
+    lines.push(`| Cohort | File | New Members | Words |`);
+    lines.push(`|--------|------|-------------|-------|`);
+    for (const g of growthResults) {
+      lines.push(`| ${g.cohort} | \`${g.file}\` | ${g.newMembers.length} | ${g.newMembers.join(", ")} |`);
+    }
+    lines.push(``);
+    const totalAdded = growthResults.reduce((sum, g) => sum + g.newMembers.length, 0);
+    lines.push(`**Total new members added:** ${totalAdded}`);
+    lines.push(``);
+  }
+
   // Top suffix patterns
   lines.push(`## Top Suffix Patterns`);
   lines.push(``);
@@ -652,6 +922,13 @@ function generateCohortReport(
     const desc = COHORT_PATTERNS[cohort]?.description || cohort;
     lines.push(`- **${cohort}**: Found ${matches.length} roots. Build a ${desc} wordlist (estimated 500-5000 entries).`);
   }
+  if (discoveries.length > 0) {
+    lines.push(``);
+    lines.push(`**New cohort candidates** (from discovery fingerprints):`);
+    for (const disc of discoveries) {
+      lines.push(`- **${disc.pattern}**: ${disc.matchedRoots.length} matches found. Research and build \`data/cohorts/${disc.pattern}.txt\`.`);
+    }
+  }
   lines.push(``);
 
   writeFileSync(outputPath, lines.join("\n"));
@@ -663,7 +940,7 @@ function generateCohortReport(
 
 function printHelp(): void {
   console.log(`
-DiamondAnalyzer v2.0 - Cohort-Based Password Analysis
+DiamondAnalyzer v2.1 - Cohort-Based Password Analysis
 
 REFACTORED: Separates structured passwords from random brute-force noise,
 classifies new roots by cultural/linguistic cohort, produces actionable output.
@@ -714,7 +991,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log(`DiamondAnalyzer v2.0 — Cohort-Based Analysis`);
+  console.log(`DiamondAnalyzer v2.1 — Cohort-Based Analysis`);
   console.log(`${"=".repeat(60)}\n`);
   console.log(`Input: ${inputFile}\n`);
 
@@ -747,6 +1024,34 @@ async function main(): Promise<void> {
     }
   }
 
+  // Step 3b: Discover potential new cohorts from unclassified roots
+  const unclassified = cohortReport.get("unclassified") || [];
+  if (unclassified.length > 0) {
+    console.log(`\nStep 3b: Scanning ${unclassified.length} unclassified roots for new cohort patterns...`);
+    const discoveries = discoverNewCohorts(unclassified);
+    if (discoveries.length > 0) {
+      for (const disc of discoveries) {
+        const topRoots = disc.matchedRoots.slice(0, 5).map(r => r.root).join(", ");
+        console.log(`  POTENTIAL NEW COHORT: ${disc.pattern} (${disc.matchedRoots.length} matches) — ${topRoots}`);
+      }
+    } else {
+      console.log(`  No new cohort patterns detected`);
+    }
+  }
+
+  // Step 3c: Grow existing cohort wordlists with new members
+  console.log("\nStep 3c: Growing existing cohort wordlists...");
+  const growthResults = growExistingCohorts(cohortReport);
+  if (growthResults.length > 0) {
+    for (const g of growthResults) {
+      console.log(`  ${g.cohort} → +${g.newMembers.length} new members to ${g.file}: ${g.newMembers.join(", ")}`);
+    }
+    const totalAdded = growthResults.reduce((sum, g) => sum + g.newMembers.length, 0);
+    console.log(`  Total: ${totalAdded} new members added to cohort wordlists`);
+  } else {
+    console.log(`  No new members to add (all cohort-matched roots already in wordlists)`);
+  }
+
   // Show top roots by frequency
   console.log("\nTop 20 new roots by frequency:");
   const topNew = Array.from(result.newRoots.entries())
@@ -777,7 +1082,7 @@ async function main(): Promise<void> {
   if (fullIdx !== -1) {
     console.log("\nStep 4c: Generating cohort report...");
     const reportPath = resolve(OUTPUT_DIR, "cohort-report.md");
-    generateCohortReport(result, cohortReport, reportPath);
+    generateCohortReport(result, cohortReport, growthResults, reportPath);
     console.log(`  Saved to: ${reportPath}`);
   }
 

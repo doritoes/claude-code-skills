@@ -73,11 +73,11 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v3.0 (2026-02-09)
-  // Applies to: batch-0005+ | nocap.rule replaces OneRule everywhere
-  // Assets: nocap-plus.txt (14.3M + 3.5K cohort roots), nocap.rule, UNOBTAINIUM.rule
-  // Success: each batch crack rate > previous batch
-  // Based on: batches 1-4 ROI, DIAMOND analysis, COHORT-ANALYSIS, budget
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v5.0 (2026-02-10)
+  // Applies to: batch-0007+ | 15 attacks
+  // Assets: nocap-plus.txt (14.3M), nocap.rule (48K), BETA.txt (9.9K), UNOBTAINIUM.rule (20)
+  // Principle: pair incremental files with established counterparts (new words × big rules, big words × new rules)
+  // Based on: batches 1-6 ROI, DIAMOND analysis, COHORT-ANALYSIS, budget
   // ══════════════════════════════════════════════════════════════════════
   //
   // TIER 0: INSTANT (trivial keyspace, <1 second total)
@@ -86,38 +86,32 @@ export const DEFAULT_ATTACK_ORDER = [
   "brute-3",     // 857K candidates - <1 second
   "brute-4",     // 81M candidates - ~2 seconds
   //
-  // TIER 1: HIGH ROI (70.6% of cracks) — brute force dominates SAND
-  "brute-6",     // 32.1% of cracks - ~10 min
-  "brute-7",     // 38.5% of cracks - ~4-6 hrs (TOP PERFORMER)
+  // TIER 1: HIGH ROI (68.6% of cracks in b6) — brute force dominates SAND
+  "brute-6",     // 31.1% of cracks - ~10 min
+  "brute-7",     // 37.5% of cracks - ~4-6 hrs (TOP PERFORMER)
   //
   // ── GATE 1: If <4% after Tier 1, STOP — something is broken ──────
   //
-  // TIER 2: COHORT + FEEDBACK ATTACKS (NEW for batch-0005)
-  // nocap-plus.txt = nocap.txt + 3,509 new cohort roots (Turkish, Indian,
-  // Arabic, Slavic, Chinese Pinyin, cricket, K-pop, sports, streetwear)
-  // nocap.rule replaces OneRule — it's OneRule + bussin combined
-  "feedback-beta-nocaprule",       // BETA.txt (55 roots) + nocap.rule [FEEDBACK VALIDATION]
-  "nocapplus-nocaprule",           // nocap-plus.txt + nocap.rule [PRIMARY NEW ATTACK]
-  "nocapplus-unobtainium",         // nocap-plus.txt + DIAMOND rules [CROSS-POLLINATION]
-  "feedback-nocapplus-unobtainium", // nocap-plus.txt + unobtainium.rule [FULL FEEDBACK]
+  // TIER 2: FEEDBACK ATTACKS (batch-0007+)
+  // BETA.txt = new words not in nocap.txt → pair with BIG rules (nocap.rule)
+  // UNOBTAINIUM.rule = new rules not in nocap.rule → pair with BIG wordlist (nocap-plus.txt)
+  "feedback-beta-nocaprule",       // BETA.txt (9.9K words) + nocap.rule — new words × established rules
+  "nocapplus-nocaprule",           // nocap-plus.txt + nocap.rule [PRIMARY]
+  "nocapplus-unobtainium",         // nocap-plus.txt + UNOBTAINUM.rule — established words × new rules
   //
   // ── GATE 2: Evaluate Tier 2 yields. If >1%, lock in for all batches ─
   //
-  // TIER 3: PROVEN MEDIUM ROI (21.3% of historical cracks)
-  "hybrid-nocapplus-4digit",  // nocap-plus + 4 digits (oguz1234, kohli2024) [NEW]
-  "hybrid-rockyou-4digit",    // 13.6% - word + 4 digits (password1234) [PROVEN]
-  "mask-lllllldd",            //  5.3% - 6 lowercase + 2 digits
-  "brute-5",                  //  4.1% - 5-char exhaustive
-  "mask-Ullllllld",           //  2.8% - Capital + 7 lower + 1 digit
+  // TIER 3: PROVEN MEDIUM ROI (batch-0006 data)
+  "hybrid-nocapplus-4digit",  // 13.5% - top hybrid (consistent b5+b6)
+  "mask-lllllldd",            //  4.9% - 6 lowercase + 2 digits
+  "brute-5",                  //  4.3% - 5-char exhaustive
+  "mask-Ullllllld",           //  2.9% - Capital + 7 lower + 1 digit
   //
   // ── GATE 3: ~95% of achievable cracks done. Stop if >$30 for batch ─
   //
-  // TIER 4: LOW ROI (3.4%) — run only if budget allows
+  // TIER 4: LOW ROI — run only if budget allows
   "mask-Ullllldd",                  // 2.4% - Capital + 4 lower + 2 digits
-  "hybrid-rockyou-special-digits",  // 1.0% - word + ! + digits
-  //
-  // TIER 5: FEEDBACK MEASUREMENT
-  "test-unobtainium",  // Validates feedback loop effectiveness (expected ~0)
+  "hybrid-rockyou-special-digits",  // 1.8% - word + ! + digits
   //
   // ══════════════════════════════════════════════════════════════════════
   // REMOVED: ZERO/MINIMAL VALUE (< 0.2% combined)
@@ -130,6 +124,10 @@ export const DEFAULT_ATTACK_ORDER = [
   // ✗ hybrid-rizzyou-4digit    - Minimal ROI (<0.1%)
   // ✗ hybrid-rockyou-year      - Minimal ROI (<0.1%)
   // ✗ brute-8                  - 52 hrs, too expensive at current budget
+  // ✗ rizzyou-bussin            - 0 cracks in b6; 203 candidates total (small×small)
+  // ✗ feedback-beta-unobtainium - 0 cracks in b6; small×small pairing wastes a slot
+  //     BETA.txt is incremental words → needs big rules (nocap.rule), not small rules
+  //     UNOBTAINIUM.rule is incremental rules → needs big wordlist (nocap-plus.txt), not small wordlist
   // ✗ feedback-beta-onerule    - Renamed: feedback-beta-nocaprule (OneRule replaced)
   // ✗ feedback-rockyou-unobtainium - Replaced: feedback-nocapplus-unobtainium
   //

@@ -416,6 +416,28 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     expectedRate: 0.01,
     description: "TEST: nocap+cohorts + rules learned from DIAMONDS (full feedback cross)",
   },
+  "feedback-beta-unobtainium": {
+    name: "feedback-beta-unobtainium",
+    phase: "feedback",
+    attackCmd: "#HL# BETA.txt -r UNOBTAINUM.rule",
+    fileIds: [12, 8],  // BETA.txt=12, UNOBTAINUM.rule=8
+    maxAgents: 1,
+    isSmall: 1,  // BETA is small list
+    priority: 109,
+    expectedRate: 0.005,
+    description: "BETA.txt (9.9K roots) + DIAMOND-derived rules (feedback cross-pollination)",
+  },
+  "rizzyou-bussin": {
+    name: "rizzyou-bussin",
+    phase: "new-wordlists",
+    attackCmd: "#HL# rizzyou.txt -r bussin.rule",
+    fileIds: [4, 9],  // rizzyou.txt=4, bussin.rule=9
+    maxAgents: 1,
+    isSmall: 1,  // rizzyou is small, bussin.rule is small
+    priority: 50,
+    expectedRate: 0.005,
+    description: "Modern GenZ wordlist + modern rule patterns (first bussin.rule test)",
+  },
 };
 
 // =============================================================================

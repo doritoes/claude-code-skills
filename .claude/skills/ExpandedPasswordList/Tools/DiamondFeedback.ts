@@ -823,6 +823,49 @@ async function generateFeedback(options: {
 /**
  * Upload feedback files to Hashtopolis
  */
+async function uploadFileToHashtopolis(
+  serverIp: string,
+  sshUser: string,
+  localPath: string,
+  remoteFilename: string
+): Promise<boolean> {
+  // Pattern from FileUploader.ts: SCP → docker cp → copy to BOTH paths inside container
+  try {
+    // Step 1: SCP to server /tmp
+    console.log(`  SCP to server /tmp/${remoteFilename}...`);
+    execSync(`scp -o StrictHostKeyChecking=no "${localPath}" ${sshUser}@${serverIp}:/tmp/${remoteFilename}`, {
+      encoding: "utf-8",
+      timeout: 60000,
+    });
+
+    // Step 2: docker cp from host /tmp into container /tmp
+    console.log(`  docker cp into container...`);
+    execSync(`ssh -o StrictHostKeyChecking=no ${sshUser}@${serverIp} "sudo docker cp /tmp/${remoteFilename} hashtopolis-backend:/tmp/${remoteFilename}"`, {
+      encoding: "utf-8",
+      timeout: 30000,
+    });
+
+    // Step 3: Copy to BOTH Hashtopolis paths inside container (as root for permissions)
+    console.log(`  Copying to both Hashtopolis file directories...`);
+    const copyCmd = `ssh -o StrictHostKeyChecking=no ${sshUser}@${serverIp} "` +
+      `sudo docker exec -u root hashtopolis-backend bash -c '` +
+      `cp /tmp/${remoteFilename} /var/www/hashtopolis/files/${remoteFilename} && ` +
+      `chown www-data:www-data /var/www/hashtopolis/files/${remoteFilename} && ` +
+      `mkdir -p /usr/local/share/hashtopolis/files && ` +
+      `cp /tmp/${remoteFilename} /usr/local/share/hashtopolis/files/${remoteFilename} && ` +
+      `chown www-data:www-data /usr/local/share/hashtopolis/files/${remoteFilename} && ` +
+      `rm /tmp/${remoteFilename}' && ` +
+      `rm /tmp/${remoteFilename}"`;
+    execSync(copyCmd, { encoding: "utf-8", timeout: 60000 });
+
+    console.log(`  ${remoteFilename} uploaded successfully`);
+    return true;
+  } catch (e) {
+    console.error(`  Failed to upload ${remoteFilename}: ${(e as Error).message}`);
+    return false;
+  }
+}
+
 async function uploadFeedbackFiles(betaPath: string, rulePath: string): Promise<void> {
   // Get server config from terraform
   const terraformDir = resolve(HASHCRACK_DIR, "..", "terraform", "aws");
@@ -840,50 +883,32 @@ async function uploadFeedbackFiles(betaPath: string, rulePath: string): Promise<
   // Upload BETA.txt
   if (existsSync(betaPath)) {
     console.log(`Uploading BETA.txt to server...`);
-    try {
-      // Copy to server
-      execSync(`scp -o StrictHostKeyChecking=no "${betaPath}" ${sshUser}@${serverIp}:/tmp/BETA.txt`, {
-        encoding: "utf-8",
-        timeout: 60000,
-      });
-
-      // Copy to Hashtopolis files directory
-      execSync(`ssh -o StrictHostKeyChecking=no ${sshUser}@${serverIp} "sudo cp /tmp/BETA.txt /usr/local/share/hashtopolis/files/ && sudo chown www-data:www-data /usr/local/share/hashtopolis/files/BETA.txt"`, {
-        encoding: "utf-8",
-        timeout: 30000,
-      });
-
-      console.log("  BETA.txt uploaded successfully");
-    } catch (e) {
-      console.error(`  Failed to upload BETA.txt: ${(e as Error).message}`);
-    }
+    await uploadFileToHashtopolis(serverIp, sshUser, betaPath, "BETA.txt");
   }
 
-  // Upload unobtainium.rule
+  // Upload UNOBTAINUM.rule (note: server uses UNOBTAINUM spelling, fileId=8)
   if (existsSync(rulePath)) {
-    console.log(`Uploading unobtainium.rule to server...`);
-    try {
-      execSync(`scp -o StrictHostKeyChecking=no "${rulePath}" ${sshUser}@${serverIp}:/tmp/unobtainium.rule`, {
-        encoding: "utf-8",
-        timeout: 60000,
-      });
-
-      execSync(`ssh -o StrictHostKeyChecking=no ${sshUser}@${serverIp} "sudo cp /tmp/unobtainium.rule /usr/local/share/hashtopolis/files/ && sudo chown www-data:www-data /usr/local/share/hashtopolis/files/unobtainium.rule"`, {
-        encoding: "utf-8",
-        timeout: 30000,
-      });
-
-      console.log("  unobtainium.rule uploaded successfully");
-    } catch (e) {
-      console.error(`  Failed to upload unobtainium.rule: ${(e as Error).message}`);
-    }
+    console.log(`Uploading UNOBTAINUM.rule to server...`);
+    await uploadFileToHashtopolis(serverIp, sshUser, rulePath, "UNOBTAINUM.rule");
   }
 
-  console.log("\nNOTE: You must register these files in Hashtopolis UI:");
-  console.log("  1. Go to Files → Add File");
-  console.log("  2. Add BETA.txt as 'Wordlist'");
-  console.log("  3. Add unobtainium.rule as 'Rule'");
-  console.log("  4. Note the file IDs for use in SandProcessor.ts");
+  // Update file sizes in database
+  console.log("\nUpdating file sizes in database...");
+  try {
+    const dbPassword = execSync(`terraform output -raw db_password`, { encoding: "utf-8", cwd: terraformDir }).trim();
+    const betaSize = existsSync(betaPath) ? readFileSync(betaPath).length : 0;
+    const ruleSize = existsSync(rulePath) ? readFileSync(rulePath).length : 0;
+    const sql = `UPDATE File SET size=${betaSize} WHERE fileId=12; UPDATE File SET size=${ruleSize} WHERE fileId=8; SELECT fileId, filename, size FROM File WHERE fileId IN (8, 12);`;
+    const b64Sql = Buffer.from(sql).toString('base64');
+    const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
+    const result = execSync(
+      `ssh -o StrictHostKeyChecking=no ${sshUser}@${serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${dbPassword}' hashtopolis -sN"`,
+      { encoding: "utf-8", timeout: 30000, shell }
+    );
+    console.log(`  ${result}`);
+  } catch (e) {
+    console.warn(`  Warning: Could not update file sizes: ${(e as Error).message}`);
+  }
 }
 
 // =============================================================================
