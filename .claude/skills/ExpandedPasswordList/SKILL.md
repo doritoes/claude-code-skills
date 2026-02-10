@@ -836,6 +836,138 @@ nocap.txt + OneRuleToRuleThemStill.rule
 5. **Text emoticons**: `:)`, `<3`, `:3`, `uwu`, `owo`
 6. **Slang as password**: `goated`, `bussin`, `nocap`, `frfr` (zero matches in rockyou)
 
+## Markov Chain Password Root Discovery
+
+### Purpose
+
+Discover NEW password roots not in our baseline wordlists by training word-level Markov chains on real text corpora, generating phrase candidates, and validating them against HIBP. Every new root multiplies through nocap.rule (dozens of suffix/prefix/case transformations), making even modestly popular roots valuable.
+
+### Methodology
+
+```
+Real Text Corpora → Markov Model → Word Chains → Strip Spaces → Pre-filter Baseline → HIBP Validate → New Roots
+```
+
+1. **Train** a word-level Markov chain on combined real text corpora
+2. **Generate** 2-word, 3-word, and 4-word chains from the model
+3. **Concatenate** words (remove spaces, strip apostrophes) to form password candidates
+4. **Pre-filter** against nocap.txt baseline (saves HIBP API calls)
+5. **Validate** against HIBP with case variations (lowercase + capitalize)
+6. **Quality filter** to remove grammatical fragments (e.g., "fromthe", "inthe")
+7. **Variation test** top roots with common suffixes (1, 123, !, 69) to prove multiplier effect
+
+### Corpus Sources (Ranked by Discovery Value)
+
+All corpora are combined for maximum vocabulary diversity. Individual corpus types converge at similar hit rates (8.0-8.3%), but combined model edges ahead at 9.0%.
+
+| Corpus | Lines | Source | Password Relevance |
+|--------|-------|--------|-------------------|
+| **Sentiment140 Tweets** | 500K (of 1.6M) | Stanford (`cs.stanford.edu/people/alecmgo/trainingandtestdata.zip`) | Informal self-expression, emotional text |
+| **MemeTracker Phrases** | 200K | Stanford SNAP (`snap.stanford.edu/memetracker/`) | Viral phrases people remember → password material |
+| **Cornell Movie Dialogs** | 304K | Cornell (`www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html`) | Quotable dialog, emotional exchanges |
+| **Quotables** | 39K | Famous quotes collection | Inspirational/memorable phrases |
+
+**Key insight:** Hand-curated emotional self-expression text (11%) outperforms raw corpora (8-9%) because people choose passwords from phrases they identify with. But raw corpora provide vocabulary breadth that curated lists miss.
+
+**Corpus files location:** `scratchpad/corpus/`
+
+### Discovery Hit Rates (Validated Feb 2026)
+
+| Chain Length | Candidates | Hit Rate (new, not in baseline) | Discovery Value |
+|-------------|------------|--------------------------------|-----------------|
+| **2-word** | 500 | **49.2%** (187 found) | Highest hit rate, short memorable phrases |
+| **3-word** | 1,000 | **12.9%** (126 found) | Sweet spot: reasonable length, good variety |
+| **4-word** | 500 | **1.0%** (5 found) | Too long/specific, diminishing returns |
+
+**Total from one run:** 318 new roots discovered from 2,000 candidates (1,852 after baseline filter, 3,704 HIBP queries).
+
+### The Multiplier Effect
+
+Each bare root gets transformed by nocap.rule into dozens of variants. Variation testing proved this:
+
+| Base Root | Base HIBP | Best Variation | Variation HIBP | Multiplier |
+|-----------|-----------|----------------|----------------|------------|
+| heisthe | 155 | heisthe1 | 6,049 | **39x** |
+| whatyou | 1,655 | whatyou1 | 1,005 | suffixed form also popular |
+| itsthe | 61 | itsthe123 | 813 | **13x** |
+| notyour | 587 | notyour1 | 451 | suffixed form also popular |
+| cantget | 408 | cantget1 | 365 | suffixed form also popular |
+| ineeda | 513 | ineeda69 | 187 | alternate suffix popular |
+
+**302 out of 880 suffixed variations hit HIBP (34%).** This is exactly what nocap.rule does at GPU scale — every root in the wordlist gets tested with all suffix/prefix patterns.
+
+### Tiered Discovery Results
+
+| Tier | HIBP Range | Count | Examples |
+|------|-----------|-------|---------|
+| **Tier 1** | >= 1,000 | 5 | icantalk (2,720), nicethings (2,192), idontthink (2,026) |
+| **Tier 2** | 100-999 | 79 | icantbelieve (757), illfuckyou (734), gooddreams (590), happywithyou (414) |
+| **Tier 3** | 10-99 | 134 | imjealous (94), justwokeup (26), ifellasleep (33) |
+| **Tier 4** | 1-9 | 100 | Marginal but real — still worth having in wordlist |
+
+### Tooling
+
+| Tool | Location | Purpose |
+|------|----------|---------|
+| `markov-discovery.ts` | `scratchpad/` | Main discovery pipeline: load corpora, train model, generate candidates, pre-filter, HIBP validate |
+| `markov-quality-filter.ts` | `scratchpad/` | Post-filter: separate password-quality roots from grammatical fragments, test suffix variations |
+| `markov-v3-comparative.ts` | `scratchpad/` | Comparative analysis: test individual vs combined corpus hit rates |
+
+**Running a discovery pass:**
+```bash
+# Generate candidates, pre-filter baseline, validate HIBP
+bun run scratchpad/markov-discovery.ts
+
+# Quality filter + variation testing on results
+bun run scratchpad/markov-quality-filter.ts
+```
+
+**Output files:**
+- `scratchpad/markov-discoveries.txt` — All discoveries with HIBP counts (tab-separated)
+- `scratchpad/markov-quality-roots.txt` — Quality-filtered roots >= 10 HIBP
+- `scratchpad/markov-new-roots.txt` — All roots >= 10 HIBP (before quality filter)
+
+### Cohort Integration
+
+Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (211 roots as of Feb 2026). After adding roots:
+
+```bash
+# Rebuild nocap-plus.txt with new cohort
+python scripts/rebuild-nocap-plus.py
+
+# Upload to Hashtopolis (when server is online)
+bun Tools/FileUploader.ts --upload data/nocap-plus.txt --replace
+```
+
+### Comparative Corpus Analysis (v3 Results)
+
+All real text corpora converge at similar hit rates. Corpus diversity matters more than corpus type:
+
+| Corpus | Hit Rate | 3-word | 4-word | New Roots >= 500 |
+|--------|---------|--------|--------|-----------------|
+| **Combined (all)** | **9.0%** | 15.5% | 2.5% | 2 |
+| MemeTracker | 8.3% | 14.0% | 2.5% | 1 |
+| Movie Dialogs | 8.3% | 14.5% | 2.0% | 1 |
+| Quotes | 8.3% | 16.0% | 0.5% | 0 |
+| Tweets | 8.0% | 14.5% | 1.5% | 1 |
+
+### Key Learnings
+
+1. **2-word chains have highest hit rate (49.2%)** — short memorable phrases dominate password space
+2. **3-word chains are the volume sweet spot** — 12.9% hit rate with good variety
+3. **4-word chains have diminishing returns** — only 1.0% hit rate
+4. **Strip apostrophes** — passwords rarely contain them; "dont" not "don't"
+5. **Pre-filter baseline** — saves ~8% of HIBP queries (148/2000 already known)
+6. **Combined corpus wins** — vocabulary diversity > any single source
+7. **Every root matters** — nocap.rule transforms each root into dozens of candidates at GPU speed
+
+### Future Directions
+
+- **Character-level Markov** (OMEN-style) — may find patterns word-level misses
+- **Neural password generators** — trained on leaked password datasets directly
+- **Non-English corpora** — Spanish, Portuguese, Hindi tweet collections for cultural phrase discovery
+- **Iterative runs** — each run discovers different roots due to Markov randomness; multiple passes increase coverage
+
 ## Full Documentation
 
 - **Configuration (READ FIRST)**: `data/CONFIG.md` - Immutable settings (useNewBench=0)

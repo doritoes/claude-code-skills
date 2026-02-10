@@ -213,6 +213,31 @@ The same pattern applies to every cultural/linguistic cohort we discover.
 
 ---
 
+### 12. Markov Phrase Roots (HIGH VALUE - Proven Discovery Method)
+**Source:** Word-level Markov chains trained on combined text corpora (tweets + MemeTracker + movies + quotes)
+**Method:** Generate 2/3/4-word chains → concatenate → pre-filter baseline → HIBP validate → quality filter
+**Date:** Feb 2026
+
+**Discovery run results (single pass, 2,000 candidates):**
+- 318 new roots found (not in nocap.txt, confirmed in HIBP)
+- 2-word chains: 49.2% discovery rate (187/380 tested)
+- 3-word chains: 12.9% discovery rate (126/975 tested)
+- 4-word chains: 1.0% discovery rate (5/497 tested)
+
+**High-value roots found:**
+- icantalk (2,720), nicethings (2,192), idontthink (2,026), whatyou (1,655), thanksfor (1,557)
+- icantbelieve (757), illfuckyou (734), gooddreams (590), happywithyou (414), justonemore (451)
+
+**Key insight — The multiplier effect:** Each root multiplies through nocap.rule. `heisthe` (155 base HIBP) → `heisthe1` has 6,049 HIBP (39x). 34% of suffixed variations of discovered roots also appear in HIBP.
+
+**Cohort file:** `data/cohorts/markov-phrase-roots.txt` — 211 quality-filtered roots
+
+**This method is repeatable:** Each Markov run generates different candidates due to randomness. Multiple passes increase total discovery coverage. See `Skill.md` → "Markov Chain Password Root Discovery" for full methodology.
+
+**Action:** Run additional passes periodically. Consider non-English corpora (Spanish, Portuguese, Hindi tweets) for cross-cultural phrase discovery.
+
+---
+
 ## Cohort Value Formula
 
 ```
@@ -243,12 +268,13 @@ Where:
 | 2 | Cricket (IPL/Players) | 200-500 | Manual curation | virat, kohli, csk, rcb missing! |
 | 3 | Turkish names | 500-2000 | Find curated list | Large gap |
 | 4 | Arabic names | 1000-3000 | Find curated list | Large gap |
-| 5 | Music (K-pop/Current) | 100-300 | Manual curation | jungkook, sza, dua, badbunny |
-| 6 | Current NBA/NFL stars | 100-300 | Manual curation | jokic, embiid, wembanyama |
-| 7 | Slavic diminutives | 500-1500 | Extract from databases | Many variants |
-| 8 | Chinese Pinyin | 1000-3000 | Generate from databases | Complex |
-| 9 | College sports | 100-200 | Manual curation | osu, uga, nd |
-| 10 | Streetwear/Hype | 50-150 | Manual curation | bape, yeezy, vlone |
+| 5 | **Markov phrase roots** | **200-500/run** | **Automated** | **DONE: 211 roots. Repeatable — run again for more** |
+| 6 | Music (K-pop/Current) | 100-300 | Manual curation | jungkook, sza, dua, badbunny |
+| 7 | Current NBA/NFL stars | 100-300 | Manual curation | jokic, embiid, wembanyama |
+| 8 | Slavic diminutives | 500-1500 | Extract from databases | Many variants |
+| 9 | Chinese Pinyin | 1000-3000 | Generate from databases | Complex |
+| 10 | College sports | 100-200 | Manual curation | osu, uga, nd |
+| 11 | Streetwear/Hype | 50-150 | Manual curation | bape, yeezy, vlone |
 
 ---
 
