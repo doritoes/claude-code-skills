@@ -54,7 +54,7 @@ function execSQL(config: ServerConfig, sql: string): string {
   const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "echo ${b64Sql} | base64 -d | sudo docker exec -i hashtopolis-db mysql -u hashtopolis -p'${config.dbPassword}' hashtopolis -sN"`;
   try {
     const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
-    return execSync(cmd, { encoding: "utf-8", timeout: 30000, shell }).trim();
+    return execSync(cmd, { encoding: "utf-8", timeout: 60000, shell }).trim();
   } catch (e) {
     console.error("SQL error:", (e as Error).message);
     return "";
@@ -115,6 +115,7 @@ async function uploadFile(
     filename?: string;
     isWordlist?: boolean;
     cleanComments?: boolean;
+    replace?: boolean;
   } = {}
 ): Promise<{ fileId: number; filename: string; size: number }> {
   const { isWordlist = true, cleanComments = true } = options;
@@ -152,26 +153,35 @@ async function uploadFile(
   try {
     // Check if file already exists
     const existingId = findFileByName(config, filename);
-    if (existingId && !options.targetFileId) {
+    let replacing = false;
+    let fileId: number;
+
+    if (existingId && options.replace) {
+      // Replace mode: reuse existing fileId, overwrite file content
+      fileId = existingId;
+      replacing = true;
+      console.log(`  Replacing existing file (fileId ${fileId})...`);
+    } else if (existingId && !options.targetFileId) {
       console.log(`  File already exists as fileId ${existingId}`);
       unlinkSync(tempPath);
       return { fileId: existingId, filename, size };
-    }
-
-    // Determine fileId
-    let fileId: number;
-    if (options.targetFileId) {
+    } else if (options.targetFileId) {
       fileId = options.targetFileId;
       // Check if target fileId is already used
       const existing = execSQL(config, `SELECT filename FROM File WHERE fileId = ${fileId}`);
       if (existing) {
-        throw new Error(`fileId ${fileId} already used by: ${existing}`);
+        if (options.replace) {
+          replacing = true;
+          console.log(`  Replacing existing file at fileId ${fileId}...`);
+        } else {
+          throw new Error(`fileId ${fileId} already used by: ${existing}`);
+        }
       }
     } else {
       fileId = getNextFileId(config);
     }
 
-    console.log(`  Assigned fileId: ${fileId}`);
+    console.log(`  ${replacing ? "Replacing" : "Assigned"} fileId: ${fileId}`);
 
     // Upload file to server host
     console.log("  Uploading to server...");
@@ -197,10 +207,16 @@ async function uploadFile(
       `rm ${remotePath}"`;
     execSync(copyCmd, { encoding: "utf-8", timeout: 60000 });
 
-    // Register in database
-    console.log("  Registering in File table...");
-    const insertSql = `INSERT INTO File (fileId, filename, size, isSecret, fileType, accessGroupId) VALUES (${fileId}, '${filename}', ${size}, 1, ${fileType}, 1)`;
-    execSQL(config, insertSql);
+    if (replacing) {
+      // Update size in database
+      console.log("  Updating file size in database...");
+      execSQL(config, `UPDATE File SET size = ${size} WHERE fileId = ${fileId}`);
+    } else {
+      // Register new file in database
+      console.log("  Registering in File table...");
+      const insertSql = `INSERT INTO File (fileId, filename, size, isSecret, fileType, accessGroupId) VALUES (${fileId}, '${filename}', ${size}, 1, ${fileType}, 1)`;
+      execSQL(config, insertSql);
+    }
 
     // Verify registration
     const verify = execSQL(config, `SELECT fileId, filename, size FROM File WHERE fileId = ${fileId}`);
@@ -208,7 +224,7 @@ async function uploadFile(
       throw new Error("File registration failed - not found in database");
     }
 
-    console.log(`  ✓ Uploaded and registered as fileId ${fileId}`);
+    console.log(`  ✓ ${replacing ? "Replaced" : "Uploaded and registered as"} fileId ${fileId}`);
 
     return { fileId, filename, size };
   } finally {
@@ -290,6 +306,7 @@ FileUploader - Upload Attack Files to Hashtopolis
 Usage:
   bun FileUploader.ts --upload <file>              Upload a file
   bun FileUploader.ts --upload <file> --id <n>     Upload with specific fileId
+  bun FileUploader.ts --upload <file> --replace     Replace existing file content
   bun FileUploader.ts --list                       List all files
   bun FileUploader.ts --verify <id1,id2,...>       Verify file downloads
   bun FileUploader.ts --upload-rizzyou             Upload rizzyou.txt as fileId 4
@@ -298,12 +315,14 @@ Options:
   --upload <path>    Path to file to upload (relative to data/ or absolute)
   --id <n>           Force specific fileId (default: next available)
   --name <filename>  Override filename in Hashtopolis
+  --replace          Replace existing file (overwrite content + update DB size)
   --no-clean         Don't strip comments from wordlists
   --list             List all files in Hashtopolis
   --verify <ids>     Verify file downloads work (comma-separated IDs)
 
 Examples:
   bun FileUploader.ts --upload rizzyou.txt --id 4
+  bun FileUploader.ts --upload nocap-plus.txt --replace
   bun FileUploader.ts --upload data/GenZ.rule
   bun FileUploader.ts --list
   bun FileUploader.ts --verify 1,3,4,5,6
@@ -381,11 +400,13 @@ async function main(): Promise<void> {
     const filename = nameIdx !== -1 ? args[nameIdx + 1] : undefined;
 
     const cleanComments = !args.includes("--no-clean");
+    const replace = args.includes("--replace");
 
     const result = await uploadFile(config, filePath, {
       targetFileId,
       filename,
       cleanComments,
+      replace,
     });
 
     console.log(`\n✓ Uploaded: ${result.filename} (fileId ${result.fileId}, ${result.size} bytes)`);

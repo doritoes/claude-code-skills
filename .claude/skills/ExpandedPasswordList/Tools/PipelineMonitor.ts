@@ -1023,6 +1023,42 @@ async function runMonitor(options: { quick?: boolean; fix?: boolean; watch?: boo
   console.log("└────────────────────────────────────────────────────────────┘");
   console.log("");
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // BATCH COMPLETION DETECTION
+  // Check if all active tasks have finished (keyspace fully exhausted)
+  // ═══════════════════════════════════════════════════════════════════════
+  if (!status.queryFailed) {
+    const completionResult = execSQL(config, `
+      SELECT
+        (SELECT COUNT(*) FROM Task t JOIN TaskWrapper tw ON t.taskWrapperId = tw.taskWrapperId WHERE tw.isArchived = 0 AND t.keyspace > 0) as total_tasks,
+        (SELECT COUNT(*) FROM Task t JOIN TaskWrapper tw ON t.taskWrapperId = tw.taskWrapperId WHERE tw.isArchived = 0 AND t.keyspace > 0 AND t.keyspaceProgress >= t.keyspace) as done_tasks,
+        (SELECT SUM(tw.cracked) FROM TaskWrapper tw WHERE tw.isArchived = 0) as total_cracked,
+        (SELECT SUM(hl.hashCount) FROM Hashlist hl WHERE hl.isArchived = 0 AND hl.hashCount > 0) as total_hashes
+    `);
+    if (completionResult) {
+      const [totalTasks, doneTasks, totalCracked, totalHashes] = completionResult.split("\t").map(v => parseInt(v) || 0);
+      if (totalTasks > 0 && doneTasks === totalTasks) {
+        const crackRate = totalHashes > 0 ? ((totalCracked / totalHashes) * 100).toFixed(2) : "?";
+        console.log("┌─ \x1b[32mBATCH COMPLETE\x1b[0m ──────────────────────────────────────────┐");
+        console.log(`│ ${padBox(`\x1b[32m★\x1b[0m All ${totalTasks} tasks finished (${totalCracked.toLocaleString()}/${totalHashes.toLocaleString()} cracked, ${crackRate}%)`)} │`);
+        console.log(`│ ${padBox('')} │`);
+        console.log(`│ ${padBox(`Next steps:`)} │`);
+        console.log(`│ ${padBox(`  1. Power down workers (save budget)`)} │`);
+        console.log(`│ ${padBox(`  2. Export: bun Tools/PasswordExporter.ts`)} │`);
+        console.log(`│ ${padBox(`  3. Archive: bun Tools/SandArchiver.ts --batch batch-NNNN`)} │`);
+        console.log(`│ ${padBox(`  4. Reclaim: bun Tools/HashlistArchiver.ts`)} │`);
+        console.log("└────────────────────────────────────────────────────────────┘");
+        console.log("");
+      } else if (totalTasks > 0 && doneTasks > 0) {
+        const remaining = totalTasks - doneTasks;
+        console.log("┌─ PROGRESS ─────────────────────────────────────────────────┐");
+        console.log(`│ ${padBox(`Tasks: ${doneTasks}/${totalTasks} complete (${remaining} remaining)`)} │`);
+        console.log("└────────────────────────────────────────────────────────────┘");
+        console.log("");
+      }
+    }
+  }
+
   // Abort early if queries are failing
   if (status.queryFailed && !options.watch) {
     console.log("\x1b[31mCannot run health checks - server queries failing.\x1b[0m");

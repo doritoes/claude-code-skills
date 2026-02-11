@@ -2,6 +2,8 @@
 /**
  * DiamondAnalyzer.ts - Analyze Cracked Passwords to Extract Actionable Feedback
  *
+ * v2.3 - 2026-02-10: Added HIBP frequency checking for root prioritization.
+ *   Roots with HIBP count >= 1000 are included in BETA.txt regardless of local frequency.
  * v2.2 - 2026-02-10: Promoted korean-romanized + portuguese-brazilian to COHORT_PATTERNS.
  *   Fixed double-call bug in growExistingCohorts (was called in both main and generateCohortReport).
  * REFACTORED 2026-02-09: Complete rewrite based on THEALGORITHM analysis.
@@ -27,6 +29,13 @@ import { createReadStream, existsSync, readFileSync, writeFileSync, appendFileSy
 import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+
+// HIBP frequency threshold: roots with this many HIBP occurrences are included
+// in BETA.txt regardless of local batch frequency
+const HIBP_HIGH_THRESHOLD = 1000;
+const HIBP_MEDIUM_THRESHOLD = 100;
+const HIBP_BATCH_SIZE = 20; // Max concurrent HIBP queries
 
 const CURRENT_FILE = fileURLToPath(import.meta.url);
 const SKILL_DIR = dirname(dirname(CURRENT_FILE));
@@ -141,6 +150,42 @@ const COHORT_PATTERNS: Record<string, { description: string; patterns: RegExp[];
     ],
     examples: ["joao", "thiago", "neymar", "saudade", "capoeira"],
   },
+  "spanish-phrases": {
+    description: "Spanish/Latin American names, phrases, and cultural terms",
+    patterns: [
+      // Names — male
+      /^(alejandro|santiago|mateo|camilo|andres|sergio|javier|fernando|raul|pablo|rodrigo|carlos|diego|enrique|hector|jorge|luis|manuel|miguel|oscar|pedro|ricardo|roberto|eduardo|francisco|gerardo|gilberto|guillermo|ignacio|joaquin|jose|juan|leonel|lorenzo|marcos|mario|mauricio|nestor|orlando|ramon|rafael|salvador|sebastian|tomas|vicente|victor|xavier)$/i,
+      // Names — female
+      /^(adriana|valentina|catalina|mariana|natalia|daniela|ximena|paola|lorena|rocio|marisol|guadalupe|esperanza|alejandra|andrea|beatriz|camila|carmen|cecilia|claudia|elena|esperanza|fernanda|gabriela|graciela|isabella|jimena|juliana|leticia|lucia|luisa|marcela|mercedes|monica|patricia|pilar|regina|renata|rosario|sandra|silvia|sofia|susana|teresa|veronica|viviana|yolanda)$/i,
+      // Romantic/emotional terms
+      /^(amor|teamo|tequiero|corazon|cariño|princesa|hermosa|bonita|linda|preciosa|querida|amorcito|dulce|pasion|beso|abrazo|novio|novia|amore|miamor|teadoro|tekiero)$/i,
+      // Cultural/slang
+      /^(vamos|chingon|cabron|puta|madre|mierda|verga|pendejo|guey|loco|loca|chido|neta|orale|andale|arriba|fiesta|cerveza|tequila|mariachi|sombrero|amigo|compadre|hermano|familia|barrio|guerrero|patron|jefe)$/i,
+      // Football/sports
+      /^(realmadrid|barcelona|americafc|chivas|boca|river|pumas|tigres|santos|messi|maradona|neymar|ronaldo|futbol|gol)$/i,
+      // Music/reggaeton
+      /^(badbunny|jbalvin|daddy|yankee|ozuna|maluma|shakira|reggaeton|perreo|dembow|regueton)$/i,
+    ],
+    examples: ["alejandro", "teamo", "corazon", "vamos", "chingon"],
+  },
+  "french-phrases": {
+    description: "French names, phrases, and cultural terms",
+    patterns: [
+      // Names — male
+      /^(jean|pierre|jacques|philippe|nicolas|franck|stephane|christophe|baptiste|guillaume|mathieu|cedric|antoine|benoit|charles|damien|edouard|fabien|gabriel|henri|julien|laurent|marc|olivier|pascal|quentin|romain|sebastien|thierry|thomas|vincent|xavier|yannick|alain|andre|bernard|claude|denis|emile|francois|gerard|hugues|ivan|jerome|kevin|louis|maxime|noel|patrice|raymond|serge|sylvain)$/i,
+      // Names — female
+      /^(nathalie|sylvie|valerie|aurelie|virginie|clemence|amelie|brigitte|camille|delphine|elodie|florence|gisele|helene|isabelle|joelle|karine|laetitia|marie|nadine|oceane|pauline|rachel|sophie|therese|veronique|celine|corinne|dominique|estelle|genevieve|juliette|lucienne|marguerite|monique|mireille|sandrine|stephanie|chloe|manon|lea|jade|emma|louise|alice|ines|lina|eva|charlotte|anna)$/i,
+      // Romantic/emotional terms
+      /^(amour|jetaime|bonjour|bisou|cherie|doudou|coucou|chouchou|loulou|bebe|monamour|coeur|tresor|mignon|calin|tendresse|passion|desir|reve|ange|jolie|belle|magnifique|merveilleux)$/i,
+      // Cultural terms
+      /^(soleil|marseille|paris|lyon|toulouse|bordeaux|nantes|strasbourg|montpellier|azerty|motdepasse|liberte|egalite|fraternite|fromage|champagne|baguette|croissant|chateau|jardin|fleur|etoile|papillon|lumiere)$/i,
+      // Profanity/slang
+      /^(merde|putain|bordel|connard|salaud|enfoitre|foutre|nique|batard|casse|degage|fiche|zut|sacrebleu)$/i,
+      // Football
+      /^(olympiquemarseille|psg|parissaintgermain|equipedefrance|zidane|mbappe|griezmann|benzema|platini|ribery|pogba|cantona)$/i,
+    ],
+    examples: ["jetaime", "bonjour", "doudou", "soleil", "marseille"],
+  },
   "compound-word": {
     description: "Compound words (two dictionary words joined)",
     patterns: [
@@ -165,6 +210,8 @@ const COHORT_PATTERNS: Record<string, { description: string; patterns: RegExp[];
 const DISCOVERY_PATTERNS: Record<string, { description: string; patterns: RegExp[]; minMatches: number }> = {
   // korean-romanized: GRADUATED to COHORT_PATTERNS (batch-0006)
   // portuguese-brazilian: GRADUATED to COHORT_PATTERNS (batch-0006)
+  // spanish-latam: GRADUATED to COHORT_PATTERNS as "spanish-phrases" (batch-0008 prep, 2026-02-11)
+  // french: GRADUATED to COHORT_PATTERNS as "french-phrases" (batch-0008 prep, 2026-02-11)
   "japanese-romanized": {
     description: "Japanese romanized names and words",
     patterns: [
@@ -173,20 +220,8 @@ const DISCOVERY_PATTERNS: Record<string, { description: string; patterns: RegExp
     ],
     minMatches: 3,
   },
-  "spanish-latam": {
-    description: "Spanish/Latin American names",
-    patterns: [
-      /^(alejandro|santiago|mateo|camilo|andres|sergio|javier|fernando|raul|pablo|adriana|valentina|catalina|mariana|natalia|daniela|ximena|paola|lorena|rocio|marisol|guadalupe|esperanza)$/i,
-    ],
-    minMatches: 3,
-  },
-  "french": {
-    description: "French names and words",
-    patterns: [
-      /^(jean|pierre|jacques|philippe|nicolas|franck|stephane|christophe|baptiste|guillaume|mathieu|cedric|nathalie|sylvie|valerie|aurelie|virginie|clemence|amour|bisou|cherie|soleil)$/i,
-    ],
-    minMatches: 3,
-  },
+  // spanish-latam: GRADUATED (see above)
+  // french: GRADUATED (see above)
   "thai-romanized": {
     description: "Thai romanized names",
     patterns: [
@@ -683,6 +718,53 @@ function growExistingCohorts(
 // =============================================================================
 
 /**
+ * Query HIBP Pwned Passwords API (k-anonymity) for a single password/root.
+ * Returns the breach count (how many times this exact string appears in HIBP).
+ * Uses SHA-1 prefix (5 chars) to preserve k-anonymity.
+ */
+async function queryHIBP(word: string): Promise<number> {
+  const sha1 = createHash("sha1").update(word).digest("hex").toUpperCase();
+  const prefix = sha1.slice(0, 5);
+  const suffix = sha1.slice(5);
+
+  try {
+    const resp = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+      headers: { "User-Agent": "PAI-DiamondAnalyzer" },
+    });
+    if (!resp.ok) return 0;
+    const text = await resp.text();
+    for (const line of text.split("\n")) {
+      const [hash, count] = line.trim().split(":");
+      if (hash === suffix) return parseInt(count) || 0;
+    }
+  } catch {
+    // Network error — silently return 0
+  }
+  return 0;
+}
+
+/**
+ * Batch-query HIBP for multiple roots. Returns Map<root, hibpCount>.
+ * Rate-limits to HIBP_BATCH_SIZE concurrent requests to be respectful.
+ */
+async function batchQueryHIBP(roots: string[]): Promise<Map<string, number>> {
+  const results = new Map<string, number>();
+  for (let i = 0; i < roots.length; i += HIBP_BATCH_SIZE) {
+    const batch = roots.slice(i, i + HIBP_BATCH_SIZE);
+    const promises = batch.map(async (root) => {
+      const count = await queryHIBP(root);
+      results.set(root, count);
+    });
+    await Promise.all(promises);
+    // Small delay between batches to be respectful to HIBP API
+    if (i + HIBP_BATCH_SIZE < roots.length) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  return results;
+}
+
+/**
  * Generate BETA.txt — ACTIONABLE new root words for password cracking.
  *
  * CRITICAL DESIGN DECISION: BETA.txt must be HIGH-SIGNAL, not exhaustive.
@@ -693,14 +775,20 @@ function growExistingCohorts(
  * 1. Cohort-matched roots — ALWAYS included (these are real names/words)
  * 2. Unclassified roots — ONLY if freq >= 3 AND length >= 5
  *    (high frequency across different passwords = likely real word, not noise)
+ * 3. HIBP-validated roots — If HIBP breach count >= 1000, include regardless
+ *    of local frequency (proves the root is globally common as a password)
  * 3. Cohort wordlists — the bulk of BETA.txt comes from GENERATED cohort
  *    wordlists (Turkish names, Indian names, etc.), NOT from diamond extraction
  */
-function generateBeta(
+async function generateBeta(
   newRoots: Map<string, { count: number; examples: string[]; cohorts: string[] }>,
   outputPath: string
-): number {
+): Promise<{ count: number; hibpPromoted: string[] }> {
   const betaRoots: string[] = [];
+  const hibpPromoted: string[] = [];
+
+  // Phase 1: Include cohort-matched and high-frequency roots (existing logic)
+  const candidatesForHIBP: string[] = [];
 
   for (const [root, data] of newRoots) {
     if (data.cohorts.length > 0) {
@@ -709,22 +797,61 @@ function generateBeta(
     } else if (data.count >= 3 && root.length >= 5) {
       // Unclassified but high-frequency + long enough to be a real word
       betaRoots.push(root);
+    } else if (root.length >= 4) {
+      // Candidate for HIBP validation — not yet included but worth checking
+      candidatesForHIBP.push(root);
     }
-    // Skip: low-frequency unclassified short roots (noise)
   }
 
-  // Sort: cohort-matched first, then by length (longer = more likely real)
+  // Phase 2: HIBP frequency validation for borderline roots
+  // Only check roots not already included, limit to reasonable batch size
+  if (candidatesForHIBP.length > 0) {
+    // Prioritize: longer roots and higher local frequency first
+    candidatesForHIBP.sort((a, b) => {
+      const aData = newRoots.get(a)!;
+      const bData = newRoots.get(b)!;
+      // Sort by local frequency desc, then length desc
+      if (bData.count !== aData.count) return bData.count - aData.count;
+      return b.length - a.length;
+    });
+
+    // Cap at 200 HIBP queries to be respectful to the API
+    const toCheck = candidatesForHIBP.slice(0, 200);
+    console.log(`  Checking ${toCheck.length} candidate roots against HIBP...`);
+
+    const hibpResults = await batchQueryHIBP(toCheck);
+
+    for (const [root, hibpCount] of hibpResults) {
+      if (hibpCount >= HIBP_HIGH_THRESHOLD) {
+        betaRoots.push(root);
+        hibpPromoted.push(root);
+        const data = newRoots.get(root)!;
+        console.log(`    HIBP promoted: ${root} (${hibpCount.toLocaleString()} breaches, ${data.count}x local)`);
+      }
+    }
+
+    if (hibpPromoted.length === 0) {
+      console.log(`    No roots met HIBP threshold (>=${HIBP_HIGH_THRESHOLD.toLocaleString()} breaches)`);
+    }
+  }
+
+  // Sort: cohort-matched first, then HIBP-promoted, then by local frequency
+  const betaSet = new Set(betaRoots);
+  const hibpSet = new Set(hibpPromoted);
   betaRoots.sort((a, b) => {
     const aData = newRoots.get(a)!;
     const bData = newRoots.get(b)!;
     const aHasCohort = aData.cohorts.length > 0 ? 1 : 0;
     const bHasCohort = bData.cohorts.length > 0 ? 1 : 0;
     if (bHasCohort !== aHasCohort) return bHasCohort - aHasCohort;
+    const aHibp = hibpSet.has(a) ? 1 : 0;
+    const bHibp = hibpSet.has(b) ? 1 : 0;
+    if (bHibp !== aHibp) return bHibp - aHibp;
     return bData.count - aData.count;
   });
 
   writeFileSync(outputPath, betaRoots.join("\n") + "\n");
-  return betaRoots.length;
+  return { count: betaRoots.length, hibpPromoted };
 }
 
 /**
@@ -1066,8 +1193,11 @@ async function main(): Promise<void> {
   if (betaIdx !== -1 || fullIdx !== -1) {
     console.log("\nStep 4a: Generating BETA.txt...");
     const betaPath = resolve(OUTPUT_DIR, "BETA.txt");
-    const betaCount = generateBeta(result.newRoots, betaPath);
-    console.log(`  Generated: ${betaCount} new root words`);
+    const betaResult = await generateBeta(result.newRoots, betaPath);
+    console.log(`  Generated: ${betaResult.count} new root words`);
+    if (betaResult.hibpPromoted.length > 0) {
+      console.log(`  HIBP-promoted: ${betaResult.hibpPromoted.length} roots (>=${HIBP_HIGH_THRESHOLD.toLocaleString()} breaches)`);
+    }
     console.log(`  Saved to: ${betaPath}`);
   }
 

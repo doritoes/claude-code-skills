@@ -959,6 +959,8 @@ Each bare root gets transformed by nocap.rule into dozens of variants. Variation
 | `markov-windowed-study.ts` | `scratchpad/` | Windowed extraction study: compare sliding-window extraction vs independent chain generation |
 | `markov-prompted-study.ts` | `scratchpad/` | Prompted seed study: test which seed words produce highest password discovery rates |
 | `markov-prompted-harvest.ts` | `scratchpad/` | Production discovery: large-scale prompted generation using top seeds, saves results incrementally |
+| `markov-prompted-harvest3.ts` | `scratchpad/` | Harvest run 3: targets predicted seeds from seed-predictor analysis (57 new seeds) |
+| `markov-seed-predictor.ts` | `scratchpad/` | Analyzes harvest discoveries + rockyou patterns to predict untested high-potential seeds |
 
 **Running a discovery pass:**
 ```bash
@@ -995,7 +997,7 @@ Large-scale production run using prompted seed optimization to maximize discover
 
 ### Cohort Integration
 
-Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (10,440 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2, 7,571 from prompted harvest). After adding roots:
+Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (25,614 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2, 7,571 from prompted harvest 1, 4,263 from prompted harvest 2, 10,905 from prompted harvest 3). After adding roots:
 
 ```bash
 # Rebuild nocap-plus.txt with new cohort
@@ -1125,6 +1127,156 @@ Does seeding the Markov chain with a specific word instead of random generation 
 12. **Windowed vs independent: equivalent per query** — HIBP is the bottleneck, not Markov generation
 13. **Prompted seeds boost hit rate by 50-100%** — verbs like `love`, `get`, `go` and function words like `the`, `dont` systematically outperform random
 
+### Selecting a Good Corpus (Decision Framework)
+
+The corpus you train on determines what word transitions the model learns. The goal is to match how **real people think when choosing passwords** — which is emotional self-expression, not formal writing.
+
+**Why these corpora work:**
+
+| Corpus Type | Why It Produces Passwords | What It Contributes |
+|-------------|--------------------------|---------------------|
+| **Tweets** | Informal, first-person, emotional ("i love", "dont hate") | Pronouns + verbs + emotion = password patterns |
+| **Meme phrases** | Viral, memorable, culturally shared | Sticky phrases people recall when creating passwords |
+| **Movie dialog** | Quotable, dramatic, character-driven | Action phrases, declarations ("kill the", "get out") |
+| **Famous quotes** | Inspirational, identity-forming | Aspirational phrases ("be the change", "trust the process") |
+
+**What makes a BAD corpus:**
+- **Wikipedia/encyclopedias** — formal, third-person, factual (not how people think)
+- **Legal/academic text** — jargon-heavy, no emotional resonance
+- **Code/technical docs** — wrong vocabulary entirely
+- **Song lyrics alone** — too repetitive, limited vocabulary breadth
+
+**The convergence finding:** Individual corpus types all land at 8.0-8.3% hit rate. Combined wins at 9.0%. This means **vocabulary breadth matters more than corpus type** — any corpus with informal, emotional, first-person text works. Combine multiple for best results.
+
+**Memory-efficient loading:**
+- Cap tweets at 500K lines (of 1.6M available) — enough vocabulary, avoids OOM
+- Cap memes at 200K lines — diminishing returns beyond that
+- Use weighted starter map (not raw array) to avoid 1M+ duplicate entries crashing the heap
+
+### Selecting Good Markov Seeds (Decision Framework)
+
+Prompted generation (forcing a specific starting word) boosts hit rates by 50-100% over random. But not all seeds are equal.
+
+**Seed selection criteria (ranked by importance):**
+
+1. **High rockyou starter frequency** — If a word starts many real passwords, it produces good chains
+   - Analyze pure-alpha passwords (6-25 chars) that begin with the word
+   - Top starters: `a` (287K), `i` (132K), `an` (54K), `me` (39K), `so` (30K)
+
+2. **Strong Markov transitions** — The word must have rich transitions in the trained model
+   - Function words (`the`, `a`, `no`, `not`) combine with everything
+   - Verbs (`love`, `get`, `go`, `make`) drive action phrases
+   - Pronouns (`i`, `my`, `you`, `me`) start self-expression
+
+3. **Emotional/identity resonance** — Passwords express who people are or how they feel
+   - `love` (47.2% hit rate) — the strongest seed by far; universal emotional anchor
+   - `fuck`, `kill`, `dead` — negative emotions are also strong password drivers
+   - `king`, `angel`, `prince` — identity/aspiration seeds
+
+4. **Part-of-speech patterns** (from prompted study, 60 seeds × 15,200 queries):
+
+| POS Category | Avg Hit Rate | Best For | Why |
+|--------------|-------------|----------|-----|
+| **Verbs** | 31.7% | 3-word chains (17.6%) | Creates action phrases: "love you", "get out", "go home" |
+| **Function words** | 31.5% | 2-word chains (57.2%) | Combines with any noun: "the fight", "no more", "not today" |
+| **Nouns** | 30.9% | 2-word chains (57.9%) | Identity words: "king of", "life is", "god love" |
+| **Pronouns** | 27.6% | Self-expression | "i love", "my life", "you are" |
+| **Adjectives** | 26.9% | Descriptive pairs | "big boss", "dark side", "hot stuff" |
+| **Emotional** | 26.8% | Profanity pairs | "fuck you", but "shit this" doesn't work — needs action verb |
+
+**Seeds to AVOID:**
+- **Rare/literary words** — low transition count means the model can't generate diverse candidates
+- **Very short function words used as prefixes** — `a`, `an`, `i` have high rockyou frequency but many hits are just coincidental prefix matches (e.g., `anim` = "a" + "nim" or just "anim"?)
+- **Adjectives for 3-word chains** — only 7.5% hit rate; adjectives don't drive phrases people use as passwords
+
+**Practical seed tiers for production runs:**
+
+| Tier | Seeds | Expected Hit Rate | Candidates/Seed |
+|------|-------|-------------------|-----------------|
+| **1 (proven)** | love, get, the, king, fuck, go, life, dont, you, kill, me, all, need, one, come | 28-35% | 500 × 2 chain lengths |
+| **2 (validated)** | star, money, my, i, death, god, big, take, not, dark, make, your, fire, good, we, no, a, dead, hot, sweet | 25-32% | 300 × 2 chain lengths |
+| **3 (predicted)** | so, man, team, angel, mad, rock, cat, red, pink, bro, prince, blue, lady, win, mama | 20-30% | 500 × 2 chain lengths |
+| **Random** | — | 20-23% | 2,000+ for diversity |
+
+**The rockyou cross-reference method** for predicting new seeds:
+1. Scan rockyou for pure-alpha passwords (6-25 chars) starting with candidate words
+2. Count starter frequency — high count = people naturally use this as a password prefix
+3. Cross-reference against already-tested seeds
+4. Categories with highest untested potential: person words (man, bro, lady, mama), colors (red, pink, blue), animals (cat), action/gaming (team, rock, win)
+
+### Prompted Harvest Run 2 (Feb 2026)
+
+Second large-scale run after deduplicating against run 1 results (7,571 already tested).
+
+| Tier | Tested | Discovered | Hit Rate |
+|------|--------|------------|----------|
+| **Tier 1** (top 15 seeds) | 10,808 | 2,002 | **18.5%** |
+| **Tier 2** (20 secondary) | 8,761 | 1,606 | **18.3%** |
+| **Tier 3** (random) | 3,092 | 655 | **21.2%** |
+| **Total** | **22,661** | **4,263** | **18.8%** |
+
+**Key observations:**
+- Hit rates dropped ~10% from run 1 (29.1% → 18.8%) — expected as easy discoveries are claimed first
+- Random (Tier 3) now BEATS seeded (21.2% vs 18.5%) — seeded seeds are exhausting their search space while random explores fresh territory
+- `allpass` at 42,237 HIBP was the top discovery (from seed `all`)
+- `no` had highest per-seed rate at 32.5% — negation phrases remain productive
+
+**Total across runs 1+2:** 11,834 unique discoveries from 48,714 queries.
+
+### Seed Predictor Analysis (Feb 2026)
+
+Cross-referenced harvest discoveries with rockyou patterns to predict untested high-potential seeds.
+
+**Method:**
+1. Analyze second-word and third-word frequencies in 11,834 discoveries
+2. Scan ~4M pure-alpha rockyou passwords for starting-word frequency
+3. Find words with high rockyou presence but never tested as Markov seeds
+4. Group by category for systematic coverage
+
+**Top untested seeds found:**
+
+| Seed | Rockyou Entries | Category | Predicted Value |
+|------|----------------|----------|----------------|
+| `an` | 54,006 | Function word | HIGH (similar to `a`, `the`) |
+| `so` | 29,979 | Function word | HIGH (emotional trigger) |
+| `man` | 12,945 | Person | HIGH (identity seed) |
+| `team` | 9,346 | Gaming | MEDIUM |
+| `is` | 7,917 | Function word | MEDIUM |
+| `angel` | 6,969 | Emotional | MEDIUM |
+| `mad` | 6,183 | Emotional | MEDIUM |
+| `rock` | 5,976 | Action | MEDIUM |
+
+**Common ending words not yet tested as seeds:** `to`, `and`, `in`, `of`, `on`, `for`, `now`, `be`, `this`, `do` — these appear frequently as the last word in 3-word discoveries, suggesting they could also be productive first words.
+
+### Prompted Harvest Run 3 (Feb 2026)
+
+Third large-scale run targeting seeds predicted by the seed-predictor analysis. 57 new seeds: 17 from rockyou analysis + 10 ending-word seeds + 30 expanded category seeds.
+
+| Tier | Seeds | Tested | Discovered | Hit Rate |
+|------|-------|--------|------------|----------|
+| **Tier 1** (17 predicted) | an, so, man, team, is, angel, mad, rock, cat, red, pink, bro, prince, blue, lady, win, mama | 13,448 | 3,064 | **22.8%** |
+| **Tier 2** (10 ending-words) | to, and, in, of, on, for, now, be, this, do | 9,258 | 2,692 | **29.1%** |
+| **Tier 3** (30 expanded) | girl, boy, dog, wolf, bear, lion, fish, bird, dream, night, sun, moon, home, heart, soul, mind, power, magic, secret, master, war, play, game, happy, wild, true, free, real, new, old | 24,516 | 5,149 | **21.0%** |
+| **Total** | — | **47,222** | **10,905** | **23.1%** |
+
+**Top discoveries:** toor (69K!), freeaccount (57.6K), isme (25.8K), freeuser (20.2K), init (20.9K), homestuck (12.8K), freewifi (13K), sou (11K), freeones (11.2K), newnormal (8.6K), mastergame (8.3K)
+
+**Breakthrough findings:**
+- **Ending-word seeds validated** — `to` (35.8%), `in` (37.7%), `for` (37.6%) were among the best seeds ever tested. These words were never seeds before because they're not "password words" — but they form the connective tissue of phrase passwords
+- **`free` is a goldmine** — 33.8% hit rate, 28 Tier-1 discoveries. People use "free+thing" as passwords for free accounts (freeaccount, freeuser, freewifi, freemovies)
+- **`new` performs strongly** — 32.5% hit rate. People announce newness (newnormal, newgames, newlight)
+- **Predicted seeds confirmed** — seed-predictor's rockyou analysis correctly identified productive seeds (so 31.9%, man 29.7%, cat 26.0%, win 25.2%)
+- **`toor`** (root backwards, 69K HIBP) — the single highest-HIBP discovery across ALL Markov runs; generated from seed `to` + transition `or`
+
+**Cumulative totals across all harvest runs:**
+
+| Run | Queries | Discoveries | Hit Rate | Unique Seeds |
+|-----|---------|-------------|----------|--------------|
+| Harvest 1 | 26,053 | 7,571 | 29.1% | 35 |
+| Harvest 2 | 22,661 | 4,263 | 18.8% | 35 (same, dedup) |
+| Harvest 3 | 47,222 | 10,905 | 23.1% | 57 (new) |
+| **Total** | **95,936** | **22,739** | **23.7%** | **92** |
+
 ### Future Directions
 
 - **Model serialization** — save trained Markov model (transitions + starter weights) to JSON; eliminates 5-10s corpus loading per run
@@ -1135,7 +1287,7 @@ Does seeding the Markov chain with a specific word instead of random generation 
 - **Curated long passphrase lists** — movie quotes, song lyrics, Bible verses, famous speeches for 22+ char targets
 - **CamelCase tested and confirmed dead** — 0 exclusive discoveries across 15K candidates at 22-32 chars (60K queries). Not worth pursuing for any length
 - **Dual-approach discovery** — windowed + independent explore different search regions with only 4% overlap; running both maximizes unique finds
-- **Prompted production runs** — use top 10-15 seeds (love, get, the, king, go, life, dont, you, kill, me) for large-scale discovery
+- **Seed exhaustion tracking** — monitor per-seed hit rate decay across runs to know when to retire seeds and add fresh ones
 
 ## Full Documentation
 

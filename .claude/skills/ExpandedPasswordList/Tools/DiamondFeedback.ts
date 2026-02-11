@@ -714,9 +714,39 @@ async function generateFeedback(options: {
   console.log(`  NEW rules (not in OneRule/nocap): ${newRules.length}`);
 
   // Generate unobtainium.rule (only NEW rules not in existing rule files)
+  // Preserves manually-added rules from previous runs (marked with "# Deep analysis" comments)
   const rulePath = resolve(FEEDBACK_DIR, "unobtainium.rule");
   if (!dryRun) {
-    const ruleContent = [
+    // Collect manually-added rules from existing file before overwriting
+    const manualRules: string[] = [];
+    if (existsSync(rulePath)) {
+      const existing = readFileSync(rulePath, "utf-8");
+      let inManualSection = false;
+      for (const line of existing.split("\n")) {
+        if (line.startsWith("# Deep analysis") || line.startsWith("# Manual")) {
+          inManualSection = true;
+          manualRules.push(line);
+        } else if (inManualSection && line.trim() !== "") {
+          // Continuation of manual section — non-empty rule lines
+          manualRules.push(line);
+        } else if (inManualSection && line.trim() === "") {
+          // End of manual section
+          inManualSection = false;
+        }
+      }
+    }
+
+    const allNewRules = [...newRules];
+    // Merge manual rules, avoiding duplicates
+    const ruleSet = new Set(newRules.map((r) => r.trim()));
+    for (const mr of manualRules) {
+      if (!mr.startsWith("#") && mr.trim() !== "" && !ruleSet.has(mr.trim())) {
+        allNewRules.push(mr);
+        ruleSet.add(mr.trim());
+      }
+    }
+
+    const ruleLines = [
       "# UNOBTAINIUM.rule - Auto-generated from DIAMOND analysis",
       "#",
       "# PURPOSE: Rules discovered from cracked passwords (DIAMONDS) that are",
@@ -727,14 +757,23 @@ async function generateFeedback(options: {
       `# Batches analyzed: ${batchesAnalyzed.join(", ")}`,
       `# Total passwords: ${aggregated.totalPasswords.toLocaleString()}`,
       `# Baseline filtered: ${filteredCount} rules (already in OneRule/nocap)`,
-      `# New rules: ${newRules.length}`,
+      `# New rules: ${allNewRules.length}`,
       "",
       "# NEW pattern-based rules (not in baseline)",
       ...newRules,
-      "",
-    ].join("\n");
+    ];
+
+    // Re-append manual section if it existed
+    if (manualRules.length > 0) {
+      ruleLines.push("");
+      ruleLines.push(...manualRules);
+    }
+
+    ruleLines.push("");
+    const ruleContent = ruleLines.join("\n");
     writeFileSync(rulePath, ruleContent);
-    console.log(`  Wrote ${newRules.length} NEW rules to ${rulePath}`);
+    const manualCount = manualRules.filter((r) => !r.startsWith("#")).length;
+    console.log(`  Wrote ${newRules.length} auto + ${manualCount} manual rules to ${rulePath}`);
   }
 
   // Print analysis summary
