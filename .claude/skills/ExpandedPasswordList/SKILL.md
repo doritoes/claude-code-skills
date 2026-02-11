@@ -958,6 +958,7 @@ Each bare root gets transformed by nocap.rule into dozens of variants. Variation
 | `markov-position-study.ts` | `scratchpad/` | Position-aware study: test if starting position in source sentence affects hit rate |
 | `markov-windowed-study.ts` | `scratchpad/` | Windowed extraction study: compare sliding-window extraction vs independent chain generation |
 | `markov-prompted-study.ts` | `scratchpad/` | Prompted seed study: test which seed words produce highest password discovery rates |
+| `markov-prompted-harvest.ts` | `scratchpad/` | Production discovery: large-scale prompted generation using top seeds, saves results incrementally |
 
 **Running a discovery pass:**
 ```bash
@@ -973,9 +974,28 @@ bun run scratchpad/markov-quality-filter.ts
 - `scratchpad/markov-quality-roots.txt` — Quality-filtered roots >= 10 HIBP
 - `scratchpad/markov-new-roots.txt` — All roots >= 10 HIBP (before quality filter)
 
+### Prompted Harvest Run (Feb 2026)
+
+Large-scale production run using prompted seed optimization to maximize discovery volume.
+
+**Design:** 15 top seeds (Tier 1) × 500 candidates × 2 chain lengths + 20 secondary seeds (Tier 2) × 300 × 2 + 4,000 random (Tier 3). 26,053 HIBP queries.
+
+| Tier | Seeds | Tested | Discovered | Hit Rate |
+|------|-------|--------|------------|----------|
+| **Tier 1** (top 15) | love, get, the, king, fuck, go, life, dont, you, kill, me, all, need, one, come | 12,773 | 3,979 | **31.2%** |
+| **Tier 2** (20 secondary) | star, money, my, i, death, god, big, take, not, dark, make, your, fire, good, we, no, a, dead, hot, sweet | 10,130 | 2,952 | **29.1%** |
+| **Tier 3** (random) | — | 3,150 | 640 | **20.3%** |
+| **Total** | — | **26,053** | **7,571** | **29.1%** |
+
+**Top discoveries:** fuckfacebook (11.5K), goodwife (9.5K), itrace (8.7K), startrek11 (6.9K), fuckce (6.5K), deadfrontier (5.8K), lifeisnow (5.8K), notallowed (5.4K), myhealth (5.2K), mytest (5.4K)
+
+**Top seeds by discovery count:** go (312), fuck (289), get (288), me (285), dont (275), all (275), you (270), need (267), one (267), love (250)
+
+**Prompted vs random at scale:** Tier 1 seeds (31.2%) beat random (20.3%) by 54%, confirming the prompted study findings hold at 10x larger sample sizes.
+
 ### Cohort Integration
 
-Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (2,869 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2). After adding roots:
+Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (10,440 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2, 7,571 from prompted harvest). After adding roots:
 
 ```bash
 # Rebuild nocap-plus.txt with new cohort
