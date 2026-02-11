@@ -957,6 +957,7 @@ Each bare root gets transformed by nocap.rule into dozens of variants. Variation
 | `markov-v3-comparative.ts` | `scratchpad/` | Comparative analysis: test individual vs combined corpus hit rates |
 | `markov-position-study.ts` | `scratchpad/` | Position-aware study: test if starting position in source sentence affects hit rate |
 | `markov-windowed-study.ts` | `scratchpad/` | Windowed extraction study: compare sliding-window extraction vs independent chain generation |
+| `markov-prompted-study.ts` | `scratchpad/` | Prompted seed study: test which seed words produce highest password discovery rates |
 
 **Running a discovery pass:**
 ```bash
@@ -1046,6 +1047,48 @@ Is it more efficient to extract sliding windows from one long chain than to gene
 - **Very low overlap (4%)** — the two approaches explore different search regions; running both maximizes unique discoveries
 - **Recommendation:** Either approach works equally well. Use independent generation for simplicity unless Markov generation becomes a bottleneck
 
+### Prompted Seed Study (Feb 2026)
+
+Does seeding the Markov chain with a specific word instead of random generation improve discovery rates?
+
+**Design:** 60 seed words across 6 categories × 150 candidates per seed × 2 chain lengths + random baseline. 15,200 HIBP queries.
+
+**Top 10 Seeds (ranked by overall hit rate):**
+
+| Rank | Seed | Category | 2w Rate | 3w Rate | Overall | vs Random |
+|------|------|----------|---------|---------|---------|-----------|
+| 1 | **love** | verb | 67.9% | **35.3%** | **47.2%** | +99% |
+| 2 | **get** | verb | 67.3% | 19.2% | 38.5% | +62% |
+| 3 | **the** | function | **74.6%** | 21.5% | 38.4% | +62% |
+| 4 | **king** | noun | 69.4% | 15.1% | 38.2% | +61% |
+| 5 | **fuck** | emotional | 58.4% | 22.4% | 37.3% | +57% |
+| 6 | **go** | verb | 59.8% | 19.9% | 37.1% | +57% |
+| 7 | **life** | noun | 60.5% | 16.9% | 36.8% | +55% |
+| 8 | **dont** | function | 56.5% | 23.9% | 36.3% | +53% |
+| 9 | **you** | pronoun | 62.7% | 19.4% | 35.9% | +52% |
+| 10 | **kill** | emotional | 58.7% | 18.6% | 35.8% | +51% |
+
+**Baseline (random):** 23.7% overall (43.9% 2-word, 9.8% 3-word).
+
+**By Part of Speech:**
+
+| Part of Speech | 2w Rate | 3w Rate | Overall | Best Seed |
+|----------------|---------|---------|---------|-----------|
+| **Verbs** | 49.1% | **17.6%** | **31.7%** | love (47.2%) |
+| **Function words** | 57.2% | 14.8% | 31.5% | the (38.4%) |
+| **Nouns** | 57.9% | 11.0% | 30.9% | king (38.2%) |
+| **Pronouns** | 49.1% | 11.1% | 27.6% | me (35.6%) |
+| **Adjectives** | 59.4% | 7.5% | 26.9% | big (30.3%) |
+| **Emotional** | 50.8% | 8.5% | 26.8% | fuck (37.3%) |
+
+**Key Findings:**
+- **50 of 60 seeds beat random** — prompted generation is systematically better
+- **`love` is the standout** — 47.2% overall, 35.3% for 3-word chains (3.6x random baseline)
+- **Verbs drive 3-word chains** — 17.6% vs 7.5% for adjectives; verb seeds create action phrases people use as passwords
+- **`the` has highest 2-word rate (74.6%)** — function words combine with nouns to form compound words (theatlantic, thefight)
+- **Emotional words underperform** — profanity alone doesn't make passwords; emotional _action_ does (fuck+you=password, but shit+this=not)
+- **Recommendation:** Use top 10-15 seeds as prompts for production discovery runs; focus on verbs and function words for 3-word chains
+
 ### Key Learnings
 
 1. **2-word chains have highest hit rate (43-49%)** — short memorable phrases dominate password space
@@ -1060,6 +1103,7 @@ Is it more efficient to extract sliding windows from one long chain than to gene
 10. **Long passphrases need curated lists, not Markov** — cultural references (quotes, lyrics, memes) are what people actually use at 22+ chars
 11. **Starting position doesn't matter for 2-word** — all positions yield ~42% hit rate
 12. **Windowed vs independent: equivalent per query** — HIBP is the bottleneck, not Markov generation
+13. **Prompted seeds boost hit rate by 50-100%** — verbs like `love`, `get`, `go` and function words like `the`, `dont` systematically outperform random
 
 ### Future Directions
 
@@ -1071,6 +1115,7 @@ Is it more efficient to extract sliding windows from one long chain than to gene
 - **Curated long passphrase lists** — movie quotes, song lyrics, Bible verses, famous speeches for 22+ char targets
 - **CamelCase tested and confirmed dead** — 0 exclusive discoveries across 15K candidates at 22-32 chars (60K queries). Not worth pursuing for any length
 - **Dual-approach discovery** — windowed + independent explore different search regions with only 4% overlap; running both maximizes unique finds
+- **Prompted production runs** — use top 10-15 seeds (love, get, the, king, go, life, dont, you, kill, me) for large-scale discovery
 
 ## Full Documentation
 
