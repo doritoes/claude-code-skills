@@ -997,7 +997,7 @@ Large-scale production run using prompted seed optimization to maximize discover
 
 ### Cohort Integration
 
-Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (25,614 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2, 7,571 from prompted harvest 1, 4,263 from prompted harvest 2, 10,905 from prompted harvest 3). After adding roots:
+Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (35,560 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2, 7,571 from prompted harvest 1, 4,263 from harvest 2, 10,905 from harvest 3, 9,946 from harvest 4). After adding roots:
 
 ```bash
 # Rebuild nocap-plus.txt with new cohort
@@ -1126,6 +1126,9 @@ Does seeding the Markov chain with a specific word instead of random generation 
 11. **Starting position doesn't matter for 2-word** — all positions yield ~42% hit rate
 12. **Windowed vs independent: equivalent per query** — HIBP is the bottleneck, not Markov generation
 13. **Prompted seeds boost hit rate by 50-100%** — verbs like `love`, `get`, `go` and function words like `the`, `dont` systematically outperform random
+14. **Seed exhaustion follows predictable decay** — run 1 (29.1%) → run 2 (18.8%) → run 3 (23.1%, new seeds) → run 4 (17.3%, re-run). Adding new seeds restores hit rate; re-running same seeds decays ~40% per pass
+15. **Preposition/connector seeds are the breakthrough** — `to` (35.8%), `in` (37.7%), `for` (37.6%) produce phrase passwords via connective tissue, not identity words
+16. **Total: 32,685 unique password roots discovered** from 153,503 HIBP queries across 4 harvest runs. Cohort file at 35,560 roots
 
 ### Selecting a Good Corpus (Decision Framework)
 
@@ -1275,7 +1278,8 @@ Third large-scale run targeting seeds predicted by the seed-predictor analysis. 
 | Harvest 1 | 26,053 | 7,571 | 29.1% | 35 |
 | Harvest 2 | 22,661 | 4,263 | 18.8% | 35 (same, dedup) |
 | Harvest 3 | 47,222 | 10,905 | 23.1% | 57 (new) |
-| **Total** | **95,936** | **22,739** | **23.7%** | **92** |
+| Harvest 4 | 57,567 | 9,946 | 17.3% | 69 (re-run all) |
+| **Total** | **153,503** | **32,685** | **21.3%** | **92 unique** |
 
 ### Future Directions
 
