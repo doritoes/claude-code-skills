@@ -873,13 +873,55 @@ All corpora are combined for maximum vocabulary diversity. Individual corpus typ
 
 ### Discovery Hit Rates (Validated Feb 2026)
 
+**Run 1 (2,000 candidates):**
+
 | Chain Length | Candidates | Hit Rate (new, not in baseline) | Discovery Value |
 |-------------|------------|--------------------------------|-----------------|
 | **2-word** | 500 | **49.2%** (187 found) | Highest hit rate, short memorable phrases |
 | **3-word** | 1,000 | **12.9%** (126 found) | Sweet spot: reasonable length, good variety |
 | **4-word** | 500 | **1.0%** (5 found) | Too long/specific, diminishing returns |
 
-**Total from one run:** 318 new roots discovered from 2,000 candidates (1,852 after baseline filter, 3,704 HIBP queries).
+**Total:** 318 new roots from 2,000 candidates (1,852 after baseline filter).
+
+**Run 2 (25,000 candidates — scaled up):**
+
+| Chain Length | Tested | Found | Hit Rate |
+|-------------|--------|-------|----------|
+| **2-word** | 6,424 | 2,813 | **43.8%** |
+| **3-word** | 11,662 | 1,361 | **11.7%** |
+| **4-word** | 4,992 | 75 | **1.5%** |
+
+**Total:** 4,249 new roots. 58 Tier-1 (>=1K HIBP), 875 Tier-2 (100-999), 1,727 Tier-3 (10-99).
+Top discoveries: nokiae63 (41K), believethat (9.5K), roadsthat (8.9K), mycareer (7.8K), breakingnews (4.5K).
+
+**Run 3 — Long passphrases (22-32 chars, 15,000 candidates):**
+
+| Char Range | Tested | Found | Hit Rate |
+|------------|--------|-------|----------|
+| **22-24** | 9,974 | 1 | **0.01%** |
+| **25-27** | 3,913 | 0 | **0.0%** |
+| **28-32** | 1,113 | 0 | **0.0%** |
+
+**Run 3a (lowercase + capitalize only):** 1 hit out of 15,000 (`becomingmorethannothing`, 21 HIBP).
+
+**Run 3b (all 4 case variants: lowercase, Capitalize, CamelCase, camelCase — 60K queries):**
+1 hit out of 15,000 (`allahuakbarallahuakbar`, 456 HIBP — lowercase dominant: low:456, Cap:18, Camel:1, lCamel:0).
+CamelCase exclusive discoveries: **0**. camelCase exclusive: **0**. Capitalization does not rescue long Markov chains.
+
+### Hit Rate by Password Length (Definitive)
+
+The hit rate drops exponentially with password length. This defines the productive range for Markov discovery:
+
+| Length Range | Typical Words | Hit Rate | Verdict |
+|-------------|---------------|----------|---------|
+| **~10 chars** | 2-word | **43.8%** | Highest ROI |
+| **~15 chars** | 3-word | **11.7%** | Still highly productive |
+| **~20 chars** | 4-word | **1.5%** | Marginal |
+| **22-32 chars** | 5-7 word | **0.007%** | Dead zone for Markov |
+
+**Why long passphrases fail with Markov:** People who use 22+ char passwords are security-conscious and choose unique, specific phrases (movie quotes, song lyrics, personal mantras) — not random word combinations that a Markov model would produce. The 22+ char passwords that DO exist in HIBP are culturally specific references, not probabilistic word chains.
+
+**Implication:** Long passphrase attacks should use curated cultural phrase lists (quotes, lyrics, memes), not Markov generation. Markov's productive range is firmly 8-20 chars.
 
 ### The Multiplier Effect
 
@@ -896,22 +938,25 @@ Each bare root gets transformed by nocap.rule into dozens of variants. Variation
 
 **302 out of 880 suffixed variations hit HIBP (34%).** This is exactly what nocap.rule does at GPU scale — every root in the wordlist gets tested with all suffix/prefix patterns.
 
-### Tiered Discovery Results
+### Tiered Discovery Results (Combined Run 1 + Run 2)
 
 | Tier | HIBP Range | Count | Examples |
 |------|-----------|-------|---------|
-| **Tier 1** | >= 1,000 | 5 | icantalk (2,720), nicethings (2,192), idontthink (2,026) |
-| **Tier 2** | 100-999 | 79 | icantbelieve (757), illfuckyou (734), gooddreams (590), happywithyou (414) |
-| **Tier 3** | 10-99 | 134 | imjealous (94), justwokeup (26), ifellasleep (33) |
-| **Tier 4** | 1-9 | 100 | Marginal but real — still worth having in wordlist |
+| **Tier 1** | >= 1,000 | 58 | nokiae63 (41K), believethat (9.5K), roadsthat (8.9K), mycareer (7.8K), breakingnews (4.5K), bankaccount (1.2K) |
+| **Tier 2** | 100-999 | 875 | icansurvive (966), mydreamworld (746), happymothersday (480), itsthebest (401) |
+| **Tier 3** | 10-99 | 1,727 | imjealous (94), justwokeup (26), ifellasleep (33) |
+| **Tier 4** | 1-9 | 1,589 | Marginal but real — still worth having in wordlist |
 
 ### Tooling
 
 | Tool | Location | Purpose |
 |------|----------|---------|
-| `markov-discovery.ts` | `scratchpad/` | Main discovery pipeline: load corpora, train model, generate candidates, pre-filter, HIBP validate |
+| `markov-discovery.ts` | `scratchpad/` | Main discovery pipeline: load corpora, train model, generate 2/3/4-word candidates, pre-filter, HIBP validate |
+| `markov-discovery-long.ts` | `scratchpad/` | Long passphrase variant: generates candidates in target char range (e.g., 22-32) by growing chains until length met |
 | `markov-quality-filter.ts` | `scratchpad/` | Post-filter: separate password-quality roots from grammatical fragments, test suffix variations |
 | `markov-v3-comparative.ts` | `scratchpad/` | Comparative analysis: test individual vs combined corpus hit rates |
+| `markov-position-study.ts` | `scratchpad/` | Position-aware study: test if starting position in source sentence affects hit rate |
+| `markov-windowed-study.ts` | `scratchpad/` | Windowed extraction study: compare sliding-window extraction vs independent chain generation |
 
 **Running a discovery pass:**
 ```bash
@@ -929,7 +974,7 @@ bun run scratchpad/markov-quality-filter.ts
 
 ### Cohort Integration
 
-Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (211 roots as of Feb 2026). After adding roots:
+Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (2,869 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2). After adding roots:
 
 ```bash
 # Rebuild nocap-plus.txt with new cohort
@@ -951,22 +996,81 @@ All real text corpora converge at similar hit rates. Corpus diversity matters mo
 | Quotes | 8.3% | 16.0% | 0.5% | 0 |
 | Tweets | 8.0% | 14.5% | 1.5% | 1 |
 
+### Starting Position Study (Feb 2026)
+
+Does starting from different positions in the source sentence affect discovery rate?
+
+**Design:** 6 start positions × 2 chain lengths × 1,000 candidates each = 12,000 total.
+
+| Position | 2-word Hit Rate | 3-word Hit Rate |
+|----------|----------------|----------------|
+| **pos 0** (sentence start) | 43.5% | 12.0% |
+| **pos 1** | 44.8% | 10.7% |
+| **pos 2** | 41.2% | 9.7% |
+| **pos 3** | 42.1% | 8.9% |
+| **pos 4** | 44.0% | 8.2% |
+| **pos 5** | 41.5% | 7.8% |
+
+**Findings:**
+- **2-word chains are position-agnostic** (41-45%) — no statistically significant difference
+- **3-word chains favor sentence starters** — pos 0-1 (10.7-12%) beat pos 3-5 (7.8-8.9%) by ~35%
+- **Each position finds ~90%+ unique passwords** — running all positions maximizes coverage
+- **Recommendation:** Use default (pos 0) generation for simplicity; position diversity provides diminishing returns
+
+### Windowed Extraction Study (Feb 2026)
+
+Is it more efficient to extract sliding windows from one long chain than to generate independent short chains?
+
+**Design:** Generate 2,000 six-word chains → extract all 2-word (5 per chain) and 3-word (4 per chain) sliding windows. Compare to matched independent generation. 27,054 total HIBP queries.
+
+**Head-to-Head Results:**
+
+| Metric | Windowed | Independent |
+|--------|----------|-------------|
+| Source chains | 2,000 | 16,924 |
+| Unique candidates | 14,824 | 16,924 |
+| **2-word hit rate** | **39.6%** | **40.0%** |
+| **3-word hit rate** | **8.9%** | **10.2%** |
+| Discoveries/chain | **1.40** | 0.20 |
+| Discoveries/query | 0.217 | 0.242 |
+| Overlap | 259 shared out of ~6,200 total |
+
+**Window position hit rates within 6-word chains:**
+- 2-word: 38.5-42.8% across all positions (position-agnostic)
+- 3-word: 10.0% at pos 0 → 7.4% at pos 3 (degrades toward end of chain)
+
+**Findings:**
+- **Hit rates are statistically equivalent** — windowed extraction produces the same quality candidates as independent generation
+- **Windowed is 7x more generation-efficient** (1.4 discoveries per Markov chain vs 0.2)
+- **Per HIBP query: identical** — HIBP queries are the bottleneck, not Markov generation
+- **Very low overlap (4%)** — the two approaches explore different search regions; running both maximizes unique discoveries
+- **Recommendation:** Either approach works equally well. Use independent generation for simplicity unless Markov generation becomes a bottleneck
+
 ### Key Learnings
 
-1. **2-word chains have highest hit rate (49.2%)** — short memorable phrases dominate password space
-2. **3-word chains are the volume sweet spot** — 12.9% hit rate with good variety
-3. **4-word chains have diminishing returns** — only 1.0% hit rate
-4. **Strip apostrophes** — passwords rarely contain them; "dont" not "don't"
-5. **Pre-filter baseline** — saves ~8% of HIBP queries (148/2000 already known)
-6. **Combined corpus wins** — vocabulary diversity > any single source
-7. **Every root matters** — nocap.rule transforms each root into dozens of candidates at GPU speed
+1. **2-word chains have highest hit rate (43-49%)** — short memorable phrases dominate password space
+2. **3-word chains are the volume sweet spot** — 11-13% hit rate with good variety
+3. **4-word chains have diminishing returns** — only 1.0-1.5% hit rate
+4. **22-32 char chains are a dead zone (0.007%)** — random Markov combinations don't match real long passphrase behavior
+5. **Strip apostrophes** — passwords rarely contain them; "dont" not "don't"
+6. **Pre-filter baseline** — saves ~8% of HIBP queries
+7. **Combined corpus wins** — vocabulary diversity > any single source
+8. **Every root matters** — nocap.rule transforms each root into dozens of candidates at GPU speed
+9. **Scaling works** — run 2 (25K) found 4,249 roots vs run 1 (2K) at 318; hit rates remain stable
+10. **Long passphrases need curated lists, not Markov** — cultural references (quotes, lyrics, memes) are what people actually use at 22+ chars
+11. **Starting position doesn't matter for 2-word** — all positions yield ~42% hit rate
+12. **Windowed vs independent: equivalent per query** — HIBP is the bottleneck, not Markov generation
 
 ### Future Directions
 
+- **Model serialization** — save trained Markov model (transitions + starter weights) to JSON; eliminates 5-10s corpus loading per run
 - **Character-level Markov** (OMEN-style) — may find patterns word-level misses
 - **Neural password generators** — trained on leaked password datasets directly
 - **Non-English corpora** — Spanish, Portuguese, Hindi tweet collections for cultural phrase discovery
 - **Iterative runs** — each run discovers different roots due to Markov randomness; multiple passes increase coverage
+- **Curated long passphrase lists** — movie quotes, song lyrics, Bible verses, famous speeches for 22+ char targets
+- **CamelCase tested and confirmed dead** — 0 exclusive discoveries across 15K candidates at 22-32 chars (60K queries). Not worth pursuing for any length
+- **Dual-approach discovery** — windowed + independent explore different search regions with only 4% overlap; running both maximizes unique finds
 
 ## Full Documentation
 
