@@ -82,47 +82,52 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v5.0 (2026-02-10)
-  // Applies to: batch-0012+ | 17 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (11.2K), UNOBTAINIUM.rule (39)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v5.1 (2026-02-13)
+  // Applies to: batch-0013+ | 17 attacks
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.7K), UNOBTAINIUM.rule (40)
   // Principle: pair incremental files with established counterparts (new words × big rules, big words × new rules)
-  // Based on: batches 1-6 ROI, DIAMOND analysis, COHORT-ANALYSIS, budget
+  // Based on: 12 completed batches (266,637 cracks / 4,189,488 hashes = 6.37% overall)
   // ══════════════════════════════════════════════════════════════════════
   //
   // TIER 0: INSTANT (trivial keyspace, <1 second total)
-  "brute-1",     // 95 candidates - INSTANT
-  "brute-2",     // 9K candidates - INSTANT
-  "brute-3",     // 857K candidates - <1 second
-  "brute-4",     // 81M candidates - ~2 seconds
+  // Cumulative: 884 cracks / 9 attempts = 0.4% contribution
+  "brute-1",     // 95 candidates - INSTANT (0 cracks, but free to run)
+  "brute-2",     // 9K candidates - INSTANT (0 cracks, but free to run)
+  "brute-3",     // 857K candidates - <1 second (101 cracks cumulative)
+  "brute-4",     // 81M candidates - ~2 seconds (783 cracks cumulative)
   //
-  // TIER 1: HIGH ROI (68.6% of cracks in b6) — brute force dominates SAND
-  "brute-6",     // 31.1% of cracks - ~10 min
-  "brute-7",     // 37.5% of cracks - ~4-6 hrs (TOP PERFORMER)
+  // TIER 1: HIGH ROI — 68.6% of all cracks, dominates SAND
+  // Cumulative: 131,516 cracks across 19 attack runs
+  "brute-6",     // 64,454 cracks / 9 runs (2.05% rate) — 31.1% of all cracks, ~1.2 min
+  "brute-7",     // 67,062 cracks / 10 runs (1.92% rate) — 37.5% of all cracks, ~55 min (TOP PERFORMER)
   //
   // ── GATE 1: If <4% after Tier 1, STOP — something is broken ──────
   //
   // TIER 2: FEEDBACK ATTACKS (batch-0007+)
+  // Cumulative: 3,283 cracks / 27 attack runs = 1.5% contribution
   // BETA.txt = new words not in nocap.txt → pair with BIG rules (nocap.rule)
   // UNOBTAINIUM.rule = new rules not in nocap.rule → pair with BIG wordlist (nocap-plus.txt)
-  "feedback-beta-nocaprule",       // BETA.txt (9.9K words) + nocap.rule — new words × established rules
-  "nocapplus-nocaprule",           // nocap-plus.txt + nocap.rule [PRIMARY]
-  "nocapplus-unobtainium",         // nocap-plus.txt + UNOBTAINUM.rule — established words × new rules
+  "feedback-beta-nocaprule",       // 2,447 cracks / 9 runs (0.08% rate) — BETA.txt (77.7K) + nocap.rule
+  "nocapplus-nocaprule",           // 733 cracks / 9 runs (0.02% rate) — nocap-plus.txt + nocap.rule [PRIMARY]
+  "nocapplus-unobtainium",         // 103 cracks / 9 runs (<0.01% rate) — nocap-plus.txt + UNOBTAINIUM.rule
   //
-  // ── GATE 2: Evaluate Tier 2 yields. If >1%, lock in for all batches ─
+  // ── GATE 2: Feedback = 1.5% combined. Keep: every crack teaches us something ─
   //
-  // TIER 3: PROVEN MEDIUM ROI (batch-0006 data)
-  "hybrid-nocapplus-4digit",  // 13.5% - top hybrid (consistent b5+b6)
-  "mask-lllllldd",            //  4.9% - 6 lowercase + 2 digits
-  "brute-5",                  //  4.3% - 5-char exhaustive
-  "mask-Ullllllld",           //  2.9% - Capital + 7 lower + 1 digit
+  // TIER 3: PROVEN MEDIUM ROI — 25.6% of all cracks
+  // Cumulative: 53,497 cracks across 36 attack runs
+  "hybrid-nocapplus-4digit",  // 28,508 cracks / 9 runs (0.91% rate) — 13.5%, top hybrid
+  "mask-lllllldd",            // 10,562 cracks / 9 runs (0.34% rate) — 4.9%, 6 lower + 2 digits
+  "brute-5",                  //  8,831 cracks / 9 runs (0.28% rate) — 4.3%, 5-char exhaustive
+  "mask-Ullllllld",           //  5,096 cracks / 9 runs (0.16% rate) — 2.9%, Capital + 7 lower + 1 digit
   //
   // ── GATE 3: ~95% of achievable cracks done. Stop if >$30 for batch ─
   //
-  // TIER 4: LOW ROI — run only if budget allows
-  "mask-Ullllldd",                  // 2.4% - Capital + 4 lower + 2 digits
-  "hybrid-rockyou-special-digits",  // 1.8% - word + ! + digits
-  "hybrid-nocapplus-3digit",        // NEW: word + 3 digits (complements 4digit, 14.4B keyspace, ~2s)
-  "mask-lllldddd",                  // NEW: 4 lowercase + 4 digits (4.57B keyspace, ~1s)
+  // TIER 4: LOW ROI — 4.5% of all cracks, run if budget allows
+  // Cumulative: 8,783 cracks
+  "mask-Ullllldd",                  // 4,699 cracks / 9 runs (0.15% rate) — 2.4%
+  "hybrid-rockyou-special-digits",  // 3,407 cracks / 9 runs (0.11% rate) — 1.8%
+  "hybrid-nocapplus-3digit",        // 1 crack / 1 run — needs more data (3-batch trial)
+  "mask-lllldddd",                  // 676 cracks / 1 run (0.19% rate) — promising, needs more data
   //
   // ══════════════════════════════════════════════════════════════════════
   // REMOVED: ZERO/MINIMAL VALUE (< 0.2% combined)

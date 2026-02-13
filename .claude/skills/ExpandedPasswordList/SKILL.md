@@ -23,6 +23,12 @@ Research pipeline to study password cracking effectiveness and improve tools.
 | **2. Cleartext Acquisition** | Locate fresh dumps, rainbow tables, unmask methods | Future |
 | **3. Full Analysis** | Complete HIBP cleartext corpus → next-level tool improvement | Goal |
 
+### Scale
+
+- **HIBP total**: 4,000+ batches (~1B SHA-1 hashes). We've processed only 162 SAND batches so far — a small fraction.
+- **Progress**: 12 batches completed (266,637 cracks), 150 pending, thousands more available.
+- Every batch teaches us something. Every crack is a data point.
+
 ### Constraints
 
 - **Cannot brute force all HIBP** - Too expensive ($1.8M+ for 8-char on all batches)
@@ -784,7 +790,55 @@ Note: Prior estimates of 0.3-0.6× were too pessimistic. hashcat's GPU rule engi
 efficient than expected. The ~25-30% penalty for dict+rules is from wordlist reads and
 rule application, but modern GPUs handle this well with optimized kernels (`-O`).
 
-### Measured Timings (RTX 4060 Ti, batch-0008, all values measured)
+### Batch History (All 12 Completed Batches)
+
+| Batch | Hashes | Cracked | Rate | Platform | Notes |
+|-------|--------|---------|------|----------|-------|
+| batch-0001 | 351,124 | 70,258 | **20.01%** | Hashtopolis | Includes brute-8 (46,963 over 52 hrs) |
+| batch-0002 | 349,620 | 22,907 | 6.55% | Hashtopolis | Standard pipeline |
+| batch-0003 | 350,385 | 20,537 | 5.86% | Hashtopolis | Standard pipeline |
+| batch-0004 | 350,638 | 22,635 | 6.45% | Hashtopolis | Standard pipeline |
+| batch-0005 | 350,073 | 45,564 | 13.01% | Hashtopolis | 19 attacks (pre-optimization) |
+| batch-0006 | 351,125 | 45,782 | 13.04% | Hashtopolis | 17 attacks (current v5.0 order) |
+| batch-0007 | 349,581 | 23,511 | 6.72% | BIGRED | First BIGRED batch |
+| batch-0008 | 349,446 | 23,311 | 6.67% | BIGRED | brute-7 truncated 51% (SSH bug) |
+| batch-0009 | 349,976 | 23,241 | 6.64% | BIGRED | brute-7 re-run with screen fix |
+| batch-0010 | 349,842 | 23,308 | 6.66% | BIGRED | Full brute-7 (8,701 cracks) |
+| batch-0011 | 350,379 | 23,330 | 6.66% | BIGRED | Standard pipeline |
+| batch-0012 | 349,667 | 24,193 | 6.92% | BIGRED | Added hybrid-3digit + mask-lllldddd |
+| **TOTAL** | **4,189,488** | **266,637** | **6.37%** | | **12 batches, 152 pending** |
+
+_batch-0001 is an outlier (includes brute-8). batch-0005/0006 counts include early/extra attacks._
+_Normalized rate (batch-0002 through batch-0012, excluding brute-8): **~6.5% per batch**._
+_SAND hashes are hash-sorted (alphabetical) — batches are roughly equivalent difficulty._
+
+### Cumulative Attack ROI (All 12 Batches)
+
+Ranked by total cracks across all batches where each attack was attempted:
+
+| Rank | Attack | Attempts | Total Cracks | Avg Rate | Contribution | Tier |
+|------|--------|----------|-------------|----------|--------------|------|
+| 1 | **brute-7** | 10 | **67,062** | 1.92% | **37.5%** | T1 |
+| 2 | **brute-6** | 9 | **64,454** | 2.05% | **31.1%** | T1 |
+| 3 | **hybrid-nocapplus-4digit** | 9 | **28,508** | 0.91% | **13.5%** | T3 |
+| 4 | mask-lllllldd | 9 | 10,562 | 0.34% | 4.9% | T3 |
+| 5 | brute-5 | 9 | 8,831 | 0.28% | 4.3% | T3 |
+| 6 | mask-Ullllllld | 9 | 5,096 | 0.16% | 2.9% | T3 |
+| 7 | mask-Ullllldd | 9 | 4,699 | 0.15% | 2.4% | T4 |
+| 8 | hybrid-rockyou-special-digits | 9 | 3,407 | 0.11% | 1.8% | T4 |
+| 9 | **feedback-beta-nocaprule** | 9 | **2,447** | **0.08%** | **1.1%** | T2 |
+| 10 | brute-4 | 9 | 783 | 0.02% | 0.4% | T0 |
+| 11 | nocapplus-nocaprule | 9 | 733 | 0.02% | 0.3% | T2 |
+| 12 | mask-lllldddd | 1 | 676 | 0.19% | 0.3% | T4 |
+| 13 | brute-3 | 9 | 101 | <0.01% | <0.1% | T0 |
+| 14 | nocapplus-unobtainium | 9 | 103 | <0.01% | <0.1% | T2 |
+| 15 | hybrid-nocapplus-3digit | 1 | 1 | <0.01% | <0.1% | T4 |
+
+_Tier 1 (brute-6+7) = **68.6%** of all cracks. Tier 3 (hybrid+mask+brute-5) = **25.6%**._
+_Feedback attacks (T2) = **1.5%** combined (3,283 cracks from 27 attack runs)._
+_Every crack teaches us something — feedback contributes roots and rules even at low volume._
+
+### Single-Batch Timing Reference (RTX 4060 Ti, batch-0008)
 
 | Attack | Mode | Keyspace | Time | Speed | Cracks | ROI |
 |--------|------|----------|------|-------|--------|-----|
@@ -822,6 +876,30 @@ bun Tools/DiamondFeedback.ts --batch batch-0008
 - `data/diamonds/batch-NNNN.txt` — parsed hash:plain pairs
 - `data/diamonds/passwords-batch-NNNN.txt` — plaintext passwords only
 - `data/glass/batch-NNNN.txt` — uncracked hashes (SAND minus DIAMONDS)
+
+### Continuous Improvement Strategy
+
+**Philosophy: Every crack is a data point.** Even low-ROI attacks contribute roots and rules that compound over time. The goal is to squeeze all value from every batch while prioritizing the highest-yield attacks first.
+
+**Feedback loop status (12 batches):**
+- 284 unique roots discovered (discovered-roots.txt)
+- 77,776 words in BETA.txt (cohorts + discovered + HIBP-promoted)
+- 40 rules in UNOBTAINIUM.rule (new transformations not in nocap.rule)
+- Feedback attacks contribute 1.5% of cracks (3,283 total) — low but growing
+
+**A/B testing plan:**
+To measure true feedback value, periodically run a batch WITHOUT feedback attacks (skip Tier 2: feedback-beta-nocaprule, nocapplus-nocaprule, nocapplus-unobtainium). Compare crack rate against adjacent batches that include feedback. Since SAND batches are hash-sorted (roughly equal difficulty), the difference isolates feedback contribution. After the A/B test, always go back and run the skipped attacks on that batch — every crack matters for publication.
+
+**Attack pruning criteria:**
+- Remove attacks below 0.01% rate after 3+ attempts (currently: brute-1, brute-2 at 0 cracks)
+- Keep brute-3/brute-4 despite low cracks — instant to run, non-zero value
+- Promote attacks that show improving trends across batches
+- New attacks get 3-batch trial period before evaluation
+
+**What to watch for in coming batches:**
+- Does feedback-beta-nocaprule crack rate increase as BETA.txt grows? (77.7K words now)
+- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (40 rules now)
+- Do new mask patterns (mask-lllldddd, hybrid-3digit) justify their slot after more data?
 
 ### Configuration
 
