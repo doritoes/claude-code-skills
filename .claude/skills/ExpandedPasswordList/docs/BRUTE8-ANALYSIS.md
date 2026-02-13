@@ -153,8 +153,63 @@ We haven't tried:
 3. Build pop culture / modern wordlists from PEARLS patterns
 4. Test targeted attacks on GLASS before concluding "uncrackable"
 
+## ROI Analysis: brute-8 Now vs Post-Pipeline (2026-02-12)
+
+### BIGRED Hardware
+
+RTX 4060 Ti (8GB VRAM), SHA-1 mask speed ~10.9 GH/s with `-O` optimized kernels.
+
+### Timing
+
+| Metric | Value |
+|--------|-------|
+| Keyspace (95^8) | 6.63 quadrillion |
+| Time per batch | ~169 hours (~7 days) |
+| Standard batch time | ~3-4 hours |
+| Batches per 7 days | ~42 |
+
+### Opportunity Cost Comparison
+
+| Metric | brute-8 (1 batch, 7 days) | Standard pipeline (42 batches, 7 days) |
+|--------|---------------------------|---------------------------------------|
+| Expected cracks | ~3K-33K | ~966K |
+| Unique batches processed | 1 | 42 |
+| Pipeline progress | 1/155 remaining | 42/155 remaining |
+| Feedback loop value | See below | Full (every batch feeds DiamondAnalyzer) |
+
+### Corrected Feedback Value Assessment
+
+**Previous claim (WRONG):** "brute-8 discoveries are random strings with ZERO feedback value."
+
+**Actual data from batch-0001 (48,624 eight-character passwords):**
+
+| Category | Count | % | Feedback Value |
+|----------|-------|---|----------------|
+| word+digits | 6,323 | 13.0% | HIGH — word roots feed cohorts |
+| capitalized+digits | 1,396 | 2.9% | HIGH — same roots, capitalization rules handle |
+| digits+word | 1,905 | 3.9% | HIGH — word roots feed cohorts |
+| two words | 4,492 | 9.2% | HIGH — compound roots for wordlists |
+| other structured | 7,018 | 14.4% | MEDIUM — contains dictionary words in context |
+| all lowercase alpha | 8,418 | 17.3% | LOW-MEDIUM — some real words, some random strings |
+| leet speak | 735 | 1.5% | HIGH — leet roots already in wordlists |
+| keyboard patterns | 62 | 0.1% | LOW — already covered by masks |
+| **TOTAL STRUCTURED** | **30,349** | **62.4%** | **11,811 unique word roots extracted** |
+| random-looking | 18,275 | 37.6% | ZERO — truly random |
+
+**Conclusion:** brute-8 cracks are majority structured (62%) with 11,811 unique word roots that feed the DiamondAnalyzer → cohort → nocap-plus.txt feedback loop. The feedback value is real.
+
+### Decision: DEFER (not cancel)
+
+brute-8 is deferred to post-pipeline on **opportunity cost alone**:
+- 42 standard batches in same GPU time = ~30x more cracks
+- Standard pipeline cracks ALSO feed the feedback loop
+- After batch-162, combine ALL GLASS (~50M+ hashes) into one hashlist → single 7-day brute-8 pass
+- Unified GLASS approach: same GPU time, but brute-8 results checked against ALL remaining hashes (not just 1 batch)
+
 ## Data Files
 
-- DIAMONDS batch-0001: 23,295 cracked (6.6%)
+- DIAMONDS batch-0001: 70,258 cracked (after all attacks including brute-8)
+- 8-char passwords: 48,624 (69.2% of all cracks)
 - GLASS batch-0001: 327,829 uncracked (93.4%)
-- Analysis date: 2026-02-07
+- Original analysis date: 2026-02-07
+- ROI analysis date: 2026-02-12

@@ -53,6 +53,12 @@ const ROCKYOU_PATH = resolve(DATA_DIR, "rockyou.txt");
 // Cohort wordlists directory
 const COHORTS_DIR = resolve(DATA_DIR, "cohorts");
 
+// Persistent discovered roots — accumulates across ALL batches
+const DISCOVERED_ROOTS_PATH = resolve(FEEDBACK_DIR, "discovered-roots.txt");
+
+// Sand state for feedback metrics
+const SAND_STATE_PATH = resolve(DATA_DIR, "sand-state.json");
+
 // Baseline rule files to compare against (avoid duplicating existing rules)
 const ONERULE_PATH = resolve(SKILL_DIR, "..", "..", "..", "OneRuleToRuleThemStill.rule");
 const NOCAP_RULE_PATH = resolve(DATA_DIR, "nocap.rule");
@@ -629,11 +635,46 @@ async function generateFeedback(options: {
   console.log(`Baseline comparison: ${baseline.loaded ? `${baseline.count.toLocaleString()} words from ${baseline.path}` : "NOT LOADED (all roots appear new)"}`);
   console.log(`New roots discovered: ${newRoots.length.toLocaleString()}`);
 
-  // Generate BETA.txt (new root words + cohort wordlists)
+  // Generate BETA.txt (discovered roots + cohort wordlists)
+  // KEY: Uses persistent discovered-roots.txt to ACCUMULATE roots across batches
   const betaPath = resolve(FEEDBACK_DIR, "BETA.txt");
+  // Metrics tracking (populated in the block below, used for sand-state update)
+  let metricsDiscoveredTotal = 0;
+  let metricsBetaSize = 0;
+  let metricsNewDiscoveries = 0;
   if (!dryRun) {
-    // Start with discovered roots
-    const betaWords = new Set(newRoots.map(r => r.root));
+    // Load previously discovered roots (persisted across batches)
+    const discoveredRoots = new Set<string>();
+    if (existsSync(DISCOVERED_ROOTS_PATH)) {
+      const existing = readFileSync(DISCOVERED_ROOTS_PATH, "utf-8");
+      for (const line of existing.split("\n")) {
+        const word = line.trim().toLowerCase();
+        if (word && !word.startsWith("#")) {
+          discoveredRoots.add(word);
+        }
+      }
+      console.log(`  Loaded ${discoveredRoots.size.toLocaleString()} previously discovered roots`);
+    }
+
+    // Add NEW roots from this batch to the persistent set
+    const newDiscoveries = newRoots.filter(r => !discoveredRoots.has(r.root));
+    for (const r of newRoots) {
+      discoveredRoots.add(r.root);
+    }
+    console.log(`  +${newDiscoveries.length} new roots this batch (${discoveredRoots.size.toLocaleString()} total discovered)`);
+
+    // Save updated discovered-roots.txt (persistent accumulation)
+    const discoveredContent = [
+      "# discovered-roots.txt — Persistent root accumulation across ALL batches",
+      `# Updated: ${new Date().toISOString()}`,
+      `# Total: ${discoveredRoots.size} roots`,
+      "#",
+      ...Array.from(discoveredRoots).sort(),
+    ].join("\n") + "\n";
+    writeFileSync(DISCOVERED_ROOTS_PATH, discoveredContent);
+
+    // Build BETA.txt: ALL discovered roots + ALL cohort words
+    const betaWords = new Set(discoveredRoots);
 
     // Merge cohort wordlists (the real value — comprehensive name lists)
     // Always include cohort words regardless of baseline — they ARE the payload
@@ -657,6 +698,11 @@ async function generateFeedback(options: {
     const betaContent = Array.from(betaWords).join("\n") + "\n";
     writeFileSync(betaPath, betaContent);
     console.log(`  Wrote ${betaWords.size.toLocaleString()} total words to ${betaPath}`);
+
+    // Capture metrics for sand-state update
+    metricsDiscoveredTotal = discoveredRoots.size;
+    metricsBetaSize = betaWords.size;
+    metricsNewDiscoveries = newDiscoveries.length;
   }
 
   // Load baseline rules to filter against
@@ -854,6 +900,29 @@ async function generateFeedback(options: {
   if (!dryRun) {
     writeFileSync(reportPath, JSON.stringify(report, null, 2));
     console.log(`\nReport saved to: ${reportPath}`);
+  }
+
+  // Update sand-state.json with feedback metrics for each analyzed batch
+  if (!dryRun && existsSync(SAND_STATE_PATH)) {
+    try {
+      const sandState = JSON.parse(readFileSync(SAND_STATE_PATH, "utf-8"));
+      // Update the LAST batch in batchesAnalyzed (the one just processed)
+      const targetBatch = batchesAnalyzed[batchesAnalyzed.length - 1];
+      if (targetBatch && sandState.batches?.[targetBatch]) {
+        sandState.batches[targetBatch].feedback = {
+          newRootsDiscovered: metricsNewDiscoveries,
+          hibpPromoted: 0,  // tracked by DiamondAnalyzer separately
+          totalDiscoveredRoots: metricsDiscoveredTotal,
+          betaSize: metricsBetaSize,
+          nocapPlusSize: 0,  // populated by rebuild-nocap-plus.py
+          feedbackCracks: 0, // calculated from per-attack data
+        };
+        writeFileSync(SAND_STATE_PATH, JSON.stringify(sandState, null, 2));
+        console.log(`  Updated sand-state.json feedback metrics for ${targetBatch}`);
+      }
+    } catch (e) {
+      console.log(`  Warning: Could not update sand-state.json: ${e}`);
+    }
   }
 
   return report;

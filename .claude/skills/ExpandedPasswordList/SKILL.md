@@ -629,10 +629,11 @@ If no baseline exists, the tool warns and all roots appear as "new" - which defe
 - Use separate brute-1, brute-2, brute-3, ..., brute-7 attacks instead
 - Each attack has fixed keyspace that workers can benchmark
 
-**brute-8 excluded from standard pipeline:**
-- 8-character brute force takes ~51 hours per batch
-- Too expensive for routine processing
-- Use `QuickAttack.ts` for one-off experiments on specific batches
+**brute-8 deferred to post-pipeline (BIGRED ROI analysis 2026-02-12):**
+- 8-character brute force: 95^8 = 6.63 quadrillion keyspace, ~169 hours (~7 days) on RTX 4060 Ti at 10.9 GH/s
+- **Feedback value is real**: batch-0001 showed 62% of 8-char cracks are structured (word+digits, compounds, leet) with 11,811 unique word roots — feeds DiamondAnalyzer loop
+- **Deferred on opportunity cost**: 7 days on brute-8 = ~3K-33K cracks from 1 batch. 7 days on standard pipeline = ~42 batches = ~966K cracks
+- **Post-pipeline plan**: After batch-162, combine ALL GLASS into unified hashlist → single 7-day brute-8 pass maximizes hash reuse and avoids per-batch overhead
 
 ### Task ETA Calculation
 
@@ -668,6 +669,162 @@ FROM Chunk WHERE taskId = <TASK_ID>;
 **WRONG:**
 - `remaining_chunks / chunks_per_hour` (chunks are created on the fly, active count is always ~8)
 - `keyspaceProgress = keyspace` → "task is done" (dispatched ≠ finished)
+
+## BIGRED Local GPU Cracking
+
+When AWS budget is exhausted or cloud VMs are powered off, BIGRED provides a local GPU alternative. BIGRED runs hashcat directly via SSH — no Hashtopolis overhead.
+
+### Architecture
+
+```
+Windows (PAI) ──SSH──> BIGRED (192.168.99.204)
+                        ├── /home/pai/hashcat-work/
+                        │   ├── wordlists/   (nocap-plus.txt, BETA.txt, rockyou.txt, nocap.txt)
+                        │   ├── rules/       (nocap.rule, UNOBTAINIUM.rule)
+                        │   ├── hashlists/   (batch-NNNN.txt)
+                        │   ├── potfiles/    (batch-NNNN.pot)
+                        │   └── results/
+                        └── hashcat 6.2.6 (OpenCL, RTX 4060 Ti)
+```
+
+### Hardware
+
+| Component | Spec |
+|-----------|------|
+| GPU | NVIDIA RTX 4060 Ti (8GB VRAM, 34 MCUs) |
+| CPU | AMD Ryzen 9 5950X |
+| RAM | 16GB |
+| Disk | 98GB (80GB free) |
+| SHA-1 Speed | ~13.8 GH/s (optimized kernel, benchmark) |
+
+### Tools
+
+| Tool | Purpose | Command |
+|------|---------|---------|
+| BigRedSync.ts | Sync wordlists/rules to BIGRED | `bun Tools/BigRedSync.ts` |
+| BigRedRunner.ts | Run attacks + collect results | `bun Tools/BigRedRunner.ts --batch N` |
+
+### Quick Commands
+
+```bash
+cd .claude/skills/ExpandedPasswordList
+
+# Sync attack files (idempotent, skips existing)
+bun Tools/BigRedSync.ts
+
+# Upload batch hashlist
+bun Tools/BigRedSync.ts --hashlist batch-0008
+
+# Run all attacks (sequential, ~3 hours for SHA-1)
+bun Tools/BigRedRunner.ts --batch 8
+
+# Run single attack
+bun Tools/BigRedRunner.ts --batch 8 --attack brute-7
+
+# Check status while running
+bun Tools/BigRedRunner.ts --batch 8 --status
+
+# Collect results into DIAMOND pipeline
+bun Tools/BigRedRunner.ts --batch 8 --collect
+```
+
+### Understanding Attack Speed: Why Rules != Keyspace ÷ Benchmark
+
+**CRITICAL**: You cannot estimate dictionary+rules attack time by dividing keyspace by benchmark speed.
+Benchmark speed (e.g., `hashcat -b -m 100` → 13.8 GH/s) measures **mask/brute-force speed only**.
+Dictionary+rules attacks are fundamentally slower for several reasons:
+
+**Why mask attacks are fastest:**
+- GPU generates candidates directly from the mask pattern (e.g., `?a?a?a?a?a?a?a`)
+- Each candidate is the same fixed length — perfectly predictable memory access
+- Pure GPU computation, no host-to-device data transfer per candidate
+- No transformation logic — candidates are just counter increments over the charset
+
+**Why dictionary+rules attacks are slower:**
+- Each word must be read from the wordlist buffer in GPU memory
+- Each rule is a sequence of transformation operations applied to the word:
+  - Simple rules (lowercase `l`, capitalize `c`): ~1 operation, fast
+  - Complex rules (e.g., `c $1 sa@ si! $!` = capitalize + append + substitute + substitute + append):
+    5 sequential string operations per candidate
+  - nocap.rule has 48K rules, many with 3-8 chained operations
+- Variable-length words and outputs = irregular memory access patterns
+- Some rules produce candidates that get rejected (length limits with `-O` = max 31 chars)
+- Rule parsing overhead on each GPU thread
+
+**Why hybrid attacks fall in between:**
+- mode 6 (word+mask): reads word, then appends mask-generated suffix
+- Faster than full rules (mask portion is native GPU) but still requires wordlist reads
+- Typically 60-80% of mask speed
+
+**How to properly estimate dict+rules timing:**
+
+```
+mask_speed = real-world mask speed (NOT benchmark — use largest mask attack as reference)
+keyspace = wordlist_lines × rule_count
+
+# Speed multipliers (MEASURED on RTX 4060 Ti, SHA-1, batch-0008):
+#   Mask/brute:     1.0× (10.9 GH/s real-world for brute-7)
+#   Dict+rules:     ~0.72× for large keyspaces (nocapplus × nocap.rule)
+#   Hybrid:         ~0.74-0.80× (word + mask suffix)
+#
+# IMPORTANT: Small keyspaces (<1B) produce misleading speed numbers
+# because GPU startup overhead dominates. Only trust speed from attacks
+# that run >30 seconds with sustained GPU utilization.
+#
+# Best practice: run `--runtime 10` on the actual attack to get real speed
+# hashcat -m 100 hashlist.txt wordlist.txt -r rules.rule --runtime 10 --status
+```
+
+**Measured multipliers (batch-0008, large keyspace only):**
+- Dict+rules (nocap.rule, 48K rules): **0.72×** (7.8 GH/s ÷ 10.9 GH/s)
+- Hybrid mode 6 (word + 4-digit): **0.74×** (8.1 GH/s ÷ 10.9 GH/s)
+- Hybrid mode 6 (word + special+3-digit): **0.80×** (8.7 GH/s ÷ 10.9 GH/s)
+
+Note: Prior estimates of 0.3-0.6× were too pessimistic. hashcat's GPU rule engine is more
+efficient than expected. The ~25-30% penalty for dict+rules is from wordlist reads and
+rule application, but modern GPUs handle this well with optimized kernels (`-O`).
+
+### Measured Timings (RTX 4060 Ti, batch-0008, all values measured)
+
+| Attack | Mode | Keyspace | Time | Speed | Cracks | ROI |
+|--------|------|----------|------|-------|--------|-----|
+| brute-1 thru brute-4 | mask | trivial | instant | * | 123 | 0.6% |
+| brute-6 | mask | 735B | **1.2 min** | 10.2 GH/s | 7,139 | 33.2% |
+| brute-7 | mask | 69.8T | **54.7 min** | 10.9 GH/s | 6,880 | 32.0% |
+| feedback-beta-nocaprule | dict+rules | 537M | 6s | * | 133 | 0.6% |
+| nocapplus-nocaprule | dict+rules | 698B | **1.5 min** | 7.8 GH/s | 279 | 1.3% |
+| nocapplus-unobtainium | dict+rules | 360M | 4s | * | 5 | 0.0% |
+| hybrid-nocapplus-4digit | hybrid | 144B | **23s** | 8.1 GH/s | 3,249 | 15.1% |
+| mask-lllllldd | mask | 30.9B | 7s | 9.8 GH/s | 1,158 | 5.4% |
+| brute-5 | mask | 7.7B | 4s | * | 983 | 4.6% |
+| mask-Ullllllld | mask | 2.1T | **3.3 min** | 10.8 GH/s | 667 | 3.1% |
+| mask-Ullllldd | mask | 1.19B | 7s | 9.9 GH/s | 517 | 2.4% |
+| hybrid-rockyou-special-digits | hybrid | 4.6B | **60s** | 8.7 GH/s | 393 | 1.8% |
+| **TOTAL** | | | **~63 min** | | **21,526** | **6.16%** |
+
+_* Speed unreliable for small keyspaces (<1B) — GPU startup overhead dominates._
+_ROI = percentage of total cracks from that attack._
+_Total batch time ~63 min (dominated by brute-7 at 54.7 min)._ All times EST.
+
+### Post-Batch Workflow (BIGRED)
+
+After all attacks complete, results feed into the same DIAMOND pipeline:
+
+```bash
+bun Tools/BigRedRunner.ts --batch 8 --collect      # Potfile → diamonds/
+bun Tools/DiamondAnalyzer.ts --full data/diamonds/passwords-batch-0008.txt
+bun Tools/DiamondFeedback.ts --batch batch-0008
+"C:/Program Files/Python312/python.exe" scripts/rebuild-nocap-plus.py
+```
+
+### Configuration
+
+SSH credentials in `.claude/.env`:
+```
+BIGRED_HOST=192.168.99.204
+BIGRED_USER=pai
+BIGRED_SSH_KEY=~/.ssh/bigred_pai
+```
 
 ## Storage Requirements
 
@@ -836,462 +993,142 @@ nocap.txt + OneRuleToRuleThemStill.rule
 5. **Text emoticons**: `:)`, `<3`, `:3`, `uwu`, `owo`
 6. **Slang as password**: `goated`, `bussin`, `nocap`, `frfr` (zero matches in rockyou)
 
-## Markov Chain Password Root Discovery
+## Markov Chain Password Root Discovery (Research Complete — Feb 2026)
 
-### Purpose
+### Summary
 
-Discover NEW password roots not in our baseline wordlists by training word-level Markov chains on real text corpora, generating phrase candidates, and validating them against HIBP. Every new root multiplies through nocap.rule (dozens of suffix/prefix/case transformations), making even modestly popular roots valuable.
+**50,050 unique password roots discovered** from 260,567 HIBP queries across 6 harvest runs using word-level Markov chains trained on 4 combined text corpora. These roots feed into `data/cohorts/markov-phrase-roots.txt` (52,919 entries) and are included in nocap-plus.txt (14,414,139 words).
+
+**Status: Diminishing returns reached.** Harvest 6 hit rate (11.7%) dropped below the 15% efficiency threshold. Fresh seed categories are exhausted. The research is complete — further runs would yield fewer roots per HIBP query than alternative discovery methods (character-level Markov, neural generators, non-English expansion).
 
 ### Methodology
 
 ```
-Real Text Corpora → Markov Model → Word Chains → Strip Spaces → Pre-filter Baseline → HIBP Validate → New Roots
+Real Text Corpora → Word-Level Markov Model → 2/3-word Chains → Concatenate → Pre-filter Baseline → HIBP Validate → New Roots
 ```
 
-1. **Train** a word-level Markov chain on combined real text corpora
-2. **Generate** 2-word, 3-word, and 4-word chains from the model
-3. **Concatenate** words (remove spaces, strip apostrophes) to form password candidates
-4. **Pre-filter** against nocap.txt baseline (saves HIBP API calls)
-5. **Validate** against HIBP with case variations (lowercase + capitalize)
-6. **Quality filter** to remove grammatical fragments (e.g., "fromthe", "inthe")
-7. **Variation test** top roots with common suffixes (1, 123, !, 69) to prove multiplier effect
+### Corpora
 
-### Corpus Sources (Ranked by Discovery Value)
+All combined for maximum vocabulary diversity. Individual types converge at 8.0-8.3%; combined wins at 9.0%.
 
-All corpora are combined for maximum vocabulary diversity. Individual corpus types converge at similar hit rates (8.0-8.3%), but combined model edges ahead at 9.0%.
+| Corpus | Lines | Source |
+|--------|-------|--------|
+| Sentiment140 Tweets | 500K | Stanford (informal self-expression) |
+| MemeTracker Phrases | 200K | Stanford SNAP (viral memorable phrases) |
+| Cornell Movie Dialogs | 304K | Cornell (quotable dialog) |
+| Quotables | 39K | Famous quotes (aspirational phrases) |
 
-| Corpus | Lines | Source | Password Relevance |
-|--------|-------|--------|-------------------|
-| **Sentiment140 Tweets** | 500K (of 1.6M) | Stanford (`cs.stanford.edu/people/alecmgo/trainingandtestdata.zip`) | Informal self-expression, emotional text |
-| **MemeTracker Phrases** | 200K | Stanford SNAP (`snap.stanford.edu/memetracker/`) | Viral phrases people remember → password material |
-| **Cornell Movie Dialogs** | 304K | Cornell (`www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html`) | Quotable dialog, emotional exchanges |
-| **Quotables** | 39K | Famous quotes collection | Inspirational/memorable phrases |
+Files: `scratchpad/corpus/`. Memory: cap tweets at 500K, memes at 200K. Use precomputed transition totals to avoid OOM.
 
-**Key insight:** Hand-curated emotional self-expression text (11%) outperforms raw corpora (8-9%) because people choose passwords from phrases they identify with. But raw corpora provide vocabulary breadth that curated lists miss.
+### Hit Rate by Password Length
 
-**Corpus files location:** `scratchpad/corpus/`
+| Length | Words | Hit Rate | Verdict |
+|--------|-------|----------|---------|
+| ~10 chars | 2-word | **43.8%** | Highest ROI |
+| ~15 chars | 3-word | **11.7%** | Productive volume |
+| ~20 chars | 4-word | **1.5%** | Marginal |
+| 22-32 chars | 5-7 word | **0.007%** | Dead zone |
 
-### Discovery Hit Rates (Validated Feb 2026)
-
-**Run 1 (2,000 candidates):**
-
-| Chain Length | Candidates | Hit Rate (new, not in baseline) | Discovery Value |
-|-------------|------------|--------------------------------|-----------------|
-| **2-word** | 500 | **49.2%** (187 found) | Highest hit rate, short memorable phrases |
-| **3-word** | 1,000 | **12.9%** (126 found) | Sweet spot: reasonable length, good variety |
-| **4-word** | 500 | **1.0%** (5 found) | Too long/specific, diminishing returns |
-
-**Total:** 318 new roots from 2,000 candidates (1,852 after baseline filter).
-
-**Run 2 (25,000 candidates — scaled up):**
-
-| Chain Length | Tested | Found | Hit Rate |
-|-------------|--------|-------|----------|
-| **2-word** | 6,424 | 2,813 | **43.8%** |
-| **3-word** | 11,662 | 1,361 | **11.7%** |
-| **4-word** | 4,992 | 75 | **1.5%** |
-
-**Total:** 4,249 new roots. 58 Tier-1 (>=1K HIBP), 875 Tier-2 (100-999), 1,727 Tier-3 (10-99).
-Top discoveries: nokiae63 (41K), believethat (9.5K), roadsthat (8.9K), mycareer (7.8K), breakingnews (4.5K).
-
-**Run 3 — Long passphrases (22-32 chars, 15,000 candidates):**
-
-| Char Range | Tested | Found | Hit Rate |
-|------------|--------|-------|----------|
-| **22-24** | 9,974 | 1 | **0.01%** |
-| **25-27** | 3,913 | 0 | **0.0%** |
-| **28-32** | 1,113 | 0 | **0.0%** |
-
-**Run 3a (lowercase + capitalize only):** 1 hit out of 15,000 (`becomingmorethannothing`, 21 HIBP).
-
-**Run 3b (all 4 case variants: lowercase, Capitalize, CamelCase, camelCase — 60K queries):**
-1 hit out of 15,000 (`allahuakbarallahuakbar`, 456 HIBP — lowercase dominant: low:456, Cap:18, Camel:1, lCamel:0).
-CamelCase exclusive discoveries: **0**. camelCase exclusive: **0**. Capitalization does not rescue long Markov chains.
-
-### Hit Rate by Password Length (Definitive)
-
-The hit rate drops exponentially with password length. This defines the productive range for Markov discovery:
-
-| Length Range | Typical Words | Hit Rate | Verdict |
-|-------------|---------------|----------|---------|
-| **~10 chars** | 2-word | **43.8%** | Highest ROI |
-| **~15 chars** | 3-word | **11.7%** | Still highly productive |
-| **~20 chars** | 4-word | **1.5%** | Marginal |
-| **22-32 chars** | 5-7 word | **0.007%** | Dead zone for Markov |
-
-**Why long passphrases fail with Markov:** People who use 22+ char passwords are security-conscious and choose unique, specific phrases (movie quotes, song lyrics, personal mantras) — not random word combinations that a Markov model would produce. The 22+ char passwords that DO exist in HIBP are culturally specific references, not probabilistic word chains.
-
-**Implication:** Long passphrase attacks should use curated cultural phrase lists (quotes, lyrics, memes), not Markov generation. Markov's productive range is firmly 8-20 chars.
+Long passphrases need curated cultural phrases (quotes, lyrics, memes), not Markov generation. CamelCase tested and confirmed dead (0 exclusive discoveries across 30K candidates, 60K queries).
 
 ### The Multiplier Effect
 
-Each bare root gets transformed by nocap.rule into dozens of variants. Variation testing proved this:
+Each bare root → dozens of GPU-speed variants via nocap.rule. Variation testing: 302/880 suffixed variants hit HIBP (34%). Example: `heisthe` (155 HIBP) → `heisthe1` (6,049 HIBP) = 39x multiplier.
 
-| Base Root | Base HIBP | Best Variation | Variation HIBP | Multiplier |
-|-----------|-----------|----------------|----------------|------------|
-| heisthe | 155 | heisthe1 | 6,049 | **39x** |
-| whatyou | 1,655 | whatyou1 | 1,005 | suffixed form also popular |
-| itsthe | 61 | itsthe123 | 813 | **13x** |
-| notyour | 587 | notyour1 | 451 | suffixed form also popular |
-| cantget | 408 | cantget1 | 365 | suffixed form also popular |
-| ineeda | 513 | ineeda69 | 187 | alternate suffix popular |
+### Seed Taxonomy (from 182 unique seeds tested)
 
-**302 out of 880 suffixed variations hit HIBP (34%).** This is exactly what nocap.rule does at GPU scale — every root in the wordlist gets tested with all suffix/prefix patterns.
+**What works — ranked by hit rate:**
 
-### Tiered Discovery Results (Combined Run 1 + Run 2)
+| Seed Category | Avg Hit Rate | Best Seeds | Why |
+|---------------|-------------|------------|-----|
+| **Function words** | 25-38% | to (35.8%), in (37.7%), for (37.6%), the (38.4%), a (31.2%), no (32.5%) | Unlimited transition space, form connective tissue of phrases |
+| **Descriptive/state** | 20-31% | best (30.7%), live (28.8%), last (26.5%), high (26.8%), open (26.8%) | Form compound words naturally (livestream, lastfm, highend) |
+| **Verbs** | 18-31% | love (47.2%), get (38.5%), go (37.1%), find (22.1%), keep (21.9%) | Drive action phrases people use as passwords |
+| **Pronouns** | 20-30% | i (29.8%), my (27.6%), you (16.6%), me (20.4%) | Self-expression — deep well that doesn't exhaust |
+| **Number words** | 15-24% | two (24.1%), five (20.6%), four (20.4%) | People use number-word combos (fivenights, twokinds) |
 
-| Tier | HIBP Range | Count | Examples |
-|------|-----------|-------|---------|
-| **Tier 1** | >= 1,000 | 58 | nokiae63 (41K), believethat (9.5K), roadsthat (8.9K), mycareer (7.8K), breakingnews (4.5K), bankaccount (1.2K) |
-| **Tier 2** | 100-999 | 875 | icansurvive (966), mydreamworld (746), happymothersday (480), itsthebest (401) |
-| **Tier 3** | 10-99 | 1,727 | imjealous (94), justwokeup (26), ifellasleep (33) |
-| **Tier 4** | 1-9 | 1,589 | Marginal but real — still worth having in wordlist |
+**What fails:**
 
-### Tooling
+| Seed Category | Avg Hit Rate | Why |
+|---------------|-------------|-----|
+| **Saturated nouns** | 3-11% | game (5.2%), rock (4.7%), power (2.8%) — already in rockyou |
+| **Non-compound adjectives** | 1-3% | dark (3.0%), young (1.5%) — don't form English compounds |
+| **Re-runs past 2nd pass** | <10% | ~40% decay per pass; retire below 10% on first pass |
 
-| Tool | Location | Purpose |
-|------|----------|---------|
-| `markov-discovery.ts` | `scratchpad/` | Main discovery pipeline: load corpora, train model, generate 2/3/4-word candidates, pre-filter, HIBP validate |
-| `markov-discovery-long.ts` | `scratchpad/` | Long passphrase variant: generates candidates in target char range (e.g., 22-32) by growing chains until length met |
-| `markov-quality-filter.ts` | `scratchpad/` | Post-filter: separate password-quality roots from grammatical fragments, test suffix variations |
-| `markov-v3-comparative.ts` | `scratchpad/` | Comparative analysis: test individual vs combined corpus hit rates |
-| `markov-position-study.ts` | `scratchpad/` | Position-aware study: test if starting position in source sentence affects hit rate |
-| `markov-windowed-study.ts` | `scratchpad/` | Windowed extraction study: compare sliding-window extraction vs independent chain generation |
-| `markov-prompted-study.ts` | `scratchpad/` | Prompted seed study: test which seed words produce highest password discovery rates |
-| `markov-prompted-harvest.ts` | `scratchpad/` | Production discovery: large-scale prompted generation using top seeds, saves results incrementally |
-| `markov-prompted-harvest3.ts` | `scratchpad/` | Harvest run 3: targets predicted seeds from seed-predictor analysis (57 new seeds) |
-| `markov-seed-predictor.ts` | `scratchpad/` | Analyzes harvest discoveries + rockyou patterns to predict untested high-potential seeds |
+### All-Time Top Discoveries
 
-**Running a discovery pass:**
-```bash
-# Generate candidates, pre-filter baseline, validate HIBP
-bun run scratchpad/markov-discovery.ts
+| Root | HIBP Count | Source Seed | Run |
+|------|-----------|------------|-----|
+| lastfm | 256,018 | last | Harvest 5 |
+| trybe | 77,082 | try | Harvest 5 |
+| toor | 69,002 | to | Harvest 3 |
+| freeaccount | 57,638 | free | Harvest 3 |
+| nokiae63 | 41,032 | random | Run 2 |
+| allpass | 42,237 | all | Harvest 2 |
+| myon | 29,207 | my | Harvest 5 |
+| isme | 25,800 | is | Harvest 3 |
+| keepcalm | 21,938 | keep | Harvest 5 |
+| init | 20,900 | in | Harvest 3 |
 
-# Quality filter + variation testing on results
-bun run scratchpad/markov-quality-filter.ts
-```
+### Cumulative Harvest Results
 
-**Output files:**
-- `scratchpad/markov-discoveries.txt` — All discoveries with HIBP counts (tab-separated)
-- `scratchpad/markov-quality-roots.txt` — Quality-filtered roots >= 10 HIBP
-- `scratchpad/markov-new-roots.txt` — All roots >= 10 HIBP (before quality filter)
+| Run | Queries | Discoveries | Hit Rate | Strategy |
+|-----|---------|-------------|----------|----------|
+| Harvest 1 | 26,053 | 7,571 | 29.1% | 35 prompted seeds (verbs, nouns, emotional) |
+| Harvest 2 | 22,661 | 4,263 | 18.8% | Same 35 seeds, deduplication pass |
+| Harvest 3 | 47,222 | 10,905 | 23.1% | 57 new seeds (predicted + ending-words + expanded) |
+| Harvest 4 | 57,567 | 9,946 | 17.3% | Deep re-run of all 69 proven seeds |
+| Harvest 5 | 56,439 | 11,444 | 20.3% | 40 new (verbs + adjectives + identity) + 20 re-run |
+| Harvest 6 | 50,625 | 5,921 | 11.7% | 50 new (nouns + numbers) + 15 re-run |
+| **Total** | **260,567** | **50,050** | **19.2%** | **182 unique seeds** |
 
-### Prompted Harvest Run (Feb 2026)
-
-Large-scale production run using prompted seed optimization to maximize discovery volume.
-
-**Design:** 15 top seeds (Tier 1) × 500 candidates × 2 chain lengths + 20 secondary seeds (Tier 2) × 300 × 2 + 4,000 random (Tier 3). 26,053 HIBP queries.
-
-| Tier | Seeds | Tested | Discovered | Hit Rate |
-|------|-------|--------|------------|----------|
-| **Tier 1** (top 15) | love, get, the, king, fuck, go, life, dont, you, kill, me, all, need, one, come | 12,773 | 3,979 | **31.2%** |
-| **Tier 2** (20 secondary) | star, money, my, i, death, god, big, take, not, dark, make, your, fire, good, we, no, a, dead, hot, sweet | 10,130 | 2,952 | **29.1%** |
-| **Tier 3** (random) | — | 3,150 | 640 | **20.3%** |
-| **Total** | — | **26,053** | **7,571** | **29.1%** |
-
-**Top discoveries:** fuckfacebook (11.5K), goodwife (9.5K), itrace (8.7K), startrek11 (6.9K), fuckce (6.5K), deadfrontier (5.8K), lifeisnow (5.8K), notallowed (5.4K), myhealth (5.2K), mytest (5.4K)
-
-**Top seeds by discovery count:** go (312), fuck (289), get (288), me (285), dont (275), all (275), you (270), need (267), one (267), love (250)
-
-**Prompted vs random at scale:** Tier 1 seeds (31.2%) beat random (20.3%) by 54%, confirming the prompted study findings hold at 10x larger sample sizes.
+**Decay pattern:** New seed categories restore hit rate (~23%); re-running same seeds decays ~40% per pass. Harvest 6's drop to 11.7% signals diminishing returns.
 
 ### Cohort Integration
 
-Discovered roots are added to `data/cohorts/markov-phrase-roots.txt` (35,560 roots as of Feb 2026 — 211 from run 1, 2,657 from run 2, 7,571 from prompted harvest 1, 4,263 from harvest 2, 10,905 from harvest 3, 9,946 from harvest 4). After adding roots:
-
 ```bash
-# Rebuild nocap-plus.txt with new cohort
+# After adding new roots to data/cohorts/markov-phrase-roots.txt:
 python scripts/rebuild-nocap-plus.py
-
-# Upload to Hashtopolis (when server is online)
 bun Tools/FileUploader.ts --upload data/nocap-plus.txt --replace
 ```
 
-### Comparative Corpus Analysis (v3 Results)
-
-All real text corpora converge at similar hit rates. Corpus diversity matters more than corpus type:
-
-| Corpus | Hit Rate | 3-word | 4-word | New Roots >= 500 |
-|--------|---------|--------|--------|-----------------|
-| **Combined (all)** | **9.0%** | 15.5% | 2.5% | 2 |
-| MemeTracker | 8.3% | 14.0% | 2.5% | 1 |
-| Movie Dialogs | 8.3% | 14.5% | 2.0% | 1 |
-| Quotes | 8.3% | 16.0% | 0.5% | 0 |
-| Tweets | 8.0% | 14.5% | 1.5% | 1 |
-
-### Starting Position Study (Feb 2026)
-
-Does starting from different positions in the source sentence affect discovery rate?
-
-**Design:** 6 start positions × 2 chain lengths × 1,000 candidates each = 12,000 total.
-
-| Position | 2-word Hit Rate | 3-word Hit Rate |
-|----------|----------------|----------------|
-| **pos 0** (sentence start) | 43.5% | 12.0% |
-| **pos 1** | 44.8% | 10.7% |
-| **pos 2** | 41.2% | 9.7% |
-| **pos 3** | 42.1% | 8.9% |
-| **pos 4** | 44.0% | 8.2% |
-| **pos 5** | 41.5% | 7.8% |
-
-**Findings:**
-- **2-word chains are position-agnostic** (41-45%) — no statistically significant difference
-- **3-word chains favor sentence starters** — pos 0-1 (10.7-12%) beat pos 3-5 (7.8-8.9%) by ~35%
-- **Each position finds ~90%+ unique passwords** — running all positions maximizes coverage
-- **Recommendation:** Use default (pos 0) generation for simplicity; position diversity provides diminishing returns
-
-### Windowed Extraction Study (Feb 2026)
-
-Is it more efficient to extract sliding windows from one long chain than to generate independent short chains?
-
-**Design:** Generate 2,000 six-word chains → extract all 2-word (5 per chain) and 3-word (4 per chain) sliding windows. Compare to matched independent generation. 27,054 total HIBP queries.
-
-**Head-to-Head Results:**
-
-| Metric | Windowed | Independent |
-|--------|----------|-------------|
-| Source chains | 2,000 | 16,924 |
-| Unique candidates | 14,824 | 16,924 |
-| **2-word hit rate** | **39.6%** | **40.0%** |
-| **3-word hit rate** | **8.9%** | **10.2%** |
-| Discoveries/chain | **1.40** | 0.20 |
-| Discoveries/query | 0.217 | 0.242 |
-| Overlap | 259 shared out of ~6,200 total |
-
-**Window position hit rates within 6-word chains:**
-- 2-word: 38.5-42.8% across all positions (position-agnostic)
-- 3-word: 10.0% at pos 0 → 7.4% at pos 3 (degrades toward end of chain)
-
-**Findings:**
-- **Hit rates are statistically equivalent** — windowed extraction produces the same quality candidates as independent generation
-- **Windowed is 7x more generation-efficient** (1.4 discoveries per Markov chain vs 0.2)
-- **Per HIBP query: identical** — HIBP queries are the bottleneck, not Markov generation
-- **Very low overlap (4%)** — the two approaches explore different search regions; running both maximizes unique discoveries
-- **Recommendation:** Either approach works equally well. Use independent generation for simplicity unless Markov generation becomes a bottleneck
-
-### Prompted Seed Study (Feb 2026)
-
-Does seeding the Markov chain with a specific word instead of random generation improve discovery rates?
-
-**Design:** 60 seed words across 6 categories × 150 candidates per seed × 2 chain lengths + random baseline. 15,200 HIBP queries.
-
-**Top 10 Seeds (ranked by overall hit rate):**
-
-| Rank | Seed | Category | 2w Rate | 3w Rate | Overall | vs Random |
-|------|------|----------|---------|---------|---------|-----------|
-| 1 | **love** | verb | 67.9% | **35.3%** | **47.2%** | +99% |
-| 2 | **get** | verb | 67.3% | 19.2% | 38.5% | +62% |
-| 3 | **the** | function | **74.6%** | 21.5% | 38.4% | +62% |
-| 4 | **king** | noun | 69.4% | 15.1% | 38.2% | +61% |
-| 5 | **fuck** | emotional | 58.4% | 22.4% | 37.3% | +57% |
-| 6 | **go** | verb | 59.8% | 19.9% | 37.1% | +57% |
-| 7 | **life** | noun | 60.5% | 16.9% | 36.8% | +55% |
-| 8 | **dont** | function | 56.5% | 23.9% | 36.3% | +53% |
-| 9 | **you** | pronoun | 62.7% | 19.4% | 35.9% | +52% |
-| 10 | **kill** | emotional | 58.7% | 18.6% | 35.8% | +51% |
-
-**Baseline (random):** 23.7% overall (43.9% 2-word, 9.8% 3-word).
-
-**By Part of Speech:**
-
-| Part of Speech | 2w Rate | 3w Rate | Overall | Best Seed |
-|----------------|---------|---------|---------|-----------|
-| **Verbs** | 49.1% | **17.6%** | **31.7%** | love (47.2%) |
-| **Function words** | 57.2% | 14.8% | 31.5% | the (38.4%) |
-| **Nouns** | 57.9% | 11.0% | 30.9% | king (38.2%) |
-| **Pronouns** | 49.1% | 11.1% | 27.6% | me (35.6%) |
-| **Adjectives** | 59.4% | 7.5% | 26.9% | big (30.3%) |
-| **Emotional** | 50.8% | 8.5% | 26.8% | fuck (37.3%) |
-
-**Key Findings:**
-- **50 of 60 seeds beat random** — prompted generation is systematically better
-- **`love` is the standout** — 47.2% overall, 35.3% for 3-word chains (3.6x random baseline)
-- **Verbs drive 3-word chains** — 17.6% vs 7.5% for adjectives; verb seeds create action phrases people use as passwords
-- **`the` has highest 2-word rate (74.6%)** — function words combine with nouns to form compound words (theatlantic, thefight)
-- **Emotional words underperform** — profanity alone doesn't make passwords; emotional _action_ does (fuck+you=password, but shit+this=not)
-- **Recommendation:** Use top 10-15 seeds as prompts for production discovery runs; focus on verbs and function words for 3-word chains
-
-### Key Learnings
-
-1. **2-word chains have highest hit rate (43-49%)** — short memorable phrases dominate password space
-2. **3-word chains are the volume sweet spot** — 11-13% hit rate with good variety
-3. **4-word chains have diminishing returns** — only 1.0-1.5% hit rate
-4. **22-32 char chains are a dead zone (0.007%)** — random Markov combinations don't match real long passphrase behavior
-5. **Strip apostrophes** — passwords rarely contain them; "dont" not "don't"
-6. **Pre-filter baseline** — saves ~8% of HIBP queries
-7. **Combined corpus wins** — vocabulary diversity > any single source
-8. **Every root matters** — nocap.rule transforms each root into dozens of candidates at GPU speed
-9. **Scaling works** — run 2 (25K) found 4,249 roots vs run 1 (2K) at 318; hit rates remain stable
-10. **Long passphrases need curated lists, not Markov** — cultural references (quotes, lyrics, memes) are what people actually use at 22+ chars
-11. **Starting position doesn't matter for 2-word** — all positions yield ~42% hit rate
-12. **Windowed vs independent: equivalent per query** — HIBP is the bottleneck, not Markov generation
-13. **Prompted seeds boost hit rate by 50-100%** — verbs like `love`, `get`, `go` and function words like `the`, `dont` systematically outperform random
-14. **Seed exhaustion follows predictable decay** — run 1 (29.1%) → run 2 (18.8%) → run 3 (23.1%, new seeds) → run 4 (17.3%, re-run). Adding new seeds restores hit rate; re-running same seeds decays ~40% per pass
-15. **Preposition/connector seeds are the breakthrough** — `to` (35.8%), `in` (37.7%), `for` (37.6%) produce phrase passwords via connective tissue, not identity words
-16. **Total: 32,685 unique password roots discovered** from 153,503 HIBP queries across 4 harvest runs. Cohort file at 35,560 roots
-
 ### Selecting a Good Corpus (Decision Framework)
 
-The corpus you train on determines what word transitions the model learns. The goal is to match how **real people think when choosing passwords** — which is emotional self-expression, not formal writing.
+Match how **real people think when choosing passwords** — emotional self-expression, not formal writing.
 
-**Why these corpora work:**
+**Good:** Tweets (informal, first-person), meme phrases (viral, memorable), movie dialog (quotable, dramatic), famous quotes (aspirational). **Bad:** Wikipedia, legal/academic text, code docs, song lyrics alone (too repetitive).
 
-| Corpus Type | Why It Produces Passwords | What It Contributes |
-|-------------|--------------------------|---------------------|
-| **Tweets** | Informal, first-person, emotional ("i love", "dont hate") | Pronouns + verbs + emotion = password patterns |
-| **Meme phrases** | Viral, memorable, culturally shared | Sticky phrases people recall when creating passwords |
-| **Movie dialog** | Quotable, dramatic, character-driven | Action phrases, declarations ("kill the", "get out") |
-| **Famous quotes** | Inspirational, identity-forming | Aspirational phrases ("be the change", "trust the process") |
-
-**What makes a BAD corpus:**
-- **Wikipedia/encyclopedias** — formal, third-person, factual (not how people think)
-- **Legal/academic text** — jargon-heavy, no emotional resonance
-- **Code/technical docs** — wrong vocabulary entirely
-- **Song lyrics alone** — too repetitive, limited vocabulary breadth
-
-**The convergence finding:** Individual corpus types all land at 8.0-8.3% hit rate. Combined wins at 9.0%. This means **vocabulary breadth matters more than corpus type** — any corpus with informal, emotional, first-person text works. Combine multiple for best results.
-
-**Memory-efficient loading:**
-- Cap tweets at 500K lines (of 1.6M available) — enough vocabulary, avoids OOM
-- Cap memes at 200K lines — diminishing returns beyond that
-- Use weighted starter map (not raw array) to avoid 1M+ duplicate entries crashing the heap
+**Key finding:** Vocabulary breadth matters more than corpus type. Any informal, emotional, first-person text works. Combine multiple for best results.
 
 ### Selecting Good Markov Seeds (Decision Framework)
 
-Prompted generation (forcing a specific starting word) boosts hit rates by 50-100% over random. But not all seeds are equal.
+Prompted generation boosts hit rates 50-100% over random. Seed selection criteria:
 
-**Seed selection criteria (ranked by importance):**
+1. **High rockyou starter frequency** — top: `a` (287K), `i` (132K), `an` (54K), `me` (39K)
+2. **Rich Markov transitions** — function words and verbs combine with everything
+3. **Emotional/identity resonance** — `love` (47.2%) is strongest; universal emotional anchor
+4. **Compound-word potential** — seeds that naturally form English compound words (best+dentist, live+stream)
 
-1. **High rockyou starter frequency** — If a word starts many real passwords, it produces good chains
-   - Analyze pure-alpha passwords (6-25 chars) that begin with the word
-   - Top starters: `a` (287K), `i` (132K), `an` (54K), `me` (39K), `so` (30K)
+**Seeds to avoid:** Saturated rockyou nouns (game, rock, power), non-compound adjectives (dark, young), rare/literary words.
 
-2. **Strong Markov transitions** — The word must have rich transitions in the trained model
-   - Function words (`the`, `a`, `no`, `not`) combine with everything
-   - Verbs (`love`, `get`, `go`, `make`) drive action phrases
-   - Pronouns (`i`, `my`, `you`, `me`) start self-expression
+### Tooling
 
-3. **Emotional/identity resonance** — Passwords express who people are or how they feel
-   - `love` (47.2% hit rate) — the strongest seed by far; universal emotional anchor
-   - `fuck`, `kill`, `dead` — negative emotions are also strong password drivers
-   - `king`, `angel`, `prince` — identity/aspiration seeds
+| Tool | Purpose |
+|------|---------|
+| `scratchpad/markov-prompted-harvest*.ts` | Production harvest scripts (runs 1-6) |
+| `scratchpad/markov-seed-predictor.ts` | Predict new seeds from rockyou cross-reference |
+| `scratchpad/markov-discovery.ts` | Original discovery pipeline |
+| `scratchpad/markov-prompted-harvest-results.txt` | All 50,050 discoveries (tab-separated) |
 
-4. **Part-of-speech patterns** (from prompted study, 60 seeds × 15,200 queries):
+### Research Conclusion
 
-| POS Category | Avg Hit Rate | Best For | Why |
-|--------------|-------------|----------|-----|
-| **Verbs** | 31.7% | 3-word chains (17.6%) | Creates action phrases: "love you", "get out", "go home" |
-| **Function words** | 31.5% | 2-word chains (57.2%) | Combines with any noun: "the fight", "no more", "not today" |
-| **Nouns** | 30.9% | 2-word chains (57.9%) | Identity words: "king of", "life is", "god love" |
-| **Pronouns** | 27.6% | Self-expression | "i love", "my life", "you are" |
-| **Adjectives** | 26.9% | Descriptive pairs | "big boss", "dark side", "hot stuff" |
-| **Emotional** | 26.8% | Profanity pairs | "fuck you", but "shit this" doesn't work — needs action verb |
+Word-level Markov chain discovery is **complete and successful**. The approach yielded 50,050 new roots at 19.2% overall efficiency, adding 52,919 entries to the cohort. The productive range is firmly 2-3 word chains (8-20 chars). Key breakthroughs: prompted seed selection (+50-100% over random), function-word seeds (to/in/for at 35-38%), and descriptive/adjective seeds (best/live/last at 26-31%).
 
-**Seeds to AVOID:**
-- **Rare/literary words** — low transition count means the model can't generate diverse candidates
-- **Very short function words used as prefixes** — `a`, `an`, `i` have high rockyou frequency but many hits are just coincidental prefix matches (e.g., `anim` = "a" + "nim" or just "anim"?)
-- **Adjectives for 3-word chains** — only 7.5% hit rate; adjectives don't drive phrases people use as passwords
-
-**Practical seed tiers for production runs:**
-
-| Tier | Seeds | Expected Hit Rate | Candidates/Seed |
-|------|-------|-------------------|-----------------|
-| **1 (proven)** | love, get, the, king, fuck, go, life, dont, you, kill, me, all, need, one, come | 28-35% | 500 × 2 chain lengths |
-| **2 (validated)** | star, money, my, i, death, god, big, take, not, dark, make, your, fire, good, we, no, a, dead, hot, sweet | 25-32% | 300 × 2 chain lengths |
-| **3 (predicted)** | so, man, team, angel, mad, rock, cat, red, pink, bro, prince, blue, lady, win, mama | 20-30% | 500 × 2 chain lengths |
-| **Random** | — | 20-23% | 2,000+ for diversity |
-
-**The rockyou cross-reference method** for predicting new seeds:
-1. Scan rockyou for pure-alpha passwords (6-25 chars) starting with candidate words
-2. Count starter frequency — high count = people naturally use this as a password prefix
-3. Cross-reference against already-tested seeds
-4. Categories with highest untested potential: person words (man, bro, lady, mama), colors (red, pink, blue), animals (cat), action/gaming (team, rock, win)
-
-### Prompted Harvest Run 2 (Feb 2026)
-
-Second large-scale run after deduplicating against run 1 results (7,571 already tested).
-
-| Tier | Tested | Discovered | Hit Rate |
-|------|--------|------------|----------|
-| **Tier 1** (top 15 seeds) | 10,808 | 2,002 | **18.5%** |
-| **Tier 2** (20 secondary) | 8,761 | 1,606 | **18.3%** |
-| **Tier 3** (random) | 3,092 | 655 | **21.2%** |
-| **Total** | **22,661** | **4,263** | **18.8%** |
-
-**Key observations:**
-- Hit rates dropped ~10% from run 1 (29.1% → 18.8%) — expected as easy discoveries are claimed first
-- Random (Tier 3) now BEATS seeded (21.2% vs 18.5%) — seeded seeds are exhausting their search space while random explores fresh territory
-- `allpass` at 42,237 HIBP was the top discovery (from seed `all`)
-- `no` had highest per-seed rate at 32.5% — negation phrases remain productive
-
-**Total across runs 1+2:** 11,834 unique discoveries from 48,714 queries.
-
-### Seed Predictor Analysis (Feb 2026)
-
-Cross-referenced harvest discoveries with rockyou patterns to predict untested high-potential seeds.
-
-**Method:**
-1. Analyze second-word and third-word frequencies in 11,834 discoveries
-2. Scan ~4M pure-alpha rockyou passwords for starting-word frequency
-3. Find words with high rockyou presence but never tested as Markov seeds
-4. Group by category for systematic coverage
-
-**Top untested seeds found:**
-
-| Seed | Rockyou Entries | Category | Predicted Value |
-|------|----------------|----------|----------------|
-| `an` | 54,006 | Function word | HIGH (similar to `a`, `the`) |
-| `so` | 29,979 | Function word | HIGH (emotional trigger) |
-| `man` | 12,945 | Person | HIGH (identity seed) |
-| `team` | 9,346 | Gaming | MEDIUM |
-| `is` | 7,917 | Function word | MEDIUM |
-| `angel` | 6,969 | Emotional | MEDIUM |
-| `mad` | 6,183 | Emotional | MEDIUM |
-| `rock` | 5,976 | Action | MEDIUM |
-
-**Common ending words not yet tested as seeds:** `to`, `and`, `in`, `of`, `on`, `for`, `now`, `be`, `this`, `do` — these appear frequently as the last word in 3-word discoveries, suggesting they could also be productive first words.
-
-### Prompted Harvest Run 3 (Feb 2026)
-
-Third large-scale run targeting seeds predicted by the seed-predictor analysis. 57 new seeds: 17 from rockyou analysis + 10 ending-word seeds + 30 expanded category seeds.
-
-| Tier | Seeds | Tested | Discovered | Hit Rate |
-|------|-------|--------|------------|----------|
-| **Tier 1** (17 predicted) | an, so, man, team, is, angel, mad, rock, cat, red, pink, bro, prince, blue, lady, win, mama | 13,448 | 3,064 | **22.8%** |
-| **Tier 2** (10 ending-words) | to, and, in, of, on, for, now, be, this, do | 9,258 | 2,692 | **29.1%** |
-| **Tier 3** (30 expanded) | girl, boy, dog, wolf, bear, lion, fish, bird, dream, night, sun, moon, home, heart, soul, mind, power, magic, secret, master, war, play, game, happy, wild, true, free, real, new, old | 24,516 | 5,149 | **21.0%** |
-| **Total** | — | **47,222** | **10,905** | **23.1%** |
-
-**Top discoveries:** toor (69K!), freeaccount (57.6K), isme (25.8K), freeuser (20.2K), init (20.9K), homestuck (12.8K), freewifi (13K), sou (11K), freeones (11.2K), newnormal (8.6K), mastergame (8.3K)
-
-**Breakthrough findings:**
-- **Ending-word seeds validated** — `to` (35.8%), `in` (37.7%), `for` (37.6%) were among the best seeds ever tested. These words were never seeds before because they're not "password words" — but they form the connective tissue of phrase passwords
-- **`free` is a goldmine** — 33.8% hit rate, 28 Tier-1 discoveries. People use "free+thing" as passwords for free accounts (freeaccount, freeuser, freewifi, freemovies)
-- **`new` performs strongly** — 32.5% hit rate. People announce newness (newnormal, newgames, newlight)
-- **Predicted seeds confirmed** — seed-predictor's rockyou analysis correctly identified productive seeds (so 31.9%, man 29.7%, cat 26.0%, win 25.2%)
-- **`toor`** (root backwards, 69K HIBP) — the single highest-HIBP discovery across ALL Markov runs; generated from seed `to` + transition `or`
-
-**Cumulative totals across all harvest runs:**
-
-| Run | Queries | Discoveries | Hit Rate | Unique Seeds |
-|-----|---------|-------------|----------|--------------|
-| Harvest 1 | 26,053 | 7,571 | 29.1% | 35 |
-| Harvest 2 | 22,661 | 4,263 | 18.8% | 35 (same, dedup) |
-| Harvest 3 | 47,222 | 10,905 | 23.1% | 57 (new) |
-| Harvest 4 | 57,567 | 9,946 | 17.3% | 69 (re-run all) |
-| **Total** | **153,503** | **32,685** | **21.3%** | **92 unique** |
-
-### Future Directions
-
-- **Model serialization** — save trained Markov model (transitions + starter weights) to JSON; eliminates 5-10s corpus loading per run
-- **Character-level Markov** (OMEN-style) — may find patterns word-level misses
-- **Neural password generators** — trained on leaked password datasets directly
-- **Non-English corpora** — Spanish, Portuguese, Hindi tweet collections for cultural phrase discovery
-- **Iterative runs** — each run discovers different roots due to Markov randomness; multiple passes increase coverage
-- **Curated long passphrase lists** — movie quotes, song lyrics, Bible verses, famous speeches for 22+ char targets
-- **CamelCase tested and confirmed dead** — 0 exclusive discoveries across 15K candidates at 22-32 chars (60K queries). Not worth pursuing for any length
-- **Dual-approach discovery** — windowed + independent explore different search regions with only 4% overlap; running both maximizes unique finds
-- **Seed exhaustion tracking** — monitor per-seed hit rate decay across runs to know when to retire seeds and add fresh ones
+**What's left for future research (not Markov):**
+- Character-level Markov (OMEN-style) — may find patterns word-level misses
+- Neural password generators — trained on leaked datasets directly
+- Non-English expansion — Spanish (7,589) and French (5,818) done; Portuguese, Hindi, Arabic remain
+- Curated long passphrase lists — movie quotes, song lyrics, Bible verses for 22+ char targets
 
 ## Full Documentation
 

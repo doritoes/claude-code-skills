@@ -9,7 +9,7 @@
  * @license MIT
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DATA_DIR as CONFIG_DATA_DIR } from "./config";
@@ -32,6 +32,15 @@ export interface BatchState {
   completedAt?: string;
   status: BatchStatus;
   error?: string;
+  // Feedback metrics (populated by DiamondFeedback after post-processing)
+  feedback?: {
+    newRootsDiscovered: number;    // new roots found by DiamondAnalyzer
+    hibpPromoted: number;          // roots promoted via HIBP validation
+    totalDiscoveredRoots: number;  // cumulative discovered-roots.txt size
+    betaSize: number;              // BETA.txt word count after feedback
+    nocapPlusSize: number;         // nocap-plus.txt word count
+    feedbackCracks: number;        // cracks from feedback-* attacks specifically
+  };
 }
 
 export interface AttackStats {
@@ -74,8 +83,8 @@ export interface SandState {
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
   // CONTINUOUS IMPROVEMENT ATTACK ORDER — v5.0 (2026-02-10)
-  // Applies to: batch-0007+ | 15 attacks
-  // Assets: nocap-plus.txt (14.3M), nocap.rule (48K), BETA.txt (9.9K), UNOBTAINIUM.rule (20)
+  // Applies to: batch-0012+ | 17 attacks
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (11.2K), UNOBTAINIUM.rule (39)
   // Principle: pair incremental files with established counterparts (new words × big rules, big words × new rules)
   // Based on: batches 1-6 ROI, DIAMOND analysis, COHORT-ANALYSIS, budget
   // ══════════════════════════════════════════════════════════════════════
@@ -112,6 +121,8 @@ export const DEFAULT_ATTACK_ORDER = [
   // TIER 4: LOW ROI — run only if budget allows
   "mask-Ullllldd",                  // 2.4% - Capital + 4 lower + 2 digits
   "hybrid-rockyou-special-digits",  // 1.8% - word + ! + digits
+  "hybrid-nocapplus-3digit",        // NEW: word + 3 digits (complements 4digit, 14.4B keyspace, ~2s)
+  "mask-lllldddd",                  // NEW: 4 lowercase + 4 digits (4.57B keyspace, ~1s)
   //
   // ══════════════════════════════════════════════════════════════════════
   // REMOVED: ZERO/MINIMAL VALUE (< 0.2% combined)
@@ -123,7 +134,12 @@ export const DEFAULT_ATTACK_ORDER = [
   // ✗ newwords-nocap-unobtainium - Superseded by nocapplus-unobtainium
   // ✗ hybrid-rizzyou-4digit    - Minimal ROI (<0.1%)
   // ✗ hybrid-rockyou-year      - Minimal ROI (<0.1%)
-  // ✗ brute-8                  - 52 hrs, too expensive at current budget
+  // ✗ brute-8                  - 169 hrs on BIGRED (7 days). DEFERRED to post-pipeline.
+  //     Opportunity cost: 7 days = ~42 standard batches = ~966K cracks vs ~3K-33K from brute-8 on 1 batch.
+  //     batch-0001 analysis: 62% of 8-char cracks ARE structured (word+digits, compounds, leet) with
+  //     11,811 unique word roots → real feedback value for DiamondAnalyzer → new cohort roots + rules.
+  //     Still deferred: opportunity cost alone justifies running standard pipeline first.
+  //     PLAN: After batch-162, combine ALL GLASS into unified hashlist → single 7-day brute-8 pass.
   // ✗ rizzyou-bussin            - 0 cracks in b6; 203 candidates total (small×small)
   // ✗ feedback-beta-unobtainium - 0 cracks in b6; small×small pairing wastes a slot
   //     BETA.txt is incremental words → needs big rules (nocap.rule), not small rules
@@ -213,12 +229,67 @@ export class SandStateManager {
   }
 
   /**
-   * Save state to disk (immediate)
+   * Save state to disk (immediate).
+   * Creates a .bak backup before writing, validates state integrity,
+   * and strips stale computed fields (summary, unobtainium).
    */
   save(): void {
     if (!this.state) return;
     this.state.lastUpdated = new Date().toISOString();
+
+    // Strip stale static fields — these should be computed, not stored
+    const stateAny = this.state as any;
+    delete stateAny.summary;
+    delete stateAny.unobtainium;
+
+    // Validate before writing
+    const warnings = this.validate();
+    if (warnings.length > 0) {
+      console.error(`[SandState] Validation warnings on save:`);
+      for (const w of warnings) console.error(`  - ${w}`);
+    }
+
+    // Backup before write
+    if (existsSync(this.statePath)) {
+      try {
+        copyFileSync(this.statePath, this.statePath + ".bak");
+      } catch { /* non-fatal */ }
+    }
+
     writeFileSync(this.statePath, JSON.stringify(this.state, null, 2));
+  }
+
+  /**
+   * Validate state integrity. Returns list of warnings (empty = healthy).
+   */
+  validate(): string[] {
+    if (!this.state) return ["State not loaded"];
+    const warnings: string[] = [];
+
+    for (const [name, batch] of Object.entries(this.state.batches)) {
+      // Completed batch should have cracked > 0 (unless all attacks found 0)
+      if (batch.status === "completed" && batch.cracked === 0 && batch.attacksApplied.length > 0) {
+        warnings.push(`${name}: completed with 0 cracks and ${batch.attacksApplied.length} attacks — suspicious`);
+      }
+
+      // Completed batch should have completedAt
+      if (batch.status === "completed" && !batch.completedAt) {
+        warnings.push(`${name}: completed but missing completedAt timestamp`);
+      }
+
+      // attacksApplied + attacksRemaining should not have duplicates
+      const overlap = batch.attacksApplied.filter(a => batch.attacksRemaining.includes(a));
+      if (overlap.length > 0) {
+        warnings.push(`${name}: attacks in BOTH applied and remaining: ${overlap.join(", ")}`);
+      }
+
+      // cracked should not exceed hashCount
+      if (batch.cracked > batch.hashCount) {
+        warnings.push(`${name}: cracked (${batch.cracked}) > hashCount (${batch.hashCount})`);
+      }
+    }
+
+    return warnings;
   }
 
   /**
@@ -332,11 +403,15 @@ export class SandStateManager {
       throw new Error(`Batch ${batchName} not found in state`);
     }
 
+    // Guard: skip if already applied (prevents double-counting on retry)
+    if (batch.attacksApplied.includes(attackName)) {
+      console.warn(`[SandState] ${batchName}/${attackName} already applied — skipping duplicate completeAttack`);
+      return;
+    }
+
     // Move from remaining to applied
     batch.attacksRemaining = batch.attacksRemaining.filter((a) => a !== attackName);
-    if (!batch.attacksApplied.includes(attackName)) {
-      batch.attacksApplied.push(attackName);
-    }
+    batch.attacksApplied.push(attackName);
     batch.cracked += crackedCount;
     batch.lastAttackAt = new Date().toISOString();
 
@@ -588,6 +663,30 @@ if (import.meta.main) {
     }
   } else if (args[0] === "--reorder") {
     mgr.reorderAttacks();
+  } else if (args[0] === "--validate") {
+    mgr.load();
+    const warnings = mgr.validate();
+    if (warnings.length === 0) {
+      console.log("State validation: HEALTHY (no issues found)");
+    } else {
+      console.log(`State validation: ${warnings.length} issue(s) found`);
+      for (const w of warnings) {
+        console.log(`  WARNING: ${w}`);
+      }
+    }
+
+    // Also show computed summary for comparison
+    const summary = mgr.getSummary();
+    console.log(`\nComputed summary:`);
+    console.log(`  Batches tracked: ${summary.totalBatches}`);
+    console.log(`  Completed: ${summary.completed}`);
+    console.log(`  In Progress: ${summary.inProgress}`);
+    console.log(`  Pending: ${summary.pending}`);
+    console.log(`  Failed: ${summary.failed}`);
+    console.log(`  Total cracked: ${summary.totalCracked.toLocaleString()} / ${summary.totalHashes.toLocaleString()}`);
+    if (summary.totalHashes > 0) {
+      console.log(`  Rate: ${((summary.totalCracked / summary.totalHashes) * 100).toFixed(2)}%`);
+    }
   } else {
     const state = mgr.load();
     const summary = mgr.getSummary();

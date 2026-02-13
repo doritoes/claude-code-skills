@@ -214,6 +214,17 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     expectedRate: 0.015,
     description: "rockyou + special + 3 digits (password!123)",
   },
+  "hybrid-nocapplus-3digit": {
+    name: "hybrid-nocapplus-3digit",
+    phase: "hybrid",
+    attackCmd: "#HL# -a 6 nocap-plus.txt ?d?d?d",
+    fileIds: [11],  // nocap-plus.txt=11
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 70,
+    expectedRate: 0.01,
+    description: "nocap-plus + 3 digit suffix (password123)",
+  },
 
   // ==========================================================================
   // Phase 4: COMBINATOR (word+word combinations - mode -a 1)
@@ -279,6 +290,17 @@ const ATTACK_PRESETS: Record<string, AttackPreset> = {
     priority: 52,
     expectedRate: 0.005,
     description: "8 digits (phone numbers, dates)",
+  },
+  "mask-lllldddd": {
+    name: "mask-lllldddd",
+    phase: "mask",
+    attackCmd: "#HL# -a 3 ?l?l?l?l?d?d?d?d",
+    fileIds: [],
+    maxAgents: 0,
+    isSmall: 0,
+    priority: 45,
+    expectedRate: 0.008,
+    description: "4 lowercase + 4 digits (love1234, test2024)",
   },
 
   // ==========================================================================
@@ -837,7 +859,9 @@ async function processBatch(
     attacksToRun = [attackName];
   } else {
     // All remaining attacks
-    attacksToRun = batchState?.attacksRemaining || [...DEFAULT_ATTACK_ORDER];
+    // IMPORTANT: empty array [] is truthy in JS — must check .length explicitly
+    const remaining = batchState?.attacksRemaining;
+    attacksToRun = (remaining && remaining.length > 0) ? remaining : [...DEFAULT_ATTACK_ORDER];
   }
 
   console.log(`\nAttacks to run: ${attacksToRun.length}`);

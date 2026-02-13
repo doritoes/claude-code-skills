@@ -815,8 +815,8 @@ async function generateBeta(
       return b.length - a.length;
     });
 
-    // Cap at 200 HIBP queries to be respectful to the API
-    const toCheck = candidatesForHIBP.slice(0, 200);
+    // Cap at 500 HIBP queries per run (k-anonymity model, low API burden)
+    const toCheck = candidatesForHIBP.slice(0, 500);
     console.log(`  Checking ${toCheck.length} candidate roots against HIBP...`);
 
     const hibpResults = await batchQueryHIBP(toCheck);
