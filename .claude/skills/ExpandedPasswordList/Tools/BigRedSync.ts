@@ -32,13 +32,13 @@ const PROJECT_ROOT = resolve(SKILL_DIR, "..", "..", "..");
 // =============================================================================
 
 const ENV_PATH = resolve(__dirname, "..", "..", "..", ".env");
-const WORK_DIR = "/home/pai/hashcat-work";
 const SHELL = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
 
 interface BigRedConfig {
   host: string;
   user: string;
   sshKey: string;
+  workDir: string;
 }
 
 function loadConfig(): BigRedConfig {
@@ -67,7 +67,9 @@ function loadConfig(): BigRedConfig {
   // Expand ~ in SSH key path
   const expandedKey = sshKey.replace(/^~/, process.env.HOME || process.env.USERPROFILE || "~");
 
-  return { host, user, sshKey: expandedKey };
+  const workDir = env.BIGRED_WORK_DIR || `/home/${user}/hashcat-work`;
+
+  return { host, user, sshKey: expandedKey, workDir };
 }
 
 // =============================================================================
@@ -122,38 +124,38 @@ interface SyncFile {
   description: string;
 }
 
-function getFileManifest(): SyncFile[] {
+function getFileManifest(workDir: string): SyncFile[] {
   return [
     // Wordlists
     {
       localPath: resolve(DATA_DIR, "nocap-plus.txt"),
-      remotePath: `${WORK_DIR}/wordlists/nocap-plus.txt`,
+      remotePath: `${workDir}/wordlists/nocap-plus.txt`,
       description: "nocap-plus.txt (combined wordlist, 14.4M words)",
     },
     {
       localPath: resolve(DATA_DIR, "nocap.txt"),
-      remotePath: `${WORK_DIR}/wordlists/nocap.txt`,
+      remotePath: `${workDir}/wordlists/nocap.txt`,
       description: "nocap.txt (rockyou + rizzyou baseline)",
     },
     {
       localPath: resolve(PROJECT_ROOT, "rockyou.txt"),
-      remotePath: `${WORK_DIR}/wordlists/rockyou.txt`,
+      remotePath: `${workDir}/wordlists/rockyou.txt`,
       description: "rockyou.txt (original rockyou wordlist)",
     },
     {
       localPath: resolve(FEEDBACK_DIR, "BETA.txt"),
-      remotePath: `${WORK_DIR}/wordlists/BETA.txt`,
+      remotePath: `${workDir}/wordlists/BETA.txt`,
       description: "BETA.txt (feedback roots)",
     },
     // Rules
     {
       localPath: resolve(DATA_DIR, "nocap.rule"),
-      remotePath: `${WORK_DIR}/rules/nocap.rule`,
+      remotePath: `${workDir}/rules/nocap.rule`,
       description: "nocap.rule (48K rules)",
     },
     {
       localPath: resolve(FEEDBACK_DIR, "unobtainium.rule"),
-      remotePath: `${WORK_DIR}/rules/UNOBTAINIUM.rule`,
+      remotePath: `${workDir}/rules/UNOBTAINIUM.rule`,
       description: "UNOBTAINIUM.rule (diamond-derived rules)",
     },
   ];
@@ -204,7 +206,7 @@ async function syncHashlist(config: BigRedConfig, batchName: string): Promise<bo
 
   const gzPath = resolve(SAND_DIR, `${batchName}.txt.gz`);
   const txtPath = resolve(SAND_DIR, `${batchName}.txt`);
-  const remotePath = `${WORK_DIR}/hashlists/${batchName}.txt`;
+  const remotePath = `${config.workDir}/hashlists/${batchName}.txt`;
 
   let hashes: string;
   if (existsSync(gzPath)) {
@@ -248,7 +250,7 @@ async function showStatus(config: BigRedConfig): Promise<void> {
   console.log("==================");
   console.log(`Host: ${config.host} (user: ${config.user})\n`);
 
-  const result = sshCmd(config, `find ${WORK_DIR} -type f -exec ls -lh {} \\; 2>/dev/null | sort`);
+  const result = sshCmd(config, `find ${config.workDir} -type f -exec ls -lh {} \\; 2>/dev/null | sort`);
   if (!result) {
     console.log("  (no files found)");
     return;
@@ -260,7 +262,7 @@ async function showStatus(config: BigRedConfig): Promise<void> {
     const parts = line.split(/\s+/);
     const size = parts[4] || "?";
     const path = parts[parts.length - 1] || "";
-    const relPath = path.replace(WORK_DIR + "/", "");
+    const relPath = path.replace(config.workDir + "/", "");
     console.log(`  ${relPath.padEnd(45)} ${size}`);
   }
 
@@ -306,8 +308,8 @@ Usage:
   bun Tools/BigRedSync.ts --hashlist batch-0008  Upload specific batch hashlist
   bun Tools/BigRedSync.ts --status               Show remote file status
 
-Configuration: .env (BIGRED_HOST, BIGRED_USER, BIGRED_SSH_KEY)
-Remote dir:    ${WORK_DIR}
+Configuration: .env (BIGRED_HOST, BIGRED_USER, BIGRED_SSH_KEY, BIGRED_WORK_DIR)
+Remote dir:    Configured via BIGRED_WORK_DIR (default: /home/<user>/hashcat-work)
 `);
         process.exit(0);
     }
@@ -331,7 +333,7 @@ Remote dir:    ${WORK_DIR}
     }
 
     // Ensure remote directories exist
-    sshCmd(config, `mkdir -p ${WORK_DIR}/{wordlists,rules,hashlists,potfiles,results}`);
+    sshCmd(config, `mkdir -p ${config.workDir}/{wordlists,rules,hashlists,potfiles,results}`);
 
     if (hashlist) {
       // Upload specific hashlist
@@ -340,7 +342,7 @@ Remote dir:    ${WORK_DIR}
     } else {
       // Sync all standard files
       console.log(`\nSyncing attack files${force ? " (FORCE)" : ""}:`);
-      const manifest = getFileManifest();
+      const manifest = getFileManifest(config.workDir);
       let uploaded = 0;
 
       for (const file of manifest) {
@@ -362,4 +364,4 @@ Remote dir:    ${WORK_DIR}
   }
 }
 
-export { loadConfig, sshCmd, scpUpload, scpDownload, WORK_DIR, type BigRedConfig };
+export { loadConfig, sshCmd, scpUpload, scpDownload, type BigRedConfig };

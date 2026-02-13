@@ -677,8 +677,8 @@ When AWS budget is exhausted or cloud VMs are powered off, BIGRED provides a loc
 ### Architecture
 
 ```
-Windows (PAI) ──SSH──> BIGRED (192.168.99.204)
-                        ├── /home/pai/hashcat-work/
+Windows (PAI) ──SSH──> BIGRED (<BIGRED_HOST>)
+                        ├── $BIGRED_WORK_DIR/
                         │   ├── wordlists/   (nocap-plus.txt, BETA.txt, rockyou.txt, nocap.txt)
                         │   ├── rules/       (nocap.rule, UNOBTAINIUM.rule)
                         │   ├── hashlists/   (batch-NNNN.txt)
@@ -811,19 +811,25 @@ _Total batch time ~63 min (dominated by brute-7 at 54.7 min)._ All times EST.
 After all attacks complete, results feed into the same DIAMOND pipeline:
 
 ```bash
-bun Tools/BigRedRunner.ts --batch 8 --collect      # Potfile → diamonds/
+bun Tools/BigRedRunner.ts --batch 8 --collect      # Potfile → diamonds/ + GLASS extraction
 bun Tools/DiamondAnalyzer.ts --full data/diamonds/passwords-batch-0008.txt
 bun Tools/DiamondFeedback.ts --batch batch-0008
 "C:/Program Files/Python312/python.exe" scripts/rebuild-nocap-plus.py
 ```
 
+**`--collect` produces:**
+- `data/diamonds/batch-NNNN.pot` — raw potfile (hash:plain)
+- `data/diamonds/batch-NNNN.txt` — parsed hash:plain pairs
+- `data/diamonds/passwords-batch-NNNN.txt` — plaintext passwords only
+- `data/glass/batch-NNNN.txt` — uncracked hashes (SAND minus DIAMONDS)
+
 ### Configuration
 
 SSH credentials in `.claude/.env`:
 ```
-BIGRED_HOST=192.168.99.204
-BIGRED_USER=pai
-BIGRED_SSH_KEY=~/.ssh/bigred_pai
+BIGRED_HOST=<your-gpu-host-ip>
+BIGRED_USER=<your-ssh-user>
+BIGRED_SSH_KEY=~/.ssh/<your-key>
 ```
 
 ## Storage Requirements
@@ -841,7 +847,7 @@ BIGRED_SSH_KEY=~/.ssh/bigred_pai
 The skill uses a **network share** for large data files. The `data` directory is a symlink to the network share:
 
 ```
-.claude/skills/ExpandedPasswordList/data -> \\192.168.99.252\files\Passwords\ExpandedPasswordList\data
+.claude/skills/ExpandedPasswordList/data -> \\<NAS_IP>\files\Passwords\ExpandedPasswordList\data
 ```
 
 **How it works:**
@@ -856,7 +862,7 @@ The skill uses a **network share** for large data files. The `data` directory is
 
 **To set up on a new machine (run as Administrator):**
 ```powershell
-cmd /c mklink /D "C:\Users\sethh\AI-Projects\.claude\skills\ExpandedPasswordList\data" "\\your-server\share\path\to\data"
+cmd /c mklink /D "<PAI_DIR>\.claude\skills\ExpandedPasswordList\data" "\\<NAS_IP>\share\path\to\data"
 ```
 
 ## Key Files

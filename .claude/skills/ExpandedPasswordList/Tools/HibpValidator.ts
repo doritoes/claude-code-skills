@@ -10,6 +10,12 @@
  */
 
 import { createHash } from "crypto";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(SCRIPT_DIR, "..", "..", "..", "..");
+const ROCKYOU_PATH = resolve(PROJECT_ROOT, "rockyou.txt");
 
 interface HibpResult {
   password: string;
@@ -47,7 +53,7 @@ async function checkHibp(password: string): Promise<HibpResult> {
 
 async function checkRockyou(password: string): Promise<boolean> {
   // Check if password exists in rockyou.txt using exact match
-  const proc = Bun.spawn(["grep", "-c", `^${password}$`, "C:/Users/sethh/AI-Projects/rockyou.txt"], {
+  const proc = Bun.spawn(["grep", "-c", `^${password}$`, ROCKYOU_PATH], {
     stdout: "pipe",
     stderr: "pipe",
   });

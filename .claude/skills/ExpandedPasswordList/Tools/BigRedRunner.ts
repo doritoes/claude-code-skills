@@ -21,8 +21,8 @@ import { resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { execSync } from "node:child_process";
 import { SandStateManager, DEFAULT_ATTACK_ORDER } from "./SandStateManager";
-import { DATA_DIR, SAND_DIR, DIAMONDS_DIR, HASH_TYPE_SHA1 } from "./config";
-import { loadConfig, sshCmd, scpDownload, WORK_DIR, type BigRedConfig } from "./BigRedSync";
+import { DATA_DIR, SAND_DIR, DIAMONDS_DIR, GLASS_DIR, HASH_TYPE_SHA1 } from "./config";
+import { loadConfig, sshCmd, scpDownload, type BigRedConfig } from "./BigRedSync";
 
 // =============================================================================
 // Constants
@@ -194,7 +194,7 @@ interface AttackResult {
  */
 function getPotfileCount(config: BigRedConfig, batchName: string): number {
   try {
-    const result = sshCmd(config, `test -f ${WORK_DIR}/potfiles/${batchName}.pot && wc -l < ${WORK_DIR}/potfiles/${batchName}.pot || echo 0`);
+    const result = sshCmd(config, `test -f ${config.workDir}/potfiles/${batchName}.pot && wc -l < ${config.workDir}/potfiles/${batchName}.pot || echo 0`);
     return parseInt(result) || 0;
   } catch {
     return 0;
@@ -278,7 +278,7 @@ function runAttack(
 
   const startTime = Date.now();
   const screenName = `hc-${batchName}`;
-  const logFile = `${WORK_DIR}/hashcat-${attackName}.log`;
+  const logFile = `${config.workDir}/hashcat-${attackName}.log`;
 
   // Clean up any previous screen session and log file
   try {
@@ -287,7 +287,7 @@ function runAttack(
 
   // Launch hashcat inside screen — survives SSH disconnect (SIGHUP-safe)
   const escapedCmd = hashcatCmd.replace(/'/g, "'\\''");
-  const screenCmd = `screen -dmS ${screenName} bash -c 'cd ${WORK_DIR} && ${escapedCmd} > ${logFile} 2>&1'`;
+  const screenCmd = `screen -dmS ${screenName} bash -c 'cd ${config.workDir} && ${escapedCmd} > ${logFile} 2>&1'`;
   sshCmd(config, screenCmd, 15000);
 
   console.log(`Running hashcat in screen session: ${screenName}`);
@@ -433,12 +433,12 @@ function runAttackDetached(
   } catch { /* ignore */ }
 
   // Start detached screen
-  const cmd = `cd ${WORK_DIR} && screen -dmS ${screenName} bash -c '${hashcatCmd.replace(/'/g, "'\\''")}'`;
+  const cmd = `cd ${config.workDir} && screen -dmS ${screenName} bash -c '${hashcatCmd.replace(/'/g, "'\\''")}'`;
   sshCmd(config, cmd);
 
   console.log(`Attack ${attackName} started in detached screen: ${screenName}`);
   console.log(`  Check status: bun Tools/BigRedRunner.ts --batch ${batchName.replace("batch-", "")} --status`);
-  console.log(`  Attach:       ssh pai@${config.host} -t "screen -r ${screenName}"`);
+  console.log(`  Attach:       ssh ${config.user}@${config.host} -t "screen -r ${screenName}"`);
 }
 
 // =============================================================================
@@ -484,7 +484,7 @@ function showStatus(config: BigRedConfig, batchName: string): void {
     console.log("\nhashcat is RUNNING. Send status request...");
     try {
       // Try to read hashcat status from a status file if configured
-      const statusOutput = sshCmd(config, `cat ${WORK_DIR}/hashcat.status 2>/dev/null || echo 'No status file'`, 5000);
+      const statusOutput = sshCmd(config, `cat ${config.workDir}/hashcat.status 2>/dev/null || echo 'No status file'`, 5000);
       if (!statusOutput.includes("No status file")) {
         console.log(statusOutput);
       }
@@ -517,7 +517,7 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   // Download potfile
   const localPotPath = resolve(DIAMONDS_DIR, `${batchName}.pot`);
   console.log(`Downloading potfile...`);
-  scpDownload(config, `${WORK_DIR}/potfiles/${batchName}.pot`, localPotPath);
+  scpDownload(config, `${config.workDir}/potfiles/${batchName}.pot`, localPotPath);
   console.log(`  Saved: ${localPotPath}`);
 
   // Parse potfile: format is hash:plain (one per line)
@@ -553,12 +553,30 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   writeFileSync(passwordsPath, passwords.join("\n") + "\n");
   console.log(`  Passwords  → ${passwordsPath}`);
 
-  // Load SAND hashlist to compute crack rate
+  // Load SAND hashlist to compute crack rate + extract GLASS
   const batch = loadSandBatch(batchName);
   const totalHashes = batch ? batch.length : 0;
   const crackRate = totalHashes > 0 ? (hashPlainPairs.length / totalHashes * 100).toFixed(2) : "?";
 
   console.log(`\nResults: ${hashPlainPairs.length.toLocaleString()} / ${totalHashes.toLocaleString()} (${crackRate}%)`);
+
+  // Extract GLASS (uncracked hashes = SAND - DIAMONDS)
+  if (batch && batch.length > 0) {
+    const crackedHashSet = new Set<string>();
+    for (const line of lines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx >= 0) {
+        const hash = line.slice(0, colonIdx).trim().toLowerCase();
+        if (/^[a-f0-9]{40}$/.test(hash)) crackedHashSet.add(hash);
+      }
+    }
+
+    const glassHashes = batch.filter(h => !crackedHashSet.has(h.toLowerCase()));
+    if (!existsSync(GLASS_DIR)) mkdirSync(GLASS_DIR, { recursive: true });
+    const glassPath = resolve(GLASS_DIR, `${batchName}.txt`);
+    writeFileSync(glassPath, glassHashes.join("\n") + "\n");
+    console.log(`  GLASS: ${glassHashes.length.toLocaleString()} uncracked hashes → ${glassPath}`);
+  }
 
   // Update sand-state.json
   const stateManager = new SandStateManager(DATA_DIR);
@@ -618,7 +636,7 @@ function preflight(config: BigRedConfig, batchName: string, attacks: string[]): 
   console.log("\n--- PRE-FLIGHT CHECKS ---");
 
   // 1. Check hashlist exists on BIGRED
-  const hashlistPath = `${WORK_DIR}/hashlists/${batchName}.txt`;
+  const hashlistPath = `${config.workDir}/hashlists/${batchName}.txt`;
   try {
     const size = sshCmd(config, `stat -c %s ${hashlistPath} 2>/dev/null || echo 0`);
     if (parseInt(size) === 0) {
@@ -642,7 +660,7 @@ function preflight(config: BigRedConfig, batchName: string, attacks: string[]): 
     // Find filenames in the command
     for (const filename of Object.keys(FILE_MAP)) {
       if (cmd.includes(filename)) {
-        const remotePath = `${WORK_DIR}/${FILE_MAP[filename]}`;
+        const remotePath = `${config.workDir}/${FILE_MAP[filename]}`;
         try {
           const size = sshCmd(config, `stat -c %s ${remotePath} 2>/dev/null || echo 0`);
           if (parseInt(size) === 0) {
@@ -674,7 +692,7 @@ function preflight(config: BigRedConfig, batchName: string, attacks: string[]): 
 
   // 4. Check disk space
   try {
-    const df = sshCmd(config, "df -h /home/pai/ | tail -1 | awk '{print $4}'");
+    const df = sshCmd(config, `df -h ${config.workDir} | tail -1 | awk '{print $4}'`);
     console.log(`  Disk free: ${df}`);
   } catch { /* ignore */ }
 
