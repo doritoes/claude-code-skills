@@ -56,7 +56,8 @@ export function getDataDir(): string {
 
 // Derived paths
 export const DATA_DIR = getDataDir();
-export const CANDIDATES_DIR = resolve(DATA_DIR, "candidates");
+export const ROCKS_DIR = resolve(DATA_DIR, "rocks");
+export const GRAVEL_DIR = resolve(DATA_DIR, "gravel");
 export const SAND_DIR = resolve(DATA_DIR, "sand");
 export const PEARLS_DIR = resolve(DATA_DIR, "pearls");
 export const DIAMONDS_DIR = resolve(DATA_DIR, "diamonds");
@@ -64,6 +65,7 @@ export const GLASS_DIR = resolve(DATA_DIR, "glass");
 export const RESULTS_DIR = resolve(DATA_DIR, "results");
 export const EXPORTS_DIR = resolve(DATA_DIR, "exports");
 export const FEEDBACK_DIR = resolve(DATA_DIR, "feedback");
+export const ARCHIVE_DIR = resolve(DATA_DIR, "archive");
 
 // Hash type constants
 export const HASH_TYPE_SHA1 = 100;
@@ -73,7 +75,7 @@ export const HASH_TYPE_SHA1 = 100;
  */
 export function logDataConfig(): void {
   console.log(`Data Directory: ${DATA_DIR}`);
+  console.log(`  GRAVEL:     ${GRAVEL_DIR}`);
   console.log(`  SAND:       ${SAND_DIR}`);
-  console.log(`  CANDIDATES: ${CANDIDATES_DIR}`);
   console.log(`  DIAMONDS:   ${DIAMONDS_DIR}`);
 }

@@ -158,6 +158,12 @@ function getFileManifest(workDir: string): SyncFile[] {
       remotePath: `${workDir}/rules/UNOBTAINIUM.rule`,
       description: "UNOBTAINIUM.rule (diamond-derived rules)",
     },
+    // Stage 1 rule
+    {
+      localPath: resolve(PROJECT_ROOT, "OneRuleToRuleThemStill.rule"),
+      remotePath: `${workDir}/rules/OneRuleToRuleThemStill.rule`,
+      description: "OneRuleToRuleThemStill.rule (48K optimized rules)",
+    },
   ];
 }
 

@@ -43,6 +43,7 @@ const FILE_MAP: Record<string, string> = {
   "nocap.rule":       "rules/nocap.rule",
   "UNOBTAINUM.rule":  "rules/UNOBTAINIUM.rule",
   "bussin.rule":      "rules/bussin.rule",
+  "OneRuleToRuleThemStill.rule": "rules/OneRuleToRuleThemStill.rule",
 };
 
 /**

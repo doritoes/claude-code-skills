@@ -468,7 +468,7 @@ bun Tools/SandArchiver.ts --no-collect               # Skip DiamondCollector
 bun Tools/HibpDownloader.ts --batched --parallel 10
 
 # Filter to GRAVEL (preserves HIBP occurrence counts)
-bun Tools/SetDifference.ts --batched --compress
+bun Tools/GravelFilter.ts
 
 # ============================================================================
 # RESULTS
@@ -949,8 +949,8 @@ cmd /c mklink /D "<PAI_DIR>\.claude\skills\ExpandedPasswordList\data" "\\<NAS_IP
 - State: `data/state.json`
 - SAND state: `data/sand-state.json`
 - rockyou SHA-1: `data/rockyou-sha1.bin`
-- GRAVEL batches: `data/candidates/batch-*.txt`
-- Counts index: `data/candidates/counts-index.txt` (HASH:COUNT)
+- GRAVEL batches: `data/gravel/batch-*.txt`
+- Counts index: `data/gravel/counts-index.txt` (HASH:COUNT)
 - PEARLS: `data/results/cracked.txt`
 - Prioritized: `data/results/pearls-prioritized.txt` (sorted by frequency)
 - With counts: `data/results/pearls-with-counts.txt` (PASSWORD:COUNT)

@@ -10,7 +10,7 @@ Filter downloaded HIBP hashes to remove those already in rockyou.txt.
 ## Execution
 
 ```bash
-bun .claude/skills/ExpandedPasswordList/Tools/SetDifference.ts [options]
+bun .claude/skills/ExpandedPasswordList/Tools/GravelFilter.ts [options]
 ```
 
 ### Options
@@ -55,10 +55,10 @@ Updates `data/state.json`:
 
 ## Output
 
-Candidates written to `data/candidates/`:
+Candidates written to `data/gravel/`:
 ```
-data/candidates/batch-001.txt  (1M hashes)
-data/candidates/batch-002.txt  (1M hashes)
+data/gravel/batch-001.txt  (1M hashes)
+data/gravel/batch-002.txt  (1M hashes)
 ...
 ```
 
@@ -74,7 +74,7 @@ Peak: ~100MB
 
 Filter single prefix:
 ```bash
-bun .claude/skills/ExpandedPasswordList/Tools/SetDifference.ts --prefix 00000
+bun .claude/skills/ExpandedPasswordList/Tools/GravelFilter.ts --prefix 00000
 ```
 
 Expected: ~950 candidates (95% not in rockyou)

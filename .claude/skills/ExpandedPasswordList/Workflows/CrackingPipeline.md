@@ -35,7 +35,7 @@ This is the main pipeline that transforms GRAVEL candidates into PEARLS and SAND
 ### Pipeline Overview
 
 ```
-GRAVEL (candidates/batch-*.txt.gz)
+GRAVEL (gravel/batch-*.txt.gz)
          │
          ▼
 ┌─────────────────────────────────────────────────────┐
@@ -194,13 +194,13 @@ bun .claude/skills/Hashcrack/tools/HashtopolisClient.ts files
 
 ## Stage 0: ROCKS → GRAVEL (Already Implemented)
 
-**Tool:** `SetDifference.ts`
-**Input:** HIBP hashes (ROCKS)
-**Output:** GRAVEL hashlist
-**Method:** Binary search against rockyou-sha1.bin
+**Tool:** `GravelFilter.ts`
+**Input:** ROCKS batches (plain text SHA-1 hashes)
+**Output:** GRAVEL batches (1:1 correspondence)
+**Method:** SHA-1 hash rockyou.txt in memory, filter each rocks batch
 
 ```bash
-bun Tools/SetDifference.ts --batched --compress
+bun Tools/GravelFilter.ts
 ```
 
 ---

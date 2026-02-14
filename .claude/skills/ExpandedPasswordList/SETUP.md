@@ -28,7 +28,7 @@ EXPANDED_PASSWORDS_REPO=doritoes/expanded-passwords
 │   ├── 00000.txt        # Each prefix ~15KB compressed
 │   ├── 00001.txt
 │   └── ...              # 1,048,576 prefix files
-├── candidates/          # Filtered hashes (not in rockyou)
+├── gravel/              # Filtered hashes (not in rockyou)
 │   ├── batch-001.txt    # Split for Hashcrack submission
 │   └── ...
 └── results/             # Cracked passwords

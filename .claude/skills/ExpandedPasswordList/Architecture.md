@@ -59,7 +59,7 @@ This metadata is preserved throughout the pipeline for prioritization.
 - Better candidates for early positions in attack dictionaries
 
 **Files:**
-- `data/candidates/counts-index.txt` - HASH:COUNT for all GRAVEL
+- `data/gravel/counts-index.txt` - HASH:COUNT for all GRAVEL
 - `data/results/pearls-prioritized.txt` - PEARLS sorted by frequency
 - `data/results/pearls-with-counts.txt` - PASSWORD:COUNT for analysis
 
@@ -80,7 +80,7 @@ bun Tools/PearlPrioritizer.ts --top 10000
 Each GRAVEL batch flows through multiple cracking stages:
 
 ```
-candidates/batch-0001.txt (GRAVEL)
+gravel/batch-0001.txt (GRAVEL)
         │
         ▼ Stage 1: rockyou+OneRule
         │
@@ -103,7 +103,7 @@ candidates/batch-0001.txt (GRAVEL)
 **Directory Structure:**
 ```
 data/
-├── candidates/          # GRAVEL batches (Stage 1 input)
+├── gravel/              # GRAVEL batches (Stage 1 input)
 │   ├── batch-0001.txt   # ~1M SHA-1 hashes per file
 │   ├── batch-0002.txt
 │   └── ...
@@ -291,7 +291,7 @@ Using the API downloads uncompressed text which is larger per-hash but avoids to
 ```
 # Enable with:
 bun Tools/HibpDownloader.ts --batched
-bun Tools/SetDifference.ts --batched
+bun Tools/GravelFilter.ts
 ```
 
 ### Incremental Updates (with ETags)
@@ -305,13 +305,13 @@ bun Tools/HibpDownloader.ts --batched --incremental
 ```
 
 ### Compressed Candidates
-- Filter output can be gzip compressed: `data/candidates/batch-001.txt.gz`
+- Filter output can be gzip compressed: `data/gravel/batch-001.txt.gz`
 - Reduces candidate storage by ~60%
 - CrackSubmitter auto-detects and decompresses
 
 ```
 # Enable with:
-bun Tools/SetDifference.ts --batched --compress
+bun Tools/GravelFilter.ts --compress
 ```
 
 ## rockyou-sha1.bin Format
@@ -487,7 +487,7 @@ Compare baseline vs enhanced on a GRAVEL sample.
 **Test Setup:**
 ```bash
 # Sample 10M hashes from GRAVEL for reproducible testing
-head -n 10000000 data/candidates/gravel.txt > data/benchmark/sample-10m.txt
+head -n 10000000 data/gravel/gravel.txt > data/benchmark/sample-10m.txt
 
 # Baseline: rockyou + OneRule
 hashcat -m 100 -a 0 -r OneRuleToRuleThemStill.rule sample-10m.txt rockyou.txt

@@ -171,7 +171,7 @@ PHASE 3: Rule attack (rockyou + OneRule) - SLOW (optional)
 
 ## Memory-Efficient Filter
 
-The filter step (`SetDifference.ts --batched`) uses these memory optimizations:
+The filter step (`GravelFilter.ts --batched`) uses these memory optimizations:
 
 | Optimization | Before | After |
 |--------------|--------|-------|
