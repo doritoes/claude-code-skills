@@ -84,7 +84,7 @@ export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
   // CONTINUOUS IMPROVEMENT ATTACK ORDER — v5.1 (2026-02-13)
   // Applies to: batch-0013+ | 17 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.7K), UNOBTAINIUM.rule (40)
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.7K), UNOBTAINIUM.rule (194)
   // Principle: pair incremental files with established counterparts (new words × big rules, big words × new rules)
   // Based on: 12 completed batches (266,637 cracks / 4,189,488 hashes = 6.37% overall)
   // ══════════════════════════════════════════════════════════════════════
@@ -109,7 +109,7 @@ export const DEFAULT_ATTACK_ORDER = [
   // UNOBTAINIUM.rule = new rules not in nocap.rule → pair with BIG wordlist (nocap-plus.txt)
   "feedback-beta-nocaprule",       // 2,447 cracks / 9 runs (0.08% rate) — BETA.txt (77.7K) + nocap.rule
   "nocapplus-nocaprule",           // 733 cracks / 9 runs (0.02% rate) — nocap-plus.txt + nocap.rule [PRIMARY]
-  "nocapplus-unobtainium",         // 103 cracks / 9 runs (<0.01% rate) — nocap-plus.txt + UNOBTAINIUM.rule
+  "nocapplus-unobtainium",         // 103 cracks / 9 runs (<0.01% rate) — nocap-plus.txt + UNOBTAINIUM.rule (194 rules, deep analysis v2)
   //
   // ── GATE 2: Feedback = 1.5% combined. Keep: every crack teaches us something ─
   //
