@@ -533,7 +533,8 @@
       "Bash(\"C:/Program Files/Python312/python.exe\" Tools/rocks_extractor.py)",
       "Bash(\"C:/Program Files/Python312/python.exe\" Tools/gravel_filter.py --no-resume)",
       "Bash(\"C:/Program Files/Python312/python.exe\" Tools/rocks_extractor.py --no-resume)",
-      "Bash(\"C:/Program Files/Python312/python.exe\" \"C:/Users/sethh/AI-Projects/.claude/skills/ExpandedPasswordList/Tools/gravel_filter.py\" --no-resume)"
+      "Bash(\"C:/Program Files/Python312/python.exe\" \"C:/Users/sethh/AI-Projects/.claude/skills/ExpandedPasswordList/Tools/gravel_filter.py\" --no-resume)",
+      "Bash(\"C:/Program Files/Python312/python.exe\" Tools/gravel_processor.py --dry-run)"
     ]
   }
 }
