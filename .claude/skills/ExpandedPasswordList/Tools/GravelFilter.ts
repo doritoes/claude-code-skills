@@ -30,7 +30,7 @@ import { DATA_DIR, ROCKS_DIR, GRAVEL_DIR } from "./config";
 const CURRENT_FILE = fileURLToPath(import.meta.url);
 const TOOLS_DIR = dirname(CURRENT_FILE);
 const SKILL_DIR = dirname(TOOLS_DIR);
-const PROJECT_ROOT = resolve(SKILL_DIR, "..", "..", "..", "..");
+const PROJECT_ROOT = resolve(SKILL_DIR, "..", "..", "..");
 const DEFAULT_ROCKYOU = resolve(PROJECT_ROOT, "rockyou.txt");
 const PROGRESS_FILE = resolve(DATA_DIR, "gravel-filter-progress.json");
 
