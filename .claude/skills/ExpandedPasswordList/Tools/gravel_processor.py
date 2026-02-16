@@ -25,6 +25,10 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
+# Force unbuffered output so progress is visible in real time
+import functools
+print = functools.partial(print, flush=True)
+
 # =============================================================================
 # Paths
 # =============================================================================
@@ -285,6 +289,13 @@ def run_hashcat(config, batch):
     # Poll for completion
     _poll_completion(config, batch, screen_name, log_file)
 
+    # Wait for hashcat to fully exit before returning
+    # Prevents next batch from seeing "hashcat busy"
+    for _ in range(10):
+        if not is_hashcat_running(config):
+            break
+        time.sleep(3)
+
 
 def _launch_hashcat(config, cmd, screen_name, log_file):
     # Clean up previous session
@@ -370,8 +381,8 @@ def collect_results(config, batch, gravel_count):
         # No cracks - entire gravel becomes sand
         print(f"  No cracks. All {gravel_count:,} hashes -> SAND")
         gravel_path = GRAVEL_DIR / f"{batch}.txt"
-        (SAND_DIR / f"{batch}.txt").write_text(gravel_path.read_text())
-        (PEARLS_DIR / f"{batch}.txt").write_text("")
+        (SAND_DIR / f"{batch}.txt").write_text(gravel_path.read_text(encoding="utf-8"), encoding="utf-8")
+        (PEARLS_DIR / f"{batch}.txt").write_text("", encoding="utf-8")
         return 0, gravel_count
 
     # Download potfile to temp location
@@ -400,7 +411,8 @@ def collect_results(config, batch, gravel_count):
 
     # Write PEARLS batch file (plaintexts)
     (PEARLS_DIR / f"{batch}.txt").write_text(
-        "\n".join(plaintexts) + "\n" if plaintexts else ""
+        "\n".join(plaintexts) + "\n" if plaintexts else "",
+        encoding="utf-8"
     )
 
     # Append to hash_plaintext_pairs.txt
@@ -411,7 +423,7 @@ def collect_results(config, batch, gravel_count):
     # Compute SAND = GRAVEL - PEARLS
     gravel_path = GRAVEL_DIR / f"{batch}.txt"
     sand_hashes = []
-    with open(gravel_path, "r") as f:
+    with open(gravel_path, "r", encoding="utf-8") as f:
         for line in f:
             h = line.strip()
             if len(h) == 40 and h.lower() not in cracked:
@@ -422,7 +434,8 @@ def collect_results(config, batch, gravel_count):
 
     # Write SAND batch file
     (SAND_DIR / f"{batch}.txt").write_text(
-        "\n".join(sand_hashes) + "\n" if sand_hashes else ""
+        "\n".join(sand_hashes) + "\n" if sand_hashes else "",
+        encoding="utf-8"
     )
 
     # Verify invariant: PEARLS + SAND = GRAVEL
@@ -459,20 +472,17 @@ def process_batch(config, batch, dry_run=False):
         print(f"  [DRY RUN] {cmd}")
         return gravel_count, 0, 0
 
+    # Always start clean — delete any stale potfile from previous runs
+    try:
+        ssh_cmd(config, f"rm -f {config.work_dir}/potfiles/{batch}.pot", timeout=10)
+    except Exception:
+        pass
+
     # Upload hashlist
     upload_batch(config, batch)
 
-    # Check for completed-but-uncollected run (crash recovery)
-    pot_count = get_potfile_count(config, batch)
-    if pot_count > 0 and not is_hashcat_running(config):
-        print(f"  Found existing potfile ({pot_count:,} entries) - collecting...")
-    else:
-        # Clear old potfile and run fresh
-        try:
-            ssh_cmd(config, f"rm -f {config.work_dir}/potfiles/{batch}.pot", timeout=10)
-        except Exception:
-            pass
-        run_hashcat(config, batch)
+    # Run hashcat (blocks until complete)
+    run_hashcat(config, batch)
 
     # Collect results
     pearl_count, sand_count = collect_results(config, batch, gravel_count)
@@ -520,9 +530,11 @@ def preflight(config):
         print(f"  FAIL: {e}")
         return False
 
-    # hashcat
+    # hashcat — must NOT be running at startup
     if is_hashcat_running(config):
-        print(f"  WARNING: hashcat already running")
+        print(f"  FAIL: hashcat already running. Kill it first:")
+        print(f"        ssh pai@{config.host} 'killall -9 hashcat'")
+        return False
     else:
         print(f"  hashcat: ready")
 
@@ -619,6 +631,18 @@ def main():
     if not dry_run:
         if not preflight(config):
             sys.exit(1)
+
+        # Clean BIGRED work dirs to prevent stale data from previous runs
+        if no_resume or state.get("totalProcessed", 0) == 0:
+            print("\nCleaning BIGRED work directories...")
+            try:
+                ssh_cmd(config, (
+                    f"rm -f {config.work_dir}/hashlists/*.txt "
+                    f"{config.work_dir}/potfiles/*.pot"
+                ), timeout=15)
+                print("  Cleared hashlists/ and potfiles/")
+            except Exception as e:
+                print(f"  WARNING: cleanup failed: {e}")
 
     all_batches = get_gravel_batches()
     if not all_batches:
