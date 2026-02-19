@@ -12,8 +12,20 @@ Output:
 Usage:
   python Tools/gravel_processor.py              Run all pending batches
   python Tools/gravel_processor.py --status     Show progress
-  python Tools/gravel_processor.py --no-resume  Restart from batch-0001
+  python Tools/gravel_processor.py --no-resume  Restart from batch-0001 (requires YES confirmation)
   python Tools/gravel_processor.py --dry-run    Preview without executing
+
+Recovery:
+  python Tools/rebuild_gravel_state.py --execute   Rebuild state from pearl/sand files
+
+FUTURE IMPROVEMENT:
+  Combine multiple gravel batches into one large hashlist per hashcat run.
+  Keyspace for dict+rules is FIXED regardless of hashlist size — running
+  nocap.txt x nocap.rule against 10 batches at once takes the same ~1.5 min
+  as 1 batch, but produces 10x the pearls. This would reduce the total
+  processing time from ~100 hours (4,300 batches x 1.5 min) to ~10 hours
+  (430 groups of 10 x 1.5 min). Requires splitting the potfile back to
+  per-batch pearls/sand after each run (same pattern as sand_bruteforcer.py).
 """
 
 import os
@@ -612,6 +624,19 @@ def main():
 
     state = load_state()
     if no_resume:
+        done = state.get("totalProcessed", 0)
+        pearls = state.get("totalPearls", 0)
+        print(f"\n{'!' * 60}")
+        print(f"  WARNING: --no-resume will DESTROY tracking state")
+        print(f"  and clean BIGRED work directories.")
+        print(f"")
+        print(f"  Current state: {done:,} batches completed, {pearls:,} pearls")
+        print(f"  This CANNOT be undone without rebuild_gravel_state.py.")
+        print(f"{'!' * 60}")
+        confirm = input("\n  Type YES to confirm reset: ")
+        if confirm.strip() != "YES":
+            print("  Aborted.")
+            return
         state = {
             "version": "2.0",
             "attack": "nocap-nocaprule",
@@ -622,7 +647,7 @@ def main():
             "lastUpdated": None,
         }
         save_state(state)
-        print("State reset.")
+        print("  State reset.")
 
     config = BigRedConfig()
     print(f"BIGRED: {config.user}@{config.host}")
