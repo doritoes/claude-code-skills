@@ -97,8 +97,8 @@ export class OPNsenseAdvisoryFetcher {
     try {
       releases = await this.fetchFromEndOfLife();
     } catch (error) {
-      console.error(`OPNsense endoflife.date fetch warning: ${(error as Error).message} - using fallback data`);
-      releases = this.getFallbackReleases();
+      // Fail honestly — no fallback data
+      throw new Error(`OPNsense advisory fetch failed: ${(error as Error).message}`);
     }
 
     // Try to fetch CVEs from NVD
@@ -149,13 +149,15 @@ export class OPNsenseAdvisoryFetcher {
   private async fetchFromNvd(): Promise<OPNsenseAdvisory[]> {
     const advisories: OPNsenseAdvisory[] = [];
 
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 12);
+    // NVD API 2.0 enforces a 120-day max date range; format must be ISO-8601 without trailing Z
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - 120 * 24 * 60 * 60 * 1000);
+    const nvdDateFmt = (d: Date) => d.toISOString().replace("Z", "");
 
     const params = new URLSearchParams({
       keywordSearch: "opnsense",
-      pubStartDate: startDate.toISOString(),
-      pubEndDate: new Date().toISOString(),
+      pubStartDate: nvdDateFmt(startDate),
+      pubEndDate: nvdDateFmt(endDate),
       resultsPerPage: "50",
     });
 
@@ -210,19 +212,6 @@ export class OPNsenseAdvisoryFetcher {
     }
 
     return advisories;
-  }
-
-  /**
-   * Fallback release data if API unavailable
-   */
-  private getFallbackReleases(): OPNsenseRelease[] {
-    return [
-      { cycle: "26.1", codename: "Witty Woodpecker", releaseDate: "2026-01-28", eol: false, latest: "26.1.2", latestReleaseDate: "2026-02-01", lts: false },
-      { cycle: "25.7", codename: "Vivid Viper", releaseDate: "2025-07-16", eol: false, latest: "25.7.8", latestReleaseDate: "2025-12-11", lts: false },
-      { cycle: "25.1", codename: "Ultimate Unicorn", releaseDate: "2025-01-29", eol: "2025-08-13", latest: "25.1.9", latestReleaseDate: "2025-07-09", lts: false },
-      { cycle: "24.7", codename: "Thriving Tiger", releaseDate: "2024-07-17", eol: "2025-01-28", latest: "24.7.12", latestReleaseDate: "2025-01-15", lts: false },
-      { cycle: "24.1", codename: "Savvy Shark", releaseDate: "2024-01-31", eol: "2024-08-13", latest: "24.1.10", latestReleaseDate: "2024-07-24", lts: false },
-    ];
   }
 
   /**

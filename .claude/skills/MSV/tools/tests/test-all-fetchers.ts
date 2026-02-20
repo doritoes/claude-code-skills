@@ -6,26 +6,24 @@
  * - Connection status
  * - Data quality (advisories, branches, versions)
  * - Error details
+ *
+ * Retired fetchers (no viable vendor data source — use NVD/VulnCheck/KEV instead):
+ * - Fortinet: FortiGuard RSS has no version data
+ * - SonicWall: PSIRT portal WAF-blocked (Incapsula)
+ * - Juniper: Native feeds dead (Salesforce migration behind auth)
+ * - Check Point: No public API or RSS feed
+ * - Adobe: helpx.adobe.com CDN blocks non-browser requests
+ * - F5: No public machine-readable advisory feed
  */
 
-import { FortinetAdvisoryFetcher } from "../FortinetAdvisoryFetcher";
 import { PaloAltoAdvisoryFetcher } from "../PaloAltoAdvisoryFetcher";
 import { CiscoAdvisoryFetcher } from "../CiscoAdvisoryFetcher";
-import { SonicWallAdvisoryFetcher } from "../SonicWallAdvisoryFetcher";
-import { JuniperAdvisoryFetcher } from "../JuniperAdvisoryFetcher";
 import { IvantiAdvisoryFetcher } from "../IvantiAdvisoryFetcher";
 import { CurlAdvisoryFetcher } from "../CurlAdvisoryFetcher";
-import { F5AdvisoryFetcher } from "../F5AdvisoryFetcher";
-import { CheckPointAdvisoryFetcher } from "../CheckPointAdvisoryFetcher";
 import { OPNsenseAdvisoryFetcher } from "../OPNsenseAdvisoryFetcher";
 import { PfSenseAdvisoryFetcher } from "../PfSenseAdvisoryFetcher";
-// These use different import patterns - need wrapper classes from VendorAdvisory.ts
-// import { MozillaAdvisoryFetcher } from "../MozillaAdvisoryFetcher";
-// import { MsrcAdvisoryFetcher } from "../MsrcAdvisoryFetcher";
-// import { VMwareAdvisoryFetcher } from "../VMwareAdvisoryFetcher";
 import { AtlassianAdvisoryFetcher } from "../AtlassianAdvisoryFetcher";
 import { CitrixAdvisoryFetcher } from "../CitrixAdvisoryFetcher";
-import { AdobeAdvisoryFetcher } from "../AdobeAdvisoryFetcher";
 import { OracleAdvisoryFetcher } from "../OracleAdvisoryFetcher";
 import { getVendorFetcher } from "../VendorAdvisory";
 
@@ -103,11 +101,7 @@ async function main() {
   console.log(`${BOLD}═══════════════════════════════════════════════════════════════${RESET}\n`);
 
   const fetchers: Array<{ name: string; fn: () => Promise<any> }> = [
-    // Network Security Vendors (highest priority)
-    {
-      name: "Fortinet FortiOS",
-      fn: () => new FortinetAdvisoryFetcher(CACHE_DIR).fetch("fortios")
-    },
+    // Network Security Vendors (with viable vendor advisory sources)
     {
       name: "Palo Alto PAN-OS",
       fn: () => new PaloAltoAdvisoryFetcher(CACHE_DIR).fetch("pan-os")
@@ -117,24 +111,8 @@ async function main() {
       fn: () => new CiscoAdvisoryFetcher(CACHE_DIR).fetch("asa")
     },
     {
-      name: "SonicWall",
-      fn: () => new SonicWallAdvisoryFetcher(CACHE_DIR).fetch()
-    },
-    {
-      name: "Juniper JunOS",
-      fn: () => new JuniperAdvisoryFetcher(CACHE_DIR).fetch()
-    },
-    {
       name: "Ivanti Connect Secure",
       fn: () => new IvantiAdvisoryFetcher(CACHE_DIR, "connect_secure").fetch()
-    },
-    {
-      name: "F5 BIG-IP",
-      fn: () => new F5AdvisoryFetcher(CACHE_DIR).fetch()
-    },
-    {
-      name: "Check Point Gaia",
-      fn: () => new CheckPointAdvisoryFetcher(CACHE_DIR).fetch()
     },
     {
       name: "OPNsense",
@@ -181,13 +159,6 @@ async function main() {
       }
     },
     {
-      name: "Adobe Acrobat",
-      fn: async () => {
-        const fetcher = getVendorFetcher("adobe", "acrobat", CACHE_DIR);
-        return fetcher ? fetcher.fetch() : { advisories: [], branches: [] };
-      }
-    },
-    {
       name: "Oracle Java",
       fn: async () => {
         const fetcher = getVendorFetcher("oracle", "java", CACHE_DIR);
@@ -198,6 +169,20 @@ async function main() {
       name: "Curl",
       fn: async () => {
         const fetcher = getVendorFetcher("curl", "curl", CACHE_DIR);
+        return fetcher ? fetcher.fetch() : { advisories: [], branches: [] };
+      }
+    },
+    {
+      name: "Google Chrome",
+      fn: async () => {
+        const fetcher = getVendorFetcher("google", "chrome", CACHE_DIR);
+        return fetcher ? fetcher.fetch() : { advisories: [], branches: [] };
+      }
+    },
+    {
+      name: "SolarWinds Orion",
+      fn: async () => {
+        const fetcher = getVendorFetcher("solarwinds", "orion_platform", CACHE_DIR);
         return fetcher ? fetcher.fetch() : { advisories: [], branches: [] };
       }
     },
@@ -243,9 +228,14 @@ async function main() {
   console.log(`${YELLOW}PARTIAL: ${partial}${RESET} (advisories but no branches)`);
   console.log(`${RED}FAIL:    ${failing}${RESET} (errors or no data)`);
 
-  console.log(`\n${BOLD}Issues to Fix:${RESET}`);
-  for (const r of results.filter(r => r.status !== "PASS")) {
-    console.log(`  ${r.status === "PARTIAL" ? YELLOW : RED}• ${r.vendor}${RESET}: ${r.error || "No branch data calculated"}`);
+  console.log(`\n${DIM}Retired fetchers (no viable vendor source — covered by NVD/VulnCheck/KEV):${RESET}`);
+  console.log(`${DIM}  Fortinet, SonicWall, Juniper, Check Point, Adobe, F5${RESET}`);
+
+  if (results.some(r => r.status !== "PASS")) {
+    console.log(`\n${BOLD}Issues to Fix:${RESET}`);
+    for (const r of results.filter(r => r.status !== "PASS")) {
+      console.log(`  ${r.status === "PARTIAL" ? YELLOW : RED}• ${r.vendor}${RESET}: ${r.error || "No branch data calculated"}`);
+    }
   }
 
   return results;

@@ -4,7 +4,7 @@
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
     "lastUpdated": "2026-02-03",
     "lastChecked": "2026-01-21T00:00:00Z",
-    "totalEntries": 189,
+    "totalEntries": 192,
     "sources": [
       "CISA KEV Catalog (top vulnerable products)",
       "Enterprise patch management catalogs",
@@ -2955,27 +2955,6 @@
       "latestVersion": "2019 CU15"
     },
     {
-      "id": "weblogic",
-      "displayName": "Oracle WebLogic Server",
-      "vendor": "oracle",
-      "product": "weblogic_server",
-      "cpe23": "cpe:2.3:a:oracle:weblogic_server:*:*:*:*:*:*:*:*",
-      "category": "webserver",
-      "priority": "critical",
-      "aliases": [
-        "weblogic",
-        "oracle weblogic",
-        "weblogic server"
-      ],
-      "platforms": [
-        "windows",
-        "server"
-      ],
-      "notes": "CRITICAL: 11 CVEs in CISA KEV. Java application server. Deserialization RCE vulnerabilities.",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "14.1.2"
-    },
-    {
       "id": "sap_netweaver",
       "displayName": "SAP NetWeaver",
       "vendor": "sap",
@@ -3439,12 +3418,13 @@
       "aliases": [
         "weblogic",
         "oracle weblogic",
+        "weblogic server",
         "wls"
       ],
       "platforms": [
         "server"
       ],
-      "notes": "CRITICAL: Java app server. Deserialization RCE vulnerabilities.",
+      "notes": "CRITICAL: 11 CVEs in CISA KEV. Java application server. Deserialization RCE vulnerabilities.",
       "lastChecked": "2026-02-03",
       "latestVersion": "14.1.2"
     },
@@ -3757,6 +3737,83 @@
         "\\bgms\\b"
       ],
       "latestVersion": "12.4.3"
+    },
+    {
+      "id": "pfsense",
+      "displayName": "pfSense CE",
+      "vendor": "netgate",
+      "product": "pfsense",
+      "cpe23": "cpe:2.3:a:netgate:pfsense:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "high",
+      "aliases": [
+        "pfsense",
+        "pfsense ce",
+        "pfsense firewall",
+        "netgate pfsense"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "Open-source FreeBSD-based firewall. Community Edition. Vendor advisories from Netgate .asc files.",
+      "lastChecked": "2026-02-20",
+      "versionPattern": "^2\\.",
+      "excludePatterns": [
+        "\\bpfsense\\s*plus\\b",
+        "\\bopnsense\\b"
+      ],
+      "latestVersion": "2.8.0"
+    },
+    {
+      "id": "pfsense_plus",
+      "displayName": "pfSense Plus",
+      "vendor": "netgate",
+      "product": "pfsense_plus",
+      "cpe23": "cpe:2.3:a:netgate:pfsense_plus:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "high",
+      "aliases": [
+        "pfsense plus",
+        "netgate pfsense plus",
+        "pfsense commercial"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "Commercial pfSense. YY.MM version format. Vendor advisories from Netgate .asc files.",
+      "lastChecked": "2026-02-20",
+      "versionPattern": "^\\d{2}\\.\\d{1,2}$",
+      "excludePatterns": [
+        "\\bpfsense\\s*ce\\b",
+        "\\bcommunity\\s*edition\\b",
+        "\\bopnsense\\b"
+      ],
+      "latestVersion": "25.11"
+    },
+    {
+      "id": "opnsense",
+      "displayName": "OPNsense",
+      "vendor": "opnsense",
+      "product": "opnsense",
+      "cpe23": "cpe:2.3:a:opnsense:opnsense:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "high",
+      "aliases": [
+        "opnsense",
+        "opnsense firewall",
+        "deciso opnsense"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "Open-source FreeBSD-based firewall (fork of pfSense). Uses endoflife.date API for version data.",
+      "lastChecked": "2026-02-20",
+      "versionPattern": "^\\d{2}\\.\\d",
+      "excludePatterns": [
+        "\\bpfsense\\b"
+      ],
+      "eolProductId": "opnsense",
+      "latestVersion": "25.1"
     },
     {
       "id": "visual_studio",

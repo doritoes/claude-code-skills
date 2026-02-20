@@ -73,6 +73,22 @@ const ORACLE_PRODUCTS: Record<string, string[]> = {
   "linux": ["Oracle Linux"],
 };
 
+/**
+ * Normalize catalog product keys to fetcher product keys.
+ * Catalog uses CPE-style names (e.g., "weblogic_server", "adaptive_security_appliance_software")
+ * but the fetcher uses short names (e.g., "weblogic", "virtualbox").
+ */
+const ORACLE_PRODUCT_ALIASES: Record<string, string> = {
+  "weblogic_server": "weblogic",
+  "vm_virtualbox": "virtualbox",
+  "jdk": "java",
+  "jre": "java",
+  "java_se": "java",
+  "graalvm": "java",
+  "oracle_database": "database",
+  "enterprise_manager_ops_center": "enterprise_manager",
+};
+
 // =============================================================================
 // Oracle Advisory Fetcher
 // =============================================================================
@@ -84,7 +100,8 @@ export class OracleAdvisoryFetcher {
 
   constructor(cacheDir: string, product: string = "all") {
     this.cacheDir = cacheDir;
-    this.product = product.toLowerCase();
+    const key = product.toLowerCase();
+    this.product = ORACLE_PRODUCT_ALIASES[key] || key;
     if (!existsSync(cacheDir)) {
       mkdirSync(cacheDir, { recursive: true });
     }

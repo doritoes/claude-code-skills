@@ -46,6 +46,7 @@ export interface QueryOptions {
   verbose: boolean;
   forceRefresh: boolean;
   filter?: BatchFilter;
+  currentVersion?: string;
 }
 
 // =============================================================================
@@ -83,6 +84,8 @@ export interface MSVResult {
   action?: ActionGuidance;
   /** Aggregate risk score (0-100) */
   riskScore?: RiskScore;
+  /** User's installed version (from --version) */
+  currentVersion?: string;
   // v3 fields - variant support
   /** True if this product has variant tracks */
   hasVariants?: boolean;

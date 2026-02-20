@@ -201,6 +201,19 @@ export class MsvCache {
   }
 
   /**
+   * Delete a product's cache entry (used by --force to ensure fresh data)
+   */
+  delete(productId: string): boolean {
+    const cache = this.load();
+    if (cache.entries[productId]) {
+      delete cache.entries[productId];
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * List all cached products
    */
   list(): MsvCacheEntry[] {

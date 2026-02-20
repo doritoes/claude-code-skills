@@ -29,6 +29,7 @@ export interface RiskScoreInput {
   msvDetermined: boolean;        // Whether MSV could be determined
   hasPoCExploits: boolean;       // Any public PoC exploits
   dataAge: number;               // Hours since last data refresh
+  isCompliant?: boolean;         // User's version meets or exceeds MSV
 }
 
 export interface RiskScore {
@@ -172,8 +173,25 @@ function generateRecommendation(
   level: RiskLevel,
   input: RiskScoreInput
 ): string {
+  // When user supplied --version and is compliant, recommendation should reflect that
+  if (input.isCompliant) {
+    if (input.hasKevCves) {
+      return "PATCHED: Your version addresses known exploited vulnerabilities. Continue monitoring for new disclosures.";
+    }
+    return "PATCHED: Your version addresses known vulnerabilities. No action needed.";
+  }
+
   if (input.hasKevCves) {
-    return "IMMEDIATE: Actively exploited vulnerabilities require emergency patching within 24-48 hours.";
+    switch (level) {
+      case "CRITICAL":
+      case "HIGH":
+        return "IMMEDIATE: Actively exploited vulnerabilities detected. Verify your version and patch within 24-48 hours.";
+      case "MEDIUM":
+        return "PRIORITY: Actively exploited vulnerabilities exist for older versions. Verify your version is at or above MSV.";
+      case "LOW":
+      case "INFO":
+        return "VERIFY: Known exploited vulnerabilities exist. Confirm your installed version is patched.";
+    }
   }
 
   switch (level) {

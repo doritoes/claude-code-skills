@@ -101,10 +101,10 @@ export abstract class VendorAdvisoryFetcher {
     return null;
   }
 
-  protected setCache(key: string, data: VendorAdvisoryResult): void {
+  protected setCache(key: string, data: VendorAdvisoryResult, ttlMs?: number): void {
     const entry: CacheEntry = {
       data,
-      expiresAt: new Date(Date.now() + this.cacheDurationMs).toISOString(),
+      expiresAt: new Date(Date.now() + (ttlMs ?? this.cacheDurationMs)).toISOString(),
     };
     writeFileSync(this.getCachePath(key), JSON.stringify(entry, null, 2));
   }
@@ -292,27 +292,74 @@ export class WiresharkAdvisoryFetcher extends VendorAdvisoryFetcher {
 }
 
 // =============================================================================
-// Chrome Advisory Fetcher (Placeholder)
+// Chrome Advisory Fetcher (ChromiumDash API)
 // =============================================================================
 
 export class ChromeAdvisoryFetcher extends VendorAdvisoryFetcher {
-  // Chrome releases are on chromereleases.googleblog.com
-  // They follow a different format - will implement when needed
+  private static readonly CHROMIUMDASH_API = "https://chromiumdash.appspot.com/fetch_releases";
+  private static readonly REQUEST_TIMEOUT_MS = 15000;
 
   async fetch(): Promise<VendorAdvisoryResult> {
     const cached = this.getCache("chrome");
     if (cached) return cached;
 
-    // For now, return a stub that indicates we need NVD data
+    let branches: BranchMsv[] = [];
+    let source = "chromiumdash.appspot.com";
+
+    try {
+      // Fetch recent Stable releases for Windows from ChromiumDash
+      const url = `${ChromeAdvisoryFetcher.CHROMIUMDASH_API}?channel=Stable&platform=Windows&num=30`;
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(ChromeAdvisoryFetcher.REQUEST_TIMEOUT_MS),
+        headers: { "Accept": "application/json" },
+      });
+
+      if (response.ok) {
+        const releases = await response.json() as Array<{
+          version: string;
+          milestone: number;
+          time: number;
+        }>;
+
+        // Group by milestone, find the latest version per milestone
+        const milestoneMap = new Map<number, string>();
+        for (const rel of releases) {
+          const existing = milestoneMap.get(rel.milestone);
+          if (!existing || this.compareVersions(rel.version, existing) > 0) {
+            milestoneMap.set(rel.milestone, rel.version);
+          }
+        }
+
+        // Convert to branches (latest 3 milestones)
+        const milestones = [...milestoneMap.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .slice(0, 3);
+
+        branches = milestones.map(([milestone, version]) => ({
+          branch: String(milestone),
+          msv: version,
+          latest: version,
+        }));
+      }
+    } catch (err) {
+      // Fail honestly — no fallback data. MSV pipeline handles missing vendor data.
+      throw new Error(`Chrome advisory fetch failed: ${(err as Error).message}`);
+    }
+
+    if (branches.length === 0) {
+      throw new Error("Chrome advisory fetch returned no release data from ChromiumDash API");
+    }
+
     const result: VendorAdvisoryResult = {
       vendor: "google",
       product: "chrome",
-      advisories: [],
-      branches: [],
+      advisories: [],  // CVE data comes from AppThreat/NVD/CISA KEV
+      branches,
       fetchedAt: new Date().toISOString(),
-      source: "nvd_fallback",
+      source,
     };
 
+    this.setCache("chrome", result);
     return result;
   }
 }
@@ -325,27 +372,26 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
   private readonly trustCenterUrl = "https://www.solarwinds.com/trust-center/security-advisories";
   private readonly product: string;
 
-  // SolarWinds product name mappings for advisory filtering
-  private static readonly PRODUCT_NAMES: Record<string, string[]> = {
-    "orion_platform": ["orion", "orion platform"],
-    "serv-u": ["serv-u", "servu", "serv u"],
-    "access_rights_manager": ["access rights manager", "arm"],
-    "web_help_desk": ["web help desk", "whd"],
-    "network_performance_monitor": ["npm", "network performance monitor"],
-    "server_and_application_monitor": ["sam", "server and application monitor"],
-    "network_configuration_manager": ["ncm", "network configuration manager"],
-    "netflow_traffic_analyzer": ["nta", "netflow traffic analyzer"],
-    "ip_address_manager": ["ipam", "ip address manager"],
-    "virtualization_manager": ["vman", "virtualization manager"],
-    "database_performance_analyzer": ["dpa", "database performance analyzer"],
-    "log_analyzer": ["log analyzer", "la"],
+  // SolarWinds product name patterns for matching headlines and fixedVersion text
+  private static readonly PRODUCT_PATTERNS: Record<string, string[]> = {
+    "orion_platform": ["platform", "orion"],
+    "serv-u": ["serv-u"],
+    "access_rights_manager": ["access rights manager"],
+    "web_help_desk": ["web help desk"],
+    "network_performance_monitor": ["network performance monitor", "npm"],
+    "server_and_application_monitor": ["server and application monitor", "sam"],
+    "network_configuration_manager": ["network configuration manager", "ncm"],
+    "netflow_traffic_analyzer": ["netflow traffic analyzer", "nta"],
+    "ip_address_manager": ["ip address manager", "ipam"],
+    "virtualization_manager": ["virtualization manager", "vman"],
+    "database_performance_analyzer": ["database performance analyzer", "dpa"],
+    "log_analyzer": ["log analyzer"],
     "patch_manager": ["patch manager"],
-    "dameware_mini_remote_control": ["dameware", "mini remote control", "mrc"],
+    "dameware_mini_remote_control": ["dameware mini remote control", "dameware"],
     "dameware_remote_support": ["dameware remote support"],
-    "engineers_toolset": ["engineer's toolset", "engineers toolset", "ets"],
-    "kiwi_syslog_server": ["kiwi", "kiwi syslog"],
-    "sftp_scp_server": ["sftp", "scp"],
-    "tftp_server": ["tftp"],
+    "engineers_toolset": ["engineer's toolset", "engineers toolset"],
+    "kiwi_syslog_server": ["kiwi syslog", "kiwi"],
+    "observability": ["observability"],
   };
 
   constructor(cacheDir: string, product: string) {
@@ -358,11 +404,9 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
 
-    // Fetch the Trust Center security advisories page
+    // Fetch the Trust Center page — it embeds __NEXT_DATA__ with structured advisory data
     const response = await fetch(this.trustCenterUrl, {
-      headers: {
-        "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
-      },
+      headers: { "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
@@ -371,12 +415,31 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
     }
 
     const html = await response.text();
-    const advisories = this.parseAdvisories(html);
 
-    // Filter advisories for this specific product
-    const productAdvisories = this.filterByProduct(advisories);
+    // Extract __NEXT_DATA__ JSON blob (contains structured advisory data from ContentStack CMS)
+    const nextDataMatch = html.match(/__NEXT_DATA__"\s*type="application\/json">(.+?)<\/script>/);
+    if (!nextDataMatch) {
+      throw new Error("SolarWinds: __NEXT_DATA__ not found in page");
+    }
 
-    // Calculate MSV from fixed versions
+    let pagesData: any[];
+    try {
+      const nextData = JSON.parse(nextDataMatch[1]);
+      pagesData = nextData?.props?.pageProps?.pagesData;
+      if (!Array.isArray(pagesData)) {
+        throw new Error("pagesData not found");
+      }
+    } catch (e) {
+      throw new Error(`SolarWinds: failed to parse advisory data: ${(e as Error).message}`);
+    }
+
+    // Parse all advisories from structured data
+    const allAdvisories = this.parseAdvisories(pagesData);
+
+    // Filter for requested product
+    const productAdvisories = this.filterByProduct(allAdvisories);
+
+    // Calculate branch MSVs from fixed versions
     const branches = this.calculateBranchMsv(productAdvisories);
 
     const result: VendorAdvisoryResult = {
@@ -392,109 +455,72 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
     return result;
   }
 
-  private parseAdvisories(html: string): SecurityAdvisory[] {
+  /** Recursively extract text from ContentStack rich-text doc nodes */
+  private extractDocText(node: any): string {
+    if (!node) return "";
+    if (typeof node === "string") return node;
+    if (typeof node.text === "string") return node.text;
+    if (Array.isArray(node.children)) {
+      return node.children.map((c: any) => this.extractDocText(c)).join("").trim();
+    }
+    if (Array.isArray(node)) {
+      return node.map((c: any) => this.extractDocText(c)).join("").trim();
+    }
+    return "";
+  }
+
+  private parseAdvisories(pagesData: any[]): SecurityAdvisory[] {
     const advisories: SecurityAdvisory[] = [];
 
-    // SolarWinds publishes CVEs with product name and version info
-    // Look for CVE patterns and extract surrounding context
-    const cveRegex = /CVE-\d{4}-\d+/gi;
-    const cveMatches = [...new Set(html.match(cveRegex) || [])];
+    for (const page of pagesData) {
+      const headline = page.headline || "";
+      const cveText = this.extractDocText(page.advisoryId);
+      const fixedText = this.extractDocText(page.fixedVersion);
+      const severityStr = page.severity || "";
+      const date = page.firstPublished || "";
 
-    for (const cve of cveMatches) {
-      // Find context around CVE
-      const cveIndex = html.indexOf(cve);
-      if (cveIndex === -1) continue;
+      // Extract CVE ID from doc text (e.g., "CVE-2025-40552")
+      const cveMatch = cveText.match(/CVE-\d{4}-\d+/i);
+      if (!cveMatch) continue;
+      const cveId = cveMatch[0].toUpperCase();
 
-      const contextStart = Math.max(0, cveIndex - 500);
-      const contextEnd = Math.min(html.length, cveIndex + 1000);
-      const context = html.slice(contextStart, contextEnd);
+      // Extract version from fixedVersion text (e.g., "SolarWinds Web Help Desk 2026.1")
+      const fixedVersions = this.extractVersionFromFixedText(fixedText);
 
-      const fixedVersions = this.extractVersions(context);
-      const products = this.extractProducts(context);
+      // Parse severity from "9.8 Critical" format
+      const severity = this.parseSeverity(severityStr);
 
       advisories.push({
-        id: cve,
-        title: `SolarWinds Security Advisory ${cve}`,
-        severity: this.extractSeverity(context),
+        id: cveId,
+        title: headline,
+        severity,
         affectedVersions: [],
         fixedVersions,
-        cveIds: [cve.toUpperCase()],
-        publishedDate: this.extractDate(context) || new Date().toISOString().split("T")[0],
-        url: `https://nvd.nist.gov/vuln/detail/${cve}`,
+        cveIds: [cveId],
+        publishedDate: date || new Date().toISOString().split("T")[0],
+        url: `https://www.solarwinds.com/${page.url || `trust-center/security-advisories/${cveId.toLowerCase()}`}`,
       });
     }
 
     return advisories;
   }
 
-  private extractProducts(text: string): string[] {
-    const products: string[] = [];
-    const lower = text.toLowerCase();
-
-    for (const [productKey, names] of Object.entries(SolarWindsAdvisoryFetcher.PRODUCT_NAMES)) {
-      for (const name of names) {
-        if (lower.includes(name)) {
-          products.push(productKey);
-          break;
-        }
-      }
-    }
-
-    return products;
-  }
-
-  private filterByProduct(advisories: SecurityAdvisory[]): SecurityAdvisory[] {
-    const productNames = SolarWindsAdvisoryFetcher.PRODUCT_NAMES[this.product] || [this.product];
-
-    // For Orion Platform, include all Orion modules as they share the base platform
-    const orionModules = [
-      "orion_platform", "network_performance_monitor", "server_and_application_monitor",
-      "network_configuration_manager", "netflow_traffic_analyzer", "ip_address_manager",
-      "virtualization_manager", "database_performance_analyzer", "log_analyzer"
-    ];
-
-    const isOrionProduct = orionModules.includes(this.product);
-
-    return advisories.filter(adv => {
-      const text = `${adv.title} ${adv.id}`.toLowerCase();
-
-      // If this is an Orion product, also check for Orion platform advisories
-      if (isOrionProduct && (text.includes("orion") || text.includes("platform"))) {
-        return true;
-      }
-
-      for (const name of productNames) {
-        if (text.includes(name.toLowerCase())) {
-          return true;
-        }
-      }
-
-      return false;
-    });
-  }
-
-  private extractVersions(text: string): string[] {
-    // SolarWinds versions typically follow patterns like:
-    // "2024.2.1" or "15.2.0" or "12.5.1 Hotfix 3"
-    const versionRegex = /\b(\d{4}\.\d+(?:\.\d+)?|\d+\.\d+(?:\.\d+)?)\b/g;
-    const matches = text.matchAll(versionRegex);
+  private extractVersionFromFixedText(text: string): string[] {
+    if (!text) return [];
+    // Match patterns like "2026.1", "12.8.8", "15.5.3", "2024.4.1 SR1"
+    const versionRegex = /\b(\d{4}\.\d+(?:\.\d+)?(?:\s+(?:SR|HF)\d+)?|\d+\.\d+\.\d+(?:\s+(?:SR|HF)\d+)?)\b/gi;
     const versions = new Set<string>();
-
-    for (const match of matches) {
-      const version = match[1];
-      // Filter out years-only (2024, 2023, etc.) and common non-version numbers
-      if (!version.includes(".")) continue;
-      const major = parseInt(version.split(".")[0], 10);
-      // SolarWinds uses both year-based (2024.x.x) and traditional (15.x.x) versioning
-      if ((major >= 2019 && major <= 2030) || (major >= 8 && major <= 30)) {
-        versions.add(version);
+    for (const match of text.matchAll(versionRegex)) {
+      const v = match[1].trim();
+      // Filter: must look like a version (has dots), not a bare year
+      if (v.includes(".")) {
+        versions.add(v);
       }
     }
-
     return Array.from(versions);
   }
 
-  private extractSeverity(text: string): SecurityAdvisory["severity"] {
+  private parseSeverity(text: string): SecurityAdvisory["severity"] {
     const lower = text.toLowerCase();
     if (lower.includes("critical")) return "critical";
     if (lower.includes("high")) return "high";
@@ -503,41 +529,47 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
     return "unknown";
   }
 
-  private extractDate(text: string): string | null {
-    // Look for date patterns: YYYY-MM-DD, MM/DD/YYYY, Month DD, YYYY
-    const datePatterns = [
-      /(\d{4}-\d{2}-\d{2})/,
-      /(\d{1,2}\/\d{1,2}\/\d{4})/,
-      /(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/i,
-    ];
-
-    for (const pattern of datePatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        try {
-          const date = new Date(match[0]);
-          if (!isNaN(date.getTime())) {
-            return date.toISOString().split("T")[0];
-          }
-        } catch {
-          // Continue to next pattern
-        }
-      }
+  private filterByProduct(advisories: SecurityAdvisory[]): SecurityAdvisory[] {
+    const patterns = SolarWindsAdvisoryFetcher.PRODUCT_PATTERNS[this.product];
+    if (!patterns) {
+      // Fallback: match product name directly
+      return advisories.filter(adv =>
+        adv.title.toLowerCase().includes(this.product.replace(/_/g, " ").toLowerCase())
+      );
     }
 
-    return null;
+    // For Orion Platform, also include generic "Platform" advisories
+    const orionModules = [
+      "orion_platform", "network_performance_monitor", "server_and_application_monitor",
+      "network_configuration_manager", "netflow_traffic_analyzer", "ip_address_manager",
+      "virtualization_manager", "database_performance_analyzer", "log_analyzer"
+    ];
+    const isOrionProduct = orionModules.includes(this.product);
+
+    return advisories.filter(adv => {
+      const text = adv.title.toLowerCase();
+
+      // Check product patterns
+      for (const pattern of patterns) {
+        if (text.includes(pattern.toLowerCase())) return true;
+      }
+
+      // Orion modules also match generic "Platform" advisories
+      if (isOrionProduct && text.includes("platform")) return true;
+
+      return false;
+    });
   }
 
   private calculateBranchMsv(advisories: SecurityAdvisory[]): BranchMsv[] {
-    // Collect all fixed versions
     const allVersions = new Set<string>();
     for (const adv of advisories) {
       for (const v of adv.fixedVersions) {
-        allVersions.add(v);
+        // Normalize: strip SR/HF suffixes for branch grouping but keep full version
+        allVersions.add(v.replace(/\s+(SR|HF)\d+$/i, ""));
       }
     }
 
-    // Group by branch and find highest version per branch
     const branchVersions = new Map<string, string[]>();
     for (const version of allVersions) {
       const branch = this.getBranch(version);
@@ -547,21 +579,14 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
       branchVersions.get(branch)!.push(version);
     }
 
-    // For each branch, MSV is the highest fixed version
     const results: BranchMsv[] = [];
     for (const [branch, versions] of branchVersions) {
       versions.sort((a, b) => this.compareVersions(a, b));
       const highest = versions[versions.length - 1];
-      results.push({
-        branch,
-        msv: highest,
-        latest: highest,
-      });
+      results.push({ branch, msv: highest, latest: highest });
     }
 
-    // Sort branches descending
     results.sort((a, b) => this.compareVersions(b.branch, a.branch));
-
     return results;
   }
 }
@@ -969,11 +994,18 @@ import { MsrcClient, type MsrcVulnResult } from "./MsrcClient";
 import { VMwareAdvisoryFetcher as VMwareFetcherCore } from "./VMwareAdvisoryFetcher";
 import { AtlassianAdvisoryFetcher as AtlassianFetcherCore } from "./AtlassianAdvisoryFetcher";
 import { CitrixAdvisoryFetcher as CitrixFetcherCore } from "./CitrixAdvisoryFetcher";
-import { AdobeAdvisoryFetcher as AdobeFetcherCore } from "./AdobeAdvisoryFetcher";
+// Adobe fetcher removed — helpx.adobe.com CDN blocks non-browser requests.
+// Adobe CVE data comes from NVD/VulnCheck/KEV in the main pipeline.
 import { OracleAdvisoryFetcher as OracleFetcherCore } from "./OracleAdvisoryFetcher";
 
 export class MsrcAdvisoryFetcher extends VendorAdvisoryFetcher {
   private readonly productKey: string;
+
+  // Minimum major version for modern product lines (filters legacy products)
+  // Edge Chromium starts at v79; anything below is Edge Legacy (EdgeHTML) — different engine entirely
+  private static readonly MODERN_VERSION_CUTOFF: Record<string, number> = {
+    edge: 79,
+  };
 
   // Microsoft product key mappings
   private static readonly PRODUCT_KEYS: Record<string, string> = {
@@ -996,6 +1028,17 @@ export class MsrcAdvisoryFetcher extends VendorAdvisoryFetcher {
     this.productKey = MsrcAdvisoryFetcher.PRODUCT_KEYS[product.toLowerCase()] || product;
   }
 
+  /**
+   * Check if a version is from a legacy/discontinued product line
+   */
+  static isLegacyVersion(product: string, version: string): boolean {
+    const key = MsrcAdvisoryFetcher.PRODUCT_KEYS[product.toLowerCase()] || product.toLowerCase();
+    const cutoff = MsrcAdvisoryFetcher.MODERN_VERSION_CUTOFF[key];
+    if (!cutoff) return false;
+    const major = parseInt(version.split(".")[0], 10);
+    return !isNaN(major) && major < cutoff;
+  }
+
   async fetch(): Promise<VendorAdvisoryResult> {
     const cacheKey = `msrc-${this.productKey}`;
     const cached = this.getCache(cacheKey);
@@ -1010,22 +1053,34 @@ export class MsrcAdvisoryFetcher extends VendorAdvisoryFetcher {
     // Convert MSRC results to SecurityAdvisory format
     const advisories: SecurityAdvisory[] = vulns.map(vuln => ({
       id: vuln.cveId,
-      title: vuln.title,
+      title: vuln.title || "",
       severity: this.mapSeverity(vuln.severity),
-      affectedVersions: vuln.affectedProducts,
+      affectedVersions: vuln.affectedProducts || [],
       fixedVersions: vuln.fixedBuild ? [vuln.fixedBuild] : [],
       cveIds: [vuln.cveId],
-      publishedDate: vuln.publishedDate.split("T")[0],
+      publishedDate: (vuln.publishedDate || new Date().toISOString()).split("T")[0],
       url: `https://msrc.microsoft.com/update-guide/vulnerability/${vuln.cveId}`,
     }));
 
+    // Filter out legacy product versions (e.g., Edge Legacy < v79 is a different engine)
+    const cutoff = MsrcAdvisoryFetcher.MODERN_VERSION_CUTOFF[this.productKey];
+    const filteredAdvisories = cutoff
+      ? advisories.filter(adv => {
+          if (adv.fixedVersions.length === 0) return true;
+          return adv.fixedVersions.some(v => {
+            const major = parseInt(v.split(".")[0], 10);
+            return isNaN(major) || major >= cutoff;
+          });
+        })
+      : advisories;
+
     // Calculate MSV from fixed builds
-    const branches = this.calculateBranchMsv(advisories);
+    const branches = this.calculateBranchMsv(filteredAdvisories);
 
     const result: VendorAdvisoryResult = {
       vendor: "microsoft",
       product: this.productKey,
-      advisories,
+      advisories: filteredAdvisories,
       branches,
       fetchedAt: new Date().toISOString(),
       source: "https://api.msrc.microsoft.com/cvrf/v3.0",
@@ -1254,69 +1309,8 @@ export class CitrixVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
   }
 }
 
-// =============================================================================
-// Adobe Advisory Fetcher (Wrapper)
-// =============================================================================
-
-export class AdobeVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
-  private coreFetcher: AdobeFetcherCore;
-  private product: string;
-
-  constructor(cacheDir: string, product: string = "all") {
-    super(cacheDir);
-    this.product = product;
-    this.coreFetcher = new AdobeFetcherCore(cacheDir, product);
-  }
-
-  async fetch(): Promise<VendorAdvisoryResult> {
-    const cacheKey = `adobe-vendor-${this.product}`;
-    const cached = this.getCache(cacheKey);
-    if (cached) return cached;
-
-    const adobeResult = await this.coreFetcher.fetch();
-
-    // Convert to SecurityAdvisory format
-    const advisories: SecurityAdvisory[] = adobeResult.vulnerabilities.map(vuln => ({
-      id: vuln.bulletinId,
-      title: vuln.title,
-      severity: this.mapSeverity(vuln.severity),
-      affectedVersions: vuln.affectedVersions,
-      fixedVersions: vuln.fixedVersions,
-      cveIds: vuln.cveIds,
-      publishedDate: vuln.publishedDate.split("T")[0],
-      url: vuln.url,
-    }));
-
-    // Convert MSV map to branches
-    const branches: BranchMsv[] = Object.entries(adobeResult.msvByProduct).map(([product, version]) => ({
-      branch: product,
-      msv: version,
-      latest: version,
-    }));
-
-    const result: VendorAdvisoryResult = {
-      vendor: "adobe",
-      product: this.product,
-      advisories,
-      branches,
-      fetchedAt: new Date().toISOString(),
-      source: adobeResult.source,
-    };
-
-    this.setCache(cacheKey, result);
-    return result;
-  }
-
-  private mapSeverity(severity: string): SecurityAdvisory["severity"] {
-    switch (severity) {
-      case "critical": return "critical";
-      case "important": return "high";
-      case "moderate": return "medium";
-      case "low": return "low";
-      default: return "medium";
-    }
-  }
-}
+// Adobe wrapper removed — fetcher deleted (CDN blocks non-browser requests).
+// Adobe CVE data comes from NVD/VulnCheck/KEV in the main pipeline.
 
 // =============================================================================
 // Oracle Advisory Fetcher (Wrapper)
@@ -1423,18 +1417,14 @@ export function getVendorFetcher(
       if (vendor.toLowerCase() === "citrix" || vendor.toLowerCase() === "cloud_software_group") {
         return new CitrixVendorAdvisoryFetcher(cacheDir, product);
       }
-      // Check for Adobe products
-      if (vendor.toLowerCase() === "adobe") {
-        return new AdobeVendorAdvisoryFetcher(cacheDir, product);
-      }
+      // Adobe: No viable vendor advisory source (CDN blocks non-browser requests). Uses NVD/VulnCheck/KEV.
+      if (vendor.toLowerCase() === "adobe") return null;
       // Check for Oracle products
       if (vendor.toLowerCase() === "oracle") {
         return new OracleVendorAdvisoryFetcher(cacheDir, product);
       }
-      // Check for Fortinet products
-      if (vendor.toLowerCase() === "fortinet") {
-        return new FortinetVendorAdvisoryFetcher(cacheDir, product);
-      }
+      // Fortinet: No viable vendor advisory source (RSS has no version data). Uses NVD/VulnCheck/KEV.
+      if (vendor.toLowerCase() === "fortinet") return null;
       // Check for Palo Alto Networks products
       if (vendor.toLowerCase() === "palo_alto" || vendor.toLowerCase() === "paloaltonetworks" || vendor.toLowerCase() === "palo alto networks") {
         return new PaloAltoVendorAdvisoryFetcher(cacheDir, product);
@@ -1443,26 +1433,18 @@ export function getVendorFetcher(
       if (vendor.toLowerCase() === "cisco") {
         return new CiscoVendorAdvisoryFetcher(cacheDir, product);
       }
-      // Check for SonicWall products
-      if (vendor.toLowerCase() === "sonicwall") {
-        return new SonicWallVendorAdvisoryFetcher(cacheDir, product);
-      }
-      // Check for Juniper Networks products
-      if (vendor.toLowerCase() === "juniper" || vendor.toLowerCase() === "juniper_networks" || vendor.toLowerCase() === "juniper networks") {
-        return new JuniperVendorAdvisoryFetcher(cacheDir, product);
-      }
+      // SonicWall: No viable vendor advisory source (PSIRT portal WAF-blocked). Uses NVD/VulnCheck/KEV.
+      if (vendor.toLowerCase() === "sonicwall") return null;
+      // Juniper: No viable vendor advisory source (feeds dead, Salesforce behind auth). Uses NVD/VulnCheck/KEV.
+      if (vendor.toLowerCase() === "juniper" || vendor.toLowerCase() === "juniper_networks" || vendor.toLowerCase() === "juniper networks") return null;
       // Check for Ivanti products (CISA KEV priority target)
       if (vendor.toLowerCase() === "ivanti") {
         return new IvantiVendorAdvisoryFetcher(cacheDir, product);
       }
-      // Check for F5 products (critical network infrastructure)
-      if (vendor.toLowerCase() === "f5" || vendor.toLowerCase() === "f5_networks" || vendor.toLowerCase() === "f5 networks") {
-        return new F5VendorAdvisoryFetcher(cacheDir, product);
-      }
-      // Check for Check Point products (Seth's primary firewall vendor - CCSE/CCME certified)
-      if (vendor.toLowerCase() === "checkpoint" || vendor.toLowerCase() === "check_point" || vendor.toLowerCase() === "check point") {
-        return new CheckPointVendorAdvisoryFetcher(cacheDir, product);
-      }
+      // F5: No public machine-readable advisory feed. NVD/VulnCheck/KEV cover F5 CVEs.
+      // Future: If F5 publishes CSAF, add fetcher here.
+      // Check Point: No viable vendor advisory source (no public API/RSS). Uses NVD/VulnCheck/KEV.
+      if (vendor.toLowerCase() === "checkpoint" || vendor.toLowerCase() === "check_point" || vendor.toLowerCase() === "check point") return null;
       // Check for OPNsense (open source firewall, FreeBSD-based)
       if (vendor.toLowerCase() === "opnsense" || vendor.toLowerCase() === "deciso") {
         return new OPNsenseVendorAdvisoryFetcher(cacheDir, product);
@@ -1479,32 +1461,20 @@ export function getVendorFetcher(
 // Wrapper Fetchers for New Vendors
 // =============================================================================
 
-import { FortinetAdvisoryFetcher, fetchFortinetAdvisories } from "./FortinetAdvisoryFetcher";
 import { PaloAltoAdvisoryFetcher, fetchPaloAltoAdvisories } from "./PaloAltoAdvisoryFetcher";
 import { CiscoAdvisoryFetcher, fetchCiscoAdvisories } from "./CiscoAdvisoryFetcher";
-import { SonicWallAdvisoryFetcher, fetchSonicWallAdvisories } from "./SonicWallAdvisoryFetcher";
-import { JuniperAdvisoryFetcher, fetchJuniperAdvisories } from "./JuniperAdvisoryFetcher";
 import { IvantiAdvisoryFetcher, fetchIvantiAdvisories } from "./IvantiAdvisoryFetcher";
-import { F5AdvisoryFetcher, fetchF5Advisories } from "./F5AdvisoryFetcher";
-import { CheckPointAdvisoryFetcher, fetchCheckPointAdvisories } from "./CheckPointAdvisoryFetcher";
 import { OPNsenseAdvisoryFetcher, fetchOPNsenseAdvisories } from "./OPNsenseAdvisoryFetcher";
 import { PfSenseAdvisoryFetcher, fetchPfSenseAdvisories } from "./PfSenseAdvisoryFetcher";
+// Removed vendor fetchers — no viable vendor advisory sources. CVE data comes from NVD/VulnCheck/KEV:
+// - Fortinet: FortiGuard RSS has no version data; individual page scraping too fragile
+// - SonicWall: PSIRT portal WAF-blocked (Incapsula); NVD has only 11 CVEs total
+// - Juniper: Native feeds dead (migrated to Salesforce behind auth)
+// - Check Point: No public API or RSS feed; email-only subscription
+// - Adobe: helpx.adobe.com CDN blocks non-browser requests
+// - F5: No public machine-readable advisory feed
 
-/**
- * Fortinet Vendor Advisory Fetcher (Wrapper)
- */
-class FortinetVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
-  private product: string;
-
-  constructor(cacheDir: string, product: string = "all") {
-    super(cacheDir);
-    this.product = product;
-  }
-
-  async fetch(): Promise<VendorAdvisoryResult> {
-    return fetchFortinetAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
-  }
-}
+// Fortinet fetcher removed — FortiGuard RSS has no version data. NVD/VulnCheck/KEV cover Fortinet CVEs.
 
 /**
  * Palo Alto Networks Vendor Advisory Fetcher (Wrapper)
@@ -1538,37 +1508,8 @@ class CiscoVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
   }
 }
 
-/**
- * SonicWall Vendor Advisory Fetcher (Wrapper)
- */
-class SonicWallVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
-  private product: string;
-
-  constructor(cacheDir: string, product: string = "all") {
-    super(cacheDir);
-    this.product = product;
-  }
-
-  async fetch(): Promise<VendorAdvisoryResult> {
-    return fetchSonicWallAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
-  }
-}
-
-/**
- * Juniper Networks Vendor Advisory Fetcher (Wrapper)
- */
-class JuniperVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
-  private product: string;
-
-  constructor(cacheDir: string, product: string = "all") {
-    super(cacheDir);
-    this.product = product;
-  }
-
-  async fetch(): Promise<VendorAdvisoryResult> {
-    return fetchJuniperAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
-  }
-}
+// SonicWall fetcher removed — PSIRT portal WAF-blocked (Incapsula), NVD has only 11 CVEs total.
+// Juniper fetcher removed — native advisory feeds dead (Salesforce migration behind auth).
 
 /**
  * Ivanti Vendor Advisory Fetcher (Wrapper)
@@ -1587,40 +1528,9 @@ class IvantiVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
   }
 }
 
-/**
- * F5 BIG-IP Vendor Advisory Fetcher (Wrapper)
- * Critical network infrastructure - load balancers, WAF, APM
- */
-class F5VendorAdvisoryFetcher extends VendorAdvisoryFetcher {
-  private product: string;
-
-  constructor(cacheDir: string, product: string = "all") {
-    super(cacheDir);
-    this.product = product;
-  }
-
-  async fetch(): Promise<VendorAdvisoryResult> {
-    return fetchF5Advisories(this.cacheDir, this.product === "all" ? undefined : this.product);
-  }
-}
-
-/**
- * Check Point Vendor Advisory Fetcher (Wrapper)
- * Seth's primary firewall vendor - CCSE/CCME certified
- * Covers: Gaia OS, Security Gateway, Management Server, CloudGuard, Maestro
- */
-class CheckPointVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
-  private product: string;
-
-  constructor(cacheDir: string, product: string = "all") {
-    super(cacheDir);
-    this.product = product;
-  }
-
-  async fetch(): Promise<VendorAdvisoryResult> {
-    return fetchCheckPointAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
-  }
-}
+// F5 fetcher removed — no public machine-readable advisory feed.
+// Check Point fetcher removed — no public API or RSS; email-only subscription.
+// Both covered by NVD/VulnCheck/KEV in the main pipeline.
 
 /**
  * OPNsense Vendor Advisory Fetcher (Wrapper)
@@ -1648,14 +1558,33 @@ class OPNsenseVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
  * pfSense CE (community): X.Y.Z format
  */
 class PfSenseVendorAdvisoryFetcher extends VendorAdvisoryFetcher {
-  private product: string;
+  private edition: string;
 
   constructor(cacheDir: string, product: string = "all") {
     super(cacheDir);
-    this.product = product;
+    // Map catalog product names to fetcher edition names ("ce", "plus", or "all")
+    const p = product.toLowerCase();
+    if (p === "pfsense" || p === "pfsense_ce" || p === "ce") {
+      this.edition = "ce";
+    } else if (p === "pfsense_plus" || p === "plus") {
+      this.edition = "plus";
+    } else {
+      this.edition = "all";
+    }
   }
 
   async fetch(): Promise<VendorAdvisoryResult> {
-    return fetchPfSenseAdvisories(this.cacheDir, this.product === "all" ? undefined : this.product);
+    return fetchPfSenseAdvisories(this.cacheDir, this.edition === "all" ? undefined : this.edition);
   }
+}
+
+/**
+ * Check if a version belongs to a legacy/discontinued product line.
+ * E.g., Edge Legacy (EdgeHTML, v1-44) vs Edge Chromium (v79+).
+ */
+export function isLegacyProductVersion(vendor: string, product: string, version: string): boolean {
+  if (vendor.toLowerCase() === "microsoft") {
+    return MsrcAdvisoryFetcher.isLegacyVersion(product, version);
+  }
+  return false;
 }

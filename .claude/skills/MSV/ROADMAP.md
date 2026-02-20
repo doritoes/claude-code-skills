@@ -14,10 +14,10 @@ This roadmap outlines planned improvements and future directions for the MSV (Mi
 | Software Catalog Entries | 189 |
 | Router Catalog Models | 89 (21 vendors) |
 | Test Coverage | 325 tests (107 router tests) |
-| Vendor Advisory Fetchers | 18 (100% passing) |
+| Vendor Advisory Fetchers | 17 (F5 removed — no public API) |
 | Data Sources | 7 (AppThreat, CISA KEV, VulnCheck, NVD, EPSS, Vendor, Router Catalog) |
 | Supported Ecosystems | Windows desktop, GHSA (npm/pip/maven/nuget/go/rust), Router Firmware, ISP Gateways |
-| Network Security Vendors | 11 (Fortinet, Palo Alto, Cisco, SonicWall, Citrix, Juniper, Ivanti, F5, Check Point, OPNsense, pfSense) |
+| Network Security Vendors | 10 (Fortinet, Palo Alto, Cisco, SonicWall, Citrix, Juniper, Ivanti, Check Point, OPNsense, pfSense) |
 
 ---
 
@@ -272,12 +272,24 @@ Track vulnerabilities in browser extensions:
 
 | Vendor | Priority | Data Source | Notes |
 |--------|----------|-------------|-------|
-| **Juniper JunOS** | HIGH | NVD API + fallback | ✅ DONE - 8 branches (25.2R1 to 21.4R3) |
-| **Ivanti** | HIGH | Ivanti RSS feed | ✅ DONE - Connect Secure, Policy Secure, ZTA, EPMM |
-| **F5 BIG-IP** | HIGH | NVD API + fallback | ✅ DONE - 6 branches (17.1 to 13.1), K articles |
-| **Check Point** | HIGH | NVD API + fallback | ✅ DONE - 8 branches (R82 to R77.30), sk articles |
+| **Juniper JunOS** | HIGH | NVD API + fallback | DONE - 8 branches (25.2R1 to 21.4R3) |
+| **Ivanti** | HIGH | Ivanti RSS feed | DONE - Connect Secure, Policy Secure, ZTA, EPMM |
+| **Check Point** | HIGH | NVD API + fallback | DONE - 8 branches (R82 to R77.30), sk articles |
 
-**Trigger:** `add F5 fetcher to MSV`
+### MEDIUM: Future Vendor Advisory Fetchers (Roadmap)
+
+These vendors lack public machine-readable advisory feeds. Monitor for CSAF/API availability:
+
+| Vendor | Status | Blocker | Data Source Today |
+|--------|--------|---------|-------------------|
+| **F5 BIG-IP** | Deferred | No public API — my.f5.com is JS-rendered Salesforce portal | NVD/VulnCheck/KEV cover F5 CVEs |
+| **Adobe** | Deferred | No CSAF feed (404 on .well-known/csaf), helpx index times out | NVD/VulnCheck/KEV cover Adobe CVEs |
+
+**What would unblock these:**
+- F5: If F5 publishes CSAF at `.well-known/csaf/` or provides a public API
+- Adobe: If Adobe publishes CSAF or makes the APSB bulletin index machine-readable
+
+**Trigger:** `check if F5 or Adobe now have CSAF feeds`
 
 ---
 
@@ -335,12 +347,31 @@ Track vulnerabilities in browser extensions:
 
 ## Completed Milestones
 
+### v1.11.0 (2026-02-19) — Fetcher Integrity Cleanup
+- **Vendor Advisory Fetcher Audit & Fix** — 2nd major review, 6 fetchers repaired or removed
+  - **Cisco ASA**: Complete rewrite from OAuth2 API (required client_id/secret) to free CSAF feed
+    - Source: `cisco.com/.well-known/csaf/` — no authentication needed
+    - Parses CSAF JSON documents for affected/fixed versions per product
+    - Returns 15+ CVEs with specific ASA/FTD version data (9.8.4.48, 9.12.4.67, etc.)
+    - Confidence: A1 (was B2 with fallback data)
+  - **SolarWinds**: Complete rewrite from broken HTML regex scraping to `__NEXT_DATA__` JSON parsing
+    - SolarWinds Trust Center embeds structured ContentStack CMS data in Next.js page
+    - Parses `pagesData` array: headline, advisoryId (CVE), severity, fixedVersion (product+version)
+    - Returns 45+ Platform advisories with 11 version branches
+    - All SolarWinds products now work: Orion Platform, Serv-U, Web Help Desk, ARM
+    - Confidence: A1 (was "not queried" — fetcher existed but returned 0 results)
+  - **Oracle WebLogic**: Fixed data contamination — WebLogic advisories were bleeding into Java/MySQL results
+  - **Chrome**: Replaced stub fetcher with proper Chrome Release Blog scraper
+  - **F5 BIG-IP**: Removed — F5 has no public machine-readable advisory feed (my.f5.com is JS-rendered Salesforce)
+    - F5 CVE data still covered by NVD/VulnCheck/KEV in main pipeline
+  - **Adobe**: Deferred — no CSAF feed, no API, APSB index times out
+    - Adobe CVE data still covered by NVD/VulnCheck/KEV in main pipeline
+  - **Root cause of failures**: Fetchers returned HTTP 200 with hardcoded fallback data, masking actual fetch failures and causing them to appear "WORKING" in audits
+  - **Total Vendor Fetchers: 17** (was 18, F5 removed)
+
 ### v1.10.0 (2026-02-03)
 - **Network Security Vendor Expansion - Enterprise + Open Source Firewalls**
-  - **F5 BIG-IP Fetcher**: NVD API + fallback for 6 branches (17.1, 17.0, 16.1, 15.1, 14.1, 13.1)
-    - Products: LTM, ASM, APM, GTM, AFM, F5OS, BIG-IP Next
-    - K article format (K######)
-    - Critical infrastructure: load balancers, WAF, access management
+  - ~~**F5 BIG-IP Fetcher**~~: Removed in v1.11.0 — F5 has no public machine-readable advisory feed
   - **Check Point Gaia OS Fetcher**: NVD API + fallback for 8 branches (R82 to R77.30)
     - Products: Security Gateway, Management Server, CloudGuard, Maestro, VSX
     - sk article format (sk######)
@@ -353,8 +384,8 @@ Track vulnerabilities in browser extensions:
     - pfSense Plus (commercial): YY.MM format (25.11, 24.11)
     - pfSense CE (community): X.Y.Z format (2.8.1, 2.7.2)
     - Advisory format: pfSense-SA-YY_XX.component
-  - **Network Security Vendors now at 11**: Fortinet, Palo Alto, Cisco, SonicWall, Citrix, Juniper, Ivanti, F5, Check Point, OPNsense, pfSense
-  - **Total Vendor Fetchers: 18** (up from 14)
+  - **Network Security Vendors now at 10**: Fortinet, Palo Alto, Cisco, SonicWall, Citrix, Juniper, Ivanti, Check Point, OPNsense, pfSense
+  - **Total Vendor Fetchers: 17** (F5 removed in v1.11.0)
 
 ### v1.9.0 (2026-02-03)
 - **Vendor Advisory Fetcher Stabilization - 100% Pass Rate**
