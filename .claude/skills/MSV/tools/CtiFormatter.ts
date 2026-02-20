@@ -74,22 +74,33 @@ function formatText(report: CTIReport): string {
   const tlpColor = getTlpColor(report.tlp.level);
   const headerWidth = 66;
 
+  const innerWidth = headerWidth - 2; // visible chars between ║ borders
+
+  // Build each line with explicit visible-width padding, then wrap with ANSI
+  const title = "CYBER THREAT INTELLIGENCE REPORT";
+  const tlpLabel = ` ${report.tlp.level}`;
+  const titleGap = innerWidth - tlpLabel.length - title.length - 1; // -1 for trailing space
+  const dateText = `Week of ${report.periodStart} to ${report.periodEnd}`;
+  const dateGap = innerWidth - dateText.length - 1; // -1 for trailing space
+
   lines.push(`${tlpColor}${"═".repeat(headerWidth)}${RESET}`);
   lines.push(
-    `${tlpColor}║${RESET} ${BOLD}${report.tlp.level.padEnd(14)}${RESET}` +
-      `${BOLD}CYBER THREAT INTELLIGENCE REPORT${RESET}`.padStart(40) +
-      `${tlpColor}  ║${RESET}`
+    `${tlpColor}║${RESET}${BOLD}${tlpLabel}${RESET}` +
+      `${" ".repeat(Math.max(1, titleGap))}` +
+      `${BOLD}${title}${RESET} ${tlpColor}║${RESET}`
   );
   lines.push(
     `${tlpColor}║${RESET}` +
-      `Week of ${report.periodStart} to ${report.periodEnd}`.padStart(50) +
-      `${tlpColor}  ║${RESET}`
+      `${" ".repeat(Math.max(1, dateGap))}` +
+      `${dateText} ${tlpColor}║${RESET}`
   );
   if (report.preparedFor) {
+    const prepText = `Prepared for: ${report.preparedFor}`;
+    const prepGap = innerWidth - prepText.length - 1;
     lines.push(
       `${tlpColor}║${RESET}` +
-        `Prepared for: ${report.preparedFor}`.padStart(50) +
-        `${tlpColor}  ║${RESET}`
+        `${" ".repeat(Math.max(1, prepGap))}` +
+        `${prepText} ${tlpColor}║${RESET}`
     );
   }
   lines.push(`${tlpColor}${"═".repeat(headerWidth)}${RESET}`);
@@ -146,22 +157,17 @@ function formatText(report: CTIReport): string {
   if (report.criticalZeroDays.length === 0) {
     lines.push(`${GREEN}No critical zero-days identified in this period.${RESET}`);
   } else {
-    for (const zeroDay of report.criticalZeroDays.slice(0, 5)) {
+    for (const zeroDay of report.criticalZeroDays) {
       const priorityColor = zeroDay.priority === "CRITICAL" ? RED : YELLOW;
-      lines.push(
-        `${priorityColor}●${RESET} ${BOLD}${zeroDay.id}${RESET} - ${zeroDay.title.slice(0, 50)}`
-      );
       const tags: string[] = [];
       if (zeroDay.ransomwareAssociated) tags.push(`${RED}RANSOMWARE${RESET}`);
       if (zeroDay.epssScore && zeroDay.epssScore > 0.5) {
         tags.push(`${YELLOW}EPSS:${(zeroDay.epssScore * 100).toFixed(1)}%${RESET}`);
       }
-      if (tags.length > 0) {
-        lines.push(`    [${tags.join(", ")}]`);
-      }
-    }
-    if (report.criticalZeroDays.length > 5) {
-      lines.push(`${DIM}  ... and ${report.criticalZeroDays.length - 5} more${RESET}`);
+      const tagStr = tags.length > 0 ? ` [${tags.join(", ")}]` : "";
+      lines.push(
+        `${priorityColor}●${RESET} ${BOLD}${zeroDay.id}${RESET} - ${zeroDay.title}${tagStr}`
+      );
     }
   }
   lines.push("");
