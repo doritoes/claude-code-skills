@@ -23,7 +23,8 @@
       "priority": "critical",
       "aliases": [
         "google chrome",
-        "chrome browser"
+        "chrome browser",
+        "chromium"
       ],
       "platforms": [
         "windows",

@@ -217,17 +217,31 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
     }
   }
 
-  // Fuzzy match (contains)
+  // Fuzzy match (contains) — tiered: prefer id/displayName/alias over product field
+  let bestMatch: SoftwareMapping | null = null;
+  let bestTier = 99; // lower = better
+  let bestLen = Infinity; // shorter displayName = more specific match
+
   for (const [key, mapping] of Object.entries(catalog)) {
-    if (
-      mapping.displayName.toLowerCase().includes(normalized) ||
-      mapping.product.toLowerCase().includes(normalized)
-    ) {
-      return mapping;
+    let tier = 99;
+    if (key.includes(normalized)) {
+      tier = 1; // id contains query
+    } else if (mapping.displayName.toLowerCase().includes(normalized)) {
+      tier = 2; // displayName contains query
+    } else if (mapping.aliases.some((a) => a.toLowerCase().includes(normalized))) {
+      tier = 3; // alias substring match
+    } else if (mapping.product.toLowerCase().includes(normalized)) {
+      tier = 4; // product field (often has compound names like "edge_chromium")
+    }
+
+    if (tier < bestTier || (tier === bestTier && mapping.displayName.length < bestLen)) {
+      bestMatch = mapping;
+      bestTier = tier;
+      bestLen = mapping.displayName.length;
     }
   }
 
-  return null;
+  return bestMatch;
 }
 
 /**
