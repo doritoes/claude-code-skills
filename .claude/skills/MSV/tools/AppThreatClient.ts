@@ -273,6 +273,8 @@ export class AppThreatClient {
   private async tryVdbCli(verbose: boolean): Promise<boolean> {
     const { spawn } = await import("node:child_process");
 
+    const DB_DOWNLOAD_TIMEOUT_MS = 60_000; // 60s timeout for download attempts
+
     // First try the vdb command directly
     const vdbResult = await new Promise<boolean>((resolve) => {
       const vdbProcess = spawn("vdb", ["--download-image"], {
@@ -281,11 +283,19 @@ export class AppThreatClient {
         windowsHide: true,
       });
 
+      const timer = setTimeout(() => {
+        if (verbose) console.log("vdb CLI timed out after 60s, killing...");
+        vdbProcess.kill();
+        resolve(false);
+      }, DB_DOWNLOAD_TIMEOUT_MS);
+
       vdbProcess.on("close", (code) => {
+        clearTimeout(timer);
         resolve(code === 0);
       });
 
       vdbProcess.on("error", () => {
+        clearTimeout(timer);
         resolve(false);
       });
     });
@@ -311,7 +321,14 @@ export class AppThreatClient {
         windowsHide: true,
       });
 
+      const timer = setTimeout(() => {
+        if (verbose) console.log("Python vdb module timed out after 60s, killing...");
+        pythonProcess.kill();
+        resolve(false);
+      }, DB_DOWNLOAD_TIMEOUT_MS);
+
       pythonProcess.on("close", (code) => {
+        clearTimeout(timer);
         if (code === 0) {
           if (verbose) console.log("AppThreat database updated successfully via Python");
           resolve(true);
@@ -321,6 +338,7 @@ export class AppThreatClient {
       });
 
       pythonProcess.on("error", () => {
+        clearTimeout(timer);
         resolve(false);
       });
     });
@@ -343,6 +361,8 @@ export class AppThreatClient {
       }
     }
 
+    const ORAS_TIMEOUT_MS = 120_000; // 120s for oras (larger download)
+
     return new Promise((resolve) => {
       if (verbose) console.log("Attempting download via oras CLI...");
 
@@ -357,7 +377,14 @@ export class AppThreatClient {
         }
       );
 
+      const timer = setTimeout(() => {
+        if (verbose) console.log("oras download timed out after 120s, killing...");
+        orasProcess.kill();
+        resolve(false);
+      }, ORAS_TIMEOUT_MS);
+
       orasProcess.on("close", (code) => {
+        clearTimeout(timer);
         if (code === 0) {
           if (verbose) console.log("AppThreat database downloaded successfully via oras");
           resolve(true);
@@ -367,6 +394,7 @@ export class AppThreatClient {
       });
 
       orasProcess.on("error", () => {
+        clearTimeout(timer);
         resolve(false);
       });
     });
