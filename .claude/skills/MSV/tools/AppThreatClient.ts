@@ -270,10 +270,22 @@ export class AppThreatClient {
   /**
    * Try to download using vdb CLI or Python module
    */
+  /** Forcefully kill a spawned process (Windows ignores SIGTERM for Python) */
+  private forceKillProcess(proc: { pid?: number; kill: (signal?: string) => void }): void {
+    try {
+      if (proc.pid && process.platform === "win32") {
+        const { spawnSync } = require("node:child_process");
+        spawnSync("taskkill", ["/pid", String(proc.pid), "/f", "/t"], { stdio: "ignore", windowsHide: true });
+      } else {
+        proc.kill("SIGKILL");
+      }
+    } catch { /* already dead */ }
+  }
+
   private async tryVdbCli(verbose: boolean): Promise<boolean> {
     const { spawn } = await import("node:child_process");
 
-    const DB_DOWNLOAD_TIMEOUT_MS = 60_000; // 60s timeout for download attempts
+    const DB_DOWNLOAD_TIMEOUT_MS = 180_000; // 3 min timeout — vdb download pulls ~650K CVEs
 
     // First try the vdb command directly
     const vdbResult = await new Promise<boolean>((resolve) => {
@@ -284,8 +296,8 @@ export class AppThreatClient {
       });
 
       const timer = setTimeout(() => {
-        if (verbose) console.log("vdb CLI timed out after 60s, killing...");
-        vdbProcess.kill();
+        if (verbose) console.log("vdb CLI timed out after 3 minutes, killing...");
+        this.forceKillProcess(vdbProcess);
         resolve(false);
       }, DB_DOWNLOAD_TIMEOUT_MS);
 
@@ -322,8 +334,8 @@ export class AppThreatClient {
       });
 
       const timer = setTimeout(() => {
-        if (verbose) console.log("Python vdb module timed out after 60s, killing...");
-        pythonProcess.kill();
+        if (verbose) console.log("Python vdb module timed out after 3 minutes, killing...");
+        this.forceKillProcess(pythonProcess);
         resolve(false);
       }, DB_DOWNLOAD_TIMEOUT_MS);
 
@@ -379,7 +391,7 @@ export class AppThreatClient {
 
       const timer = setTimeout(() => {
         if (verbose) console.log("oras download timed out after 120s, killing...");
-        orasProcess.kill();
+        this.forceKillProcess(orasProcess);
         resolve(false);
       }, ORAS_TIMEOUT_MS);
 
