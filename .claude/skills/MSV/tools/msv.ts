@@ -219,7 +219,7 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
 
   // Fuzzy match (contains) — tiered: prefer id/displayName/alias over product field
   let bestMatch: SoftwareMapping | null = null;
-  let bestTier = 99; // lower = better
+  let bestTier = 99; // lower = better; 99 = no match
   let bestLen = Infinity; // shorter displayName = more specific match
 
   for (const [key, mapping] of Object.entries(catalog)) {
@@ -234,7 +234,7 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
       tier = 4; // product field (often has compound names like "edge_chromium")
     }
 
-    if (tier < bestTier || (tier === bestTier && mapping.displayName.length < bestLen)) {
+    if (tier < 99 && (tier < bestTier || (tier === bestTier && mapping.displayName.length < bestLen))) {
       bestMatch = mapping;
       bestTier = tier;
       bestLen = mapping.displayName.length;
