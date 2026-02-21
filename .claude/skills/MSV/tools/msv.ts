@@ -217,27 +217,37 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
     }
   }
 
+  // Strip trailing version number for fallback matching
+  // Matches patterns like "r81.20", "7.4.3", "v2.1", "24.2R1", "9.24.1" at end of string
+  const versionStripped = normalized.replace(/\s+(?:v(?:ersion)?\s*)?(?:r?\d[\d.a-z]*\s*)$/i, "").trim();
+
   // Fuzzy match (contains) — tiered: prefer id/displayName/alias over product field
+  // Bidirectional: query-in-target OR target-in-query (for "checkpoint r81.20" matching alias "checkpoint")
   let bestMatch: SoftwareMapping | null = null;
   let bestTier = 99; // lower = better; 99 = no match
   let bestLen = Infinity; // shorter displayName = more specific match
 
-  for (const [key, mapping] of Object.entries(catalog)) {
-    let tier = 99;
-    if (key.includes(normalized)) {
-      tier = 1; // id contains query
-    } else if (mapping.displayName.toLowerCase().includes(normalized)) {
-      tier = 2; // displayName contains query
-    } else if (mapping.aliases.some((a) => a.toLowerCase().includes(normalized))) {
-      tier = 3; // alias substring match
-    } else if (mapping.product.toLowerCase().includes(normalized)) {
-      tier = 4; // product field (often has compound names like "edge_chromium")
-    }
+  for (const query of [normalized, ...(versionStripped !== normalized ? [versionStripped] : [])]) {
+    for (const [key, mapping] of Object.entries(catalog)) {
+      let tier = 99;
+      if (key.includes(query) || query.includes(key)) {
+        tier = 1; // id contains query or query contains id
+      } else if (mapping.displayName.toLowerCase().includes(query)) {
+        tier = 2; // displayName contains query
+      } else if (mapping.aliases.some((a) => {
+        const al = a.toLowerCase();
+        return al.includes(query) || query.includes(al);
+      })) {
+        tier = 3; // alias substring match (bidirectional)
+      } else if (mapping.product.toLowerCase().includes(query)) {
+        tier = 4; // product field
+      }
 
-    if (tier < 99 && (tier < bestTier || (tier === bestTier && mapping.displayName.length < bestLen))) {
-      bestMatch = mapping;
-      bestTier = tier;
-      bestLen = mapping.displayName.length;
+      if (tier < 99 && (tier < bestTier || (tier === bestTier && mapping.displayName.length < bestLen))) {
+        bestMatch = mapping;
+        bestTier = tier;
+        bestLen = mapping.displayName.length;
+      }
     }
   }
 
