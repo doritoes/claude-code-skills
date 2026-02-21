@@ -4,7 +4,7 @@
     "description": "MSV Software Catalog - Common Windows software with CPE mappings",
     "lastUpdated": "2026-02-03",
     "lastChecked": "2026-01-21T00:00:00Z",
-    "totalEntries": 192,
+    "totalEntries": 205,
     "sources": [
       "CISA KEV Catalog (top vulnerable products)",
       "Enterprise patch management catalogs",
@@ -3058,7 +3058,9 @@
         "ivanti vpn",
         "pulse secure",
         "pulse connect secure",
-        "ivanti pulse"
+        "ivanti pulse",
+        "ivanti connect",
+        "pulse vpn"
       ],
       "platforms": [
         "windows",
@@ -3903,27 +3905,6 @@
       "latestVersion": "16 Update 3"
     },
     {
-      "id": "ivanti_connect_secure",
-      "displayName": "Ivanti Connect Secure",
-      "vendor": "ivanti",
-      "product": "connect_secure",
-      "cpe23": "cpe:2.3:a:ivanti:connect_secure:*:*:*:*:*:*:*:*",
-      "category": "vpn",
-      "priority": "critical",
-      "aliases": [
-        "ivanti vpn",
-        "pulse secure",
-        "ivanti connect",
-        "pulse vpn"
-      ],
-      "platforms": [
-        "server"
-      ],
-      "notes": "CRITICAL: VPN gateway. Multiple actively exploited CVEs in CISA KEV.",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "22.7R2.6"
-    },
-    {
       "id": "ivanti_epmm",
       "displayName": "Ivanti Endpoint Manager Mobile",
       "vendor": "ivanti",
@@ -4128,6 +4109,327 @@
       "discoveredAt": "2026-01-22T03:30:38.370Z",
       "latestVersion": "9.7.1",
       "lastChecked": "2026-02-03"
+    },
+    {
+      "id": "junos",
+      "displayName": "Juniper Junos OS",
+      "vendor": "juniper",
+      "product": "junos",
+      "cpe23": "cpe:2.3:o:juniper:junos:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "junos",
+        "juniper junos",
+        "juniper firewall",
+        "juniper srx",
+        "srx",
+        "juniper mx",
+        "juniper ex",
+        "juniper qfx"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: 7 CISA KEV entries. Enterprise router/firewall/switch OS. SRX, MX, EX, QFX series.",
+      "lastChecked": "2026-02-20",
+      "versionPattern": "^(1[2-9]|2[0-4])\\.",
+      "excludePatterns": [
+        "\\bjunos\\s*space\\b",
+        "\\bmist\\b",
+        "\\bparagon\\b"
+      ],
+      "latestVersion": "24.2R1"
+    },
+    {
+      "id": "junos_evolved",
+      "displayName": "Juniper Junos OS Evolved",
+      "vendor": "juniper",
+      "product": "junos_os_evolved",
+      "cpe23": "cpe:2.3:o:juniper:junos_os_evolved:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "high",
+      "aliases": [
+        "junos evolved",
+        "juniper evo",
+        "junos evo"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "Next-gen Junos OS on Linux base. PTX, ACX, QFX series.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "24.2R1-EVO"
+    },
+    {
+      "id": "juniper_session_smart",
+      "displayName": "Juniper Session Smart Router",
+      "vendor": "juniper",
+      "product": "session_smart_router",
+      "cpe23": "cpe:2.3:a:juniper:session_smart_router:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "high",
+      "aliases": [
+        "session smart router",
+        "ssr",
+        "128t",
+        "juniper ssr"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "SD-WAN router. Formerly 128 Technology.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "6.3.0"
+    },
+    {
+      "id": "checkpoint_gateway",
+      "displayName": "Check Point Quantum Security Gateway",
+      "vendor": "checkpoint",
+      "product": "quantum_security_gateway",
+      "cpe23": "cpe:2.3:a:checkpoint:quantum_security_gateway:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "checkpoint",
+        "check point",
+        "checkpoint gateway",
+        "checkpoint quantum",
+        "quantum gateway",
+        "checkpoint firewall",
+        "check point firewall",
+        "checkpoint quantum security gateway"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: 1 CISA KEV entry (CVE-2024-24919). Enterprise firewall gateway.",
+      "lastChecked": "2026-02-20",
+      "versionPattern": "^R(8[0-9]|9[0-9])",
+      "latestVersion": "R82"
+    },
+    {
+      "id": "checkpoint_gaia",
+      "displayName": "Check Point Gaia OS",
+      "vendor": "checkpoint",
+      "product": "gaia_os",
+      "cpe23": "cpe:2.3:o:checkpoint:gaia_os:*:*:*:*:*:*:*:*",
+      "category": "firewall",
+      "priority": "critical",
+      "aliases": [
+        "gaia",
+        "gaia os",
+        "checkpoint gaia",
+        "check point gaia"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "Underlying OS for Check Point appliances. SecurePlatform successor.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "R82"
+    },
+    {
+      "id": "checkpoint_management",
+      "displayName": "Check Point Security Management",
+      "vendor": "checkpoint",
+      "product": "security_management",
+      "cpe23": "cpe:2.3:a:checkpoint:security_management:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "high",
+      "aliases": [
+        "checkpoint management",
+        "smartconsole",
+        "check point management",
+        "checkpoint sms"
+      ],
+      "platforms": [
+        "appliance",
+        "server"
+      ],
+      "notes": "Centralized management server. SmartConsole, SmartDashboard.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "R82"
+    },
+    {
+      "id": "checkpoint_harmony",
+      "displayName": "Check Point Harmony Endpoint",
+      "vendor": "checkpoint",
+      "product": "harmony_endpoint",
+      "cpe23": "cpe:2.3:a:checkpoint:harmony_endpoint:*:*:*:*:*:*:*:*",
+      "category": "endpoint",
+      "priority": "high",
+      "aliases": [
+        "checkpoint endpoint",
+        "harmony endpoint",
+        "check point endpoint",
+        "checkpoint sandblast"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "notes": "Endpoint protection (formerly SandBlast Agent).",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "87.70"
+    },
+    {
+      "id": "fortiproxy",
+      "displayName": "Fortinet FortiProxy",
+      "vendor": "fortinet",
+      "product": "fortiproxy",
+      "cpe23": "cpe:2.3:a:fortinet:fortiproxy:*:*:*:*:*:*:*:*",
+      "category": "network",
+      "priority": "critical",
+      "aliases": [
+        "fortiproxy",
+        "fortinet proxy"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: 4 CISA KEV entries (shared with FortiOS). Secure web proxy.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "7.6.1"
+    },
+    {
+      "id": "fortiweb",
+      "displayName": "Fortinet FortiWeb",
+      "vendor": "fortinet",
+      "product": "fortiweb",
+      "cpe23": "cpe:2.3:a:fortinet:fortiweb:*:*:*:*:*:*:*:*",
+      "category": "network",
+      "priority": "critical",
+      "aliases": [
+        "fortiweb",
+        "fortinet waf",
+        "forti waf"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: 3 CISA KEV entries. Web application firewall.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "7.6.2"
+    },
+    {
+      "id": "fortimanager",
+      "displayName": "Fortinet FortiManager",
+      "vendor": "fortinet",
+      "product": "fortimanager",
+      "cpe23": "cpe:2.3:a:fortinet:fortimanager:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": [
+        "fortimanager",
+        "fortinet manager",
+        "forti manager"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: 1 CISA KEV entry. Centralized FortiGate management.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "7.6.3"
+    },
+    {
+      "id": "fortianalyzer",
+      "displayName": "Fortinet FortiAnalyzer",
+      "vendor": "fortinet",
+      "product": "fortianalyzer",
+      "cpe23": "cpe:2.3:a:fortinet:fortianalyzer:*:*:*:*:*:*:*:*",
+      "category": "monitoring",
+      "priority": "high",
+      "aliases": [
+        "fortianalyzer",
+        "fortinet analyzer",
+        "forti analyzer"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "Log aggregation and analytics for FortiGate.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "7.6.3"
+    },
+    {
+      "id": "forticlient_ems",
+      "displayName": "Fortinet FortiClient EMS",
+      "vendor": "fortinet",
+      "product": "forticlient_enterprise_management_server",
+      "cpe23": "cpe:2.3:a:fortinet:forticlient_enterprise_management_server:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": [
+        "forticlient ems",
+        "fortinet ems"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: 1 CISA KEV entry. FortiClient endpoint management server.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "7.4.1"
+    },
+    {
+      "id": "palo_alto_expedition",
+      "displayName": "Palo Alto Expedition",
+      "vendor": "palo_alto",
+      "product": "expedition",
+      "cpe23": "cpe:2.3:a:paloaltonetworks:expedition:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "critical",
+      "aliases": [
+        "expedition",
+        "palo alto expedition",
+        "paloalto expedition"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "CRITICAL: 3 CISA KEV entries. Migration and config analysis tool. End-of-life announced.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "1.2.101",
+      "eol": true,
+      "eolDate": "2025-12-31"
+    },
+    {
+      "id": "sonicwall_email",
+      "displayName": "SonicWall Email Security",
+      "vendor": "sonicwall",
+      "product": "email_security",
+      "cpe23": "cpe:2.3:a:sonicwall:email_security:*:*:*:*:*:*:*:*",
+      "category": "email",
+      "priority": "critical",
+      "aliases": [
+        "sonicwall email",
+        "sonicwall email security"
+      ],
+      "platforms": [
+        "appliance"
+      ],
+      "notes": "CRITICAL: 3 CISA KEV entries. Email security appliance.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "10.0.17"
+    },
+    {
+      "id": "f5_big_iq",
+      "displayName": "F5 BIG-IQ Centralized Management",
+      "vendor": "f5",
+      "product": "big-iq_centralized_management",
+      "cpe23": "cpe:2.3:a:f5:big-iq_centralized_management:*:*:*:*:*:*:*:*",
+      "category": "management",
+      "priority": "high",
+      "aliases": [
+        "big-iq",
+        "f5 big-iq",
+        "bigiq"
+      ],
+      "platforms": [
+        "server"
+      ],
+      "notes": "1 CISA KEV entry. BIG-IP centralized management.",
+      "lastChecked": "2026-02-20",
+      "latestVersion": "8.3.0"
     }
   ]
 }
