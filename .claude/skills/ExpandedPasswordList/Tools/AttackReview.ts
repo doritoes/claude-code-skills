@@ -62,6 +62,93 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "mask-lllldddd": /^[a-z]{4}[0-9]{4}$/,
 };
 
+/**
+ * Reverse-engineer possible wordlist roots from a cracked password.
+ * Given password P, generates candidate words W such that some hashcat rule
+ * could transform W into P. Covers: identity, case changes, digit/special
+ * append/prepend, leet reverse, year strip, duplicate, reverse.
+ *
+ * Used by the overlap classifier to estimate dict+rule attack coverage.
+ * For nocap.rule (48K rules), virtually any matched root implies coverage.
+ */
+function reverseRuleRoots(password: string): Set<string> {
+  const roots = new Set<string>();
+  const lower = password.toLowerCase();
+  const len = password.length;
+
+  // Identity + case variants (: l u c rules)
+  roots.add(lower);
+  roots.add(password);
+
+  // Strip trailing digits 1-4 ($0..$9, $0$1, etc.)
+  for (let n = 1; n <= 4; n++) {
+    if (len > n && /^\d+$/.test(password.slice(-n))) {
+      roots.add(password.slice(0, -n).toLowerCase());
+    }
+  }
+
+  // Strip leading digits 1-2 (^0..^9, ^1^2)
+  for (let n = 1; n <= 2; n++) {
+    if (len > n && /^\d+$/.test(password.slice(0, n))) {
+      roots.add(password.slice(n).toLowerCase());
+    }
+  }
+
+  // Strip trailing special char ($! $@ $# etc.)
+  if (len > 1 && /[^a-zA-Z0-9]/.test(password[len - 1])) {
+    roots.add(password.slice(0, -1).toLowerCase());
+    // Special + digits combo ($!$1$2$3)
+    for (let n = 1; n <= 3; n++) {
+      if (len > n + 1 && /^[^a-zA-Z0-9]\d+$/.test(password.slice(-(n + 1)))) {
+        roots.add(password.slice(0, -(n + 1)).toLowerCase());
+      }
+    }
+  }
+
+  // Strip leading special char (^! ^@ etc.)
+  if (len > 1 && /[^a-zA-Z0-9]/.test(password[0])) {
+    roots.add(password.slice(1).toLowerCase());
+  }
+
+  // Strip year suffix 1950-2029
+  if (len > 4 && /^(19[5-9]\d|20[0-2]\d)$/.test(password.slice(-4))) {
+    roots.add(password.slice(0, -4).toLowerCase());
+  }
+
+  // Reverse (r rule)
+  roots.add([...lower].reverse().join(""));
+
+  // Duplicate (d rule): first half == second half
+  if (len >= 4 && len % 2 === 0) {
+    const half = password.slice(0, len / 2);
+    if (half.toLowerCase() === password.slice(len / 2).toLowerCase()) {
+      roots.add(half.toLowerCase());
+    }
+  }
+
+  // Leet reverse (sa@ se3 si1 so0 ss$ st7)
+  const leetMap: [string, RegExp][] = [
+    ["a", /[@4]/g], ["e", /[3]/g], ["i", /[1!]/g],
+    ["o", /[0]/g], ["s", /[$5]/g], ["t", /[7+]/g],
+  ];
+  let unleeted = lower;
+  for (const [char, regex] of leetMap) {
+    unleeted = unleeted.replace(regex, char);
+  }
+  if (unleeted !== lower) {
+    roots.add(unleeted);
+    // Also strip trailing digits from unleeted form
+    for (let n = 1; n <= 4; n++) {
+      if (unleeted.length > n && /^\d+$/.test(unleeted.slice(-n))) {
+        roots.add(unleeted.slice(0, -n));
+      }
+    }
+  }
+
+  roots.delete("");
+  return roots;
+}
+
 /** Feedback attack names (for trend tracking) */
 const FEEDBACK_ATTACK_NAMES = [
   "feedback-beta-nocaprule",
@@ -388,20 +475,21 @@ function classifyPassword(
     coveredBy.push("hybrid-rockyou-special-digits");
   }
 
-  // Dict+rules attacks (approximate: check if password root is in the wordlist)
-  // feedback-beta-nocaprule: BETA.txt + nocap.rule (48K rules)
-  if (betaSet.has(lower) || betaSet.has(password)) {
-    coveredBy.push("feedback-beta-nocaprule");
+  // Dict+rules attacks: reverse-engineer possible roots from password,
+  // then check if any root exists in the wordlist. Covers case changes,
+  // digit/special append/prepend, leet reverse, year strip, duplicate, reverse.
+  const roots = reverseRuleRoots(password);
+  let inBeta = false;
+  let inNocapPlus = false;
+  for (const root of roots) {
+    if (!inBeta && betaSet.has(root)) inBeta = true;
+    if (!inNocapPlus && nocapPlusSet.has(root)) inNocapPlus = true;
+    if (inBeta && inNocapPlus) break;
   }
 
-  // nocapplus-nocaprule: nocap-plus + nocap.rule
-  if (nocapPlusSet.has(lower)) {
+  if (inBeta) coveredBy.push("feedback-beta-nocaprule");
+  if (inNocapPlus) {
     coveredBy.push("nocapplus-nocaprule");
-  }
-
-  // nocapplus-unobtainium: nocap-plus + unobtainium.rule (194 rules)
-  // Approximate: if lowercase is in wordlist, some rule likely transforms it
-  if (nocapPlusSet.has(lower)) {
     coveredBy.push("nocapplus-unobtainium");
   }
 
