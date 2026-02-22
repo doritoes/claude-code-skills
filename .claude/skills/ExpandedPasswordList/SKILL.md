@@ -647,14 +647,14 @@ If no baseline exists, the tool warns and all roots appear as "new" - which defe
 | 50 | Hybrid | dict+mask (password123) | 12-48 hours |
 | 35 | Mask | common patterns | 2-7 days |
 | 25 | PRINCE | probabilistic word combo | 3-10 days |
-| 15 | Brute Force | 1-7 char exhaustive | days |
+| 15 | Brute Force | 3-7 char exhaustive | days |
 
 ### Brute Force Notes
 
 **Separate tasks per length (NOT --increment):**
-- Hashtopolis cannot calculate keyspace for `--increment` flag masks
-- Use separate brute-1, brute-2, brute-3, ..., brute-7 attacks instead
+- Use separate brute-3, brute-4, brute-5, brute-6, brute-7 attacks
 - Each attack has fixed keyspace that workers can benchmark
+- **brute-1 and brute-2 removed (v6.0):** HIBP aggregates real breaches from real services. No legitimate service accepts 1-2 character passwords, so these hashes effectively don't exist in the dataset. 0 cracks across 9 attempts confirmed this.
 
 **brute-8 deferred to post-pipeline (BIGRED ROI analysis 2026-02-12):**
 - 8-character brute force: 95^8 = 6.63 quadrillion keyspace, ~169 hours (~7 days) on RTX 4060 Ti at 10.9 GH/s
@@ -820,7 +820,7 @@ rule application, but modern GPUs handle this well with optimized kernels (`-O`)
 | batch-0003 | 350,385 | 20,537 | 5.86% | Hashtopolis | Standard pipeline |
 | batch-0004 | 350,638 | 22,635 | 6.45% | Hashtopolis | Standard pipeline |
 | batch-0005 | 350,073 | 45,564 | 13.01% | Hashtopolis | 19 attacks (pre-optimization) |
-| batch-0006 | 351,125 | 45,782 | 13.04% | Hashtopolis | 17 attacks (current v5.0 order) |
+| batch-0006 | 351,125 | 45,782 | 13.04% | Hashtopolis | 17 attacks (v5.0 order) |
 | batch-0007 | 349,581 | 23,511 | 6.72% | BIGRED | First BIGRED batch |
 | batch-0008 | 349,446 | 23,311 | 6.67% | BIGRED | brute-7 truncated 51% (SSH bug) |
 | batch-0009 | 349,976 | 23,241 | 6.64% | BIGRED | brute-7 re-run with screen fix |
@@ -846,13 +846,13 @@ Ranked by total cracks across all batches where each attack was attempted:
 | 5 | brute-5 | 9 | 8,831 | 0.28% | 4.3% | T3 |
 | 6 | mask-Ullllllld | 9 | 5,096 | 0.16% | 2.9% | T3 |
 | 7 | mask-Ullllldd | 9 | 4,699 | 0.15% | 2.4% | T4 |
-| 8 | hybrid-rockyou-special-digits | 9 | 3,407 | 0.11% | 1.8% | T4 |
+| 8 | hybrid-nocapplus-special-digits | 9 | 3,407 | 0.11% | 1.8% | T4 |
 | 9 | **feedback-beta-nocaprule** | 9 | **2,447** | **0.08%** | **1.1%** | T2 |
 | 10 | brute-4 | 9 | 783 | 0.02% | 0.4% | T0 |
 | 11 | nocapplus-nocaprule | 9 | 733 | 0.02% | 0.3% | T2 |
 | 12 | mask-lllldddd | 1 | 676 | 0.19% | 0.3% | T4 |
-| 13 | brute-3 | 9 | 101 | <0.01% | <0.1% | T0 |
-| 14 | nocapplus-unobtainium | 9 | 103 | <0.01% | <0.1% | T2 |
+| 13 | nocapplus-unobtainium | 9 | 103 | <0.01% | <0.1% | T2 |
+| 14 | brute-3 | 9 | 101 | <0.01% | <0.1% | T0 |
 | 15 | hybrid-nocapplus-3digit | 1 | 1 | <0.01% | <0.1% | T4 |
 
 _Tier 1 (brute-6+7) = **68.6%** of all cracks. Tier 3 (hybrid+mask+brute-5) = **25.6%**._
@@ -863,7 +863,7 @@ _Every crack teaches us something — feedback contributes roots and rules even 
 
 | Attack | Mode | Keyspace | Time | Speed | Cracks | ROI |
 |--------|------|----------|------|-------|--------|-----|
-| brute-1 thru brute-4 | mask | trivial | instant | * | 123 | 0.6% |
+| brute-3 + brute-4 | mask | trivial | instant | * | 123 | 0.6% |
 | brute-6 | mask | 735B | **1.2 min** | 10.2 GH/s | 7,139 | 33.2% |
 | brute-7 | mask | 69.8T | **54.7 min** | 10.9 GH/s | 6,880 | 32.0% |
 | feedback-beta-nocaprule | dict+rules | 537M | 6s | * | 133 | 0.6% |
@@ -874,7 +874,7 @@ _Every crack teaches us something — feedback contributes roots and rules even 
 | brute-5 | mask | 7.7B | 4s | * | 983 | 4.6% |
 | mask-Ullllllld | mask | 2.1T | **3.3 min** | 10.8 GH/s | 667 | 3.1% |
 | mask-Ullllldd | mask | 1.19B | 7s | 9.9 GH/s | 517 | 2.4% |
-| hybrid-rockyou-special-digits | hybrid | 4.6B | **60s** | 8.7 GH/s | 393 | 1.8% |
+| hybrid-nocapplus-special-digits | hybrid | 4.6B | **60s** | 8.7 GH/s | 393 | 1.8% |
 | **TOTAL** | | | **~63 min** | | **21,526** | **6.16%** |
 
 _* Speed unreliable for small keyspaces (<1B) — GPU startup overhead dominates._
@@ -893,8 +893,7 @@ bun Tools/DiamondFeedback.ts --batch batch-0008
 ```
 
 **`--collect` produces:**
-- `data/diamonds/batch-NNNN.pot` — raw potfile (hash:plain)
-- `data/diamonds/batch-NNNN.txt` — parsed hash:plain pairs
+- `data/diamonds/hash_plaintext_pairs.jsonl` — JSONL `{"hash":"...","plain":"..."}` (append-only)
 - `data/diamonds/passwords-batch-NNNN.txt` — plaintext passwords only
 - `data/glass/batch-NNNN.txt` — uncracked hashes (SAND minus DIAMONDS)
 
@@ -902,25 +901,25 @@ bun Tools/DiamondFeedback.ts --batch batch-0008
 
 **Philosophy: Every crack is a data point.** Even low-ROI attacks contribute roots and rules that compound over time. The goal is to squeeze all value from every batch while prioritizing the highest-yield attacks first.
 
-**Feedback loop status (12 batches):**
-- 284 unique roots discovered (discovered-roots.txt)
-- 77,776 words in BETA.txt (cohorts + discovered + HIBP-promoted)
-- 40 rules in UNOBTAINIUM.rule (new transformations not in nocap.rule)
-- Feedback attacks contribute 1.5% of cracks (3,283 total) — low but growing
+**Feedback loop status (Gen1: 12 batches, Gen2: pending fresh data):**
+- 77K+ words in BETA.txt (cohorts + discovered + HIBP-promoted)
+- 194 rules in UNOBTAINIUM.rule (new transformations not in nocap.rule)
+- Feedback attacks contributed 1.5% of Gen1 cracks (3,283 total) — compounds over time
 
 **A/B testing plan:**
 To measure true feedback value, periodically run a batch WITHOUT feedback attacks (skip Tier 2: feedback-beta-nocaprule, nocapplus-nocaprule, nocapplus-unobtainium). Compare crack rate against adjacent batches that include feedback. Since SAND batches are hash-sorted (roughly equal difficulty), the difference isolates feedback contribution. After the A/B test, always go back and run the skipped attacks on that batch — every crack matters for publication.
 
 **Attack pruning criteria:**
-- Remove attacks below 0.01% rate after 3+ attempts (currently: brute-1, brute-2 at 0 cracks)
-- Keep brute-3/brute-4 despite low cracks — instant to run, non-zero value
+- **Domain reasoning first**: brute-1/brute-2 removed because HIBP can't contain 1-2 char passwords (no service accepts them), not just because of low crack rates
+- Remove attacks below 0.01% rate after 3+ batches AND with no theoretical coverage gap
+- Keep brute-3/brute-4 despite low cracks — instant to run, non-zero value (some old services had 3-4 char minimums)
 - Promote attacks that show improving trends across batches
 - New attacks get 3-batch trial period before evaluation
 
 **What to watch for in coming batches:**
-- Does feedback-beta-nocaprule crack rate increase as BETA.txt grows? (77.7K words now)
-- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (40 rules now)
-- Do new mask patterns (mask-lllldddd, hybrid-3digit) justify their slot after more data?
+- Does feedback-beta-nocaprule crack rate increase as BETA.txt grows?
+- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (194 rules now)
+- Do mask-lllldddd and hybrid-nocapplus-3digit justify their slot after more data?
 
 ### Configuration
 
@@ -972,13 +971,12 @@ cmd /c mklink /D "<PAI_DIR>\.claude\skills\ExpandedPasswordList\data" "\\<NAS_IP
 - rockyou SHA-1: `data/rockyou-sha1.bin`
 - GRAVEL batches: `data/gravel/batch-*.txt`
 - Counts index: `data/gravel/counts-index.txt` (HASH:COUNT)
-- PEARLS: `data/results/cracked.txt`
-- Prioritized: `data/results/pearls-prioritized.txt` (sorted by frequency)
-- With counts: `data/results/pearls-with-counts.txt` (PASSWORD:COUNT)
-- SAND batches: `data/sand/batch-*.txt.gz` (uncracked from Stage 1)
-- DIAMONDS: `data/diamonds/batch-*.txt` (Stage 2+ cracked)
+- PEARLS: `data/pearls/hash_plaintext_pairs.jsonl` (JSONL, append-only)
+- SAND batches: `data/sand/batch-*.txt` (uncracked from Stage 1)
+- DIAMONDS: `data/diamonds/hash_plaintext_pairs.jsonl` (JSONL, append-only) + `data/diamonds/passwords-batch-NNNN.txt`
 - GLASS: `data/glass/batch-*.txt` (uncrackable hashes)
-- UNOBTAINIUM (future): `data/rules/unobtainium.rule`
+- UNOBTAINIUM: `data/feedback/unobtainium.rule` (194 rules)
+- BETA: `data/feedback/BETA.txt` (77K+ words)
 
 ## Generational Password Analysis
 

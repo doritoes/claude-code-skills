@@ -33,7 +33,7 @@ const TIER_MAP: Record<string, number> = {
   "brute-6": 1, "brute-7": 1,
   "feedback-beta-nocaprule": 2, "nocapplus-nocaprule": 2, "nocapplus-unobtainium": 2,
   "hybrid-nocapplus-4digit": 3, "mask-lllllldd": 3, "brute-5": 3, "mask-Ullllllld": 3,
-  "mask-Ullllldd": 4, "hybrid-rockyou-special-digits": 4, "hybrid-nocapplus-3digit": 4, "mask-lllldddd": 4,
+  "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4, "hybrid-nocapplus-3digit": 4, "mask-lllldddd": 4,
   "brute-8": 99,
 };
 
@@ -469,10 +469,10 @@ function classifyPassword(
     coveredBy.push("hybrid-nocapplus-3digit");
   }
 
-  // hybrid-rockyou-special-digits: word + special + 3 digits
+  // hybrid-nocapplus-special-digits: word + special + 3 digits
   const matchSpecDig = password.match(/^(.+?)([^a-zA-Z0-9])(\d{3})$/);
   if (matchSpecDig && rockyouSet.has(matchSpecDig[1].toLowerCase())) {
-    coveredBy.push("hybrid-rockyou-special-digits");
+    coveredBy.push("hybrid-nocapplus-special-digits");
   }
 
   // Dict+rules attacks: reverse-engineer possible roots from password,

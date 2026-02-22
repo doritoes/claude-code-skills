@@ -261,26 +261,26 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (17 attacks, v5.1)
+## Current Attack List (15 attacks, v6.0)
 
 Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 
-| Tier | Attack | Description | Historical ROI |
-|------|--------|-------------|----------------|
-| 0 | brute-1 through brute-4 | Exhaustive 1-4 chars | <1s, trivial |
-| 1 | brute-6 | Exhaustive 6 chars | 31.1% of cracks, ~1.2 min |
-| 1 | brute-7 | Exhaustive 7 chars | 37.5% of cracks, ~55 min |
-| 2 | feedback-beta-nocaprule | BETA.txt + nocap.rule | Feedback loop |
-| 2 | nocapplus-nocaprule | nocap-plus.txt + nocap.rule | Feedback loop |
-| 2 | nocapplus-unobtainium | nocap-plus.txt + UNOBTAINIUM.rule | Feedback loop |
-| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 13.5% of cracks |
-| 3 | mask-lllllldd | 6 lower + 2 digits | 4.9% |
-| 3 | brute-5 | Exhaustive 5 chars | 4.3% |
-| 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 2.9% |
-| 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 2.4% |
-| 4 | hybrid-rockyou-special-digits | rockyou + special + 3 digits | 1.8% |
-| 4 | hybrid-nocapplus-3digit | nocap-plus + 3 digits | Needs data |
-| 4 | mask-lllldddd | 4 lower + 4 digits | Needs data |
+| Tier | Attack | Description | Gen2 ROI (4 batches) |
+|------|--------|-------------|----------------------|
+| 0 | brute-3, brute-4 | Exhaustive 3-4 chars | <1s, 610 cracks |
+| 1 | brute-6 | Exhaustive 6 chars | 2.07%, ~1.6 min |
+| 1 | brute-7 | Exhaustive 7 chars | 2.51%, ~107 min |
+| 2 | feedback-beta-nocaprule | BETA.txt + nocap.rule | 0.11%, feedback loop |
+| 2 | nocapplus-unobtainium | nocap-plus.txt + UNOBTAINIUM.rule | <0.01%, faster than nocaprule |
+| 2 | nocapplus-nocaprule | nocap-plus.txt + nocap.rule | <0.01%, catches rule-only cracks |
+| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 0.93%, top hybrid |
+| 3 | mask-lllllldd | 6 lower + 2 digits | 0.34% |
+| 3 | brute-5 | Exhaustive 5 chars | 0.28% |
+| 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 0.19% |
+| 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 0.15% |
+| 4 | hybrid-nocapplus-special-digits | rockyou + special + 3 digits | 0.12% |
+| 4 | mask-lllldddd | 4 lower + 4 digits | 0.19% |
+| 4 | hybrid-nocapplus-3digit | nocap-plus + 3 digits | <0.01%, monitoring |
 
 **How to modify the attack list:** Edit `DEFAULT_ATTACK_ORDER` array in `Tools/SandStateManager.ts`. Use `AttackReview.ts` output to justify changes. The `ATTACK_CMDS` mapping in `BigRedRunner.ts` must also include any new attack name.
 

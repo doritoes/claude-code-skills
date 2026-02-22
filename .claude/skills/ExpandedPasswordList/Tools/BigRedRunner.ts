@@ -65,7 +65,7 @@ const ATTACK_CMDS: Record<string, string> = {
   "mask-lllllldd":                 "#HL# -a 3 ?l?l?l?l?l?l?d?d",
   "mask-Ullllllld":                "#HL# -a 3 ?u?l?l?l?l?l?l?l?d",
   "mask-Ullllldd":                 "#HL# -a 3 ?u?l?l?l?l?l?d?d",
-  "hybrid-rockyou-special-digits": "#HL# -a 6 rockyou.txt ?s?d?d?d",
+  "hybrid-nocapplus-special-digits": "#HL# -a 6 nocap-plus.txt ?s?d?d?d",
   "hybrid-nocapplus-3digit":       "#HL# -a 6 nocap-plus.txt ?d?d?d",
   "mask-lllldddd":                 "#HL# -a 3 ?l?l?l?l?d?d?d?d",
 };
