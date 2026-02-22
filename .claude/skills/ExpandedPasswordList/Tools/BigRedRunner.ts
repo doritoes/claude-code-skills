@@ -16,12 +16,12 @@
  * @license MIT
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { execSync } from "node:child_process";
-import { SandStateManager, DEFAULT_ATTACK_ORDER } from "./SandStateManager";
-import { DATA_DIR, SAND_DIR, DIAMONDS_DIR, GLASS_DIR, HASH_TYPE_SHA1 } from "./config";
+import { SandStateManager, DEFAULT_ATTACK_ORDER, type AttackResultEntry } from "./SandStateManager";
+import { DATA_DIR, SAND_DIR, DIAMONDS_DIR, GLASS_DIR, HASH_TYPE_SHA1, decodeHexPlain } from "./config";
 import { loadConfig, sshCmd, scpDownload, type BigRedConfig } from "./BigRedSync";
 
 // =============================================================================
@@ -299,9 +299,24 @@ function runAttack(
 
   // Verify hashcat actually started (check both process AND screen)
   if (!isHashcatRunning(config) && !isScreenAlive(config, screenName)) {
+    // Fast attacks (brute-1 through brute-5, small masks) can complete in <3 seconds.
+    // Check if the log shows a completed run before declaring failure.
+    if (isLogComplete(config, logFile)) {
+      // hashcat already finished — this is success, not failure
+      const crackedAfter = getPotfileCount(config, batchName);
+      const newCracks = crackedAfter - crackedBefore;
+      const durationSeconds = (Date.now() - startTime) / 1000;
+      console.log(`  Completed instantly (${formatDuration(durationSeconds)})`);
+      console.log(`  New cracks: ${newCracks.toLocaleString()}`);
+      console.log(`  Total potfile: ${crackedAfter.toLocaleString()}`);
+      try { sshCmd(config, `screen -X -S ${screenName} quit 2>/dev/null || true`, 5000); } catch { /* ignore */ }
+      return { attack: attackName, crackedBefore, crackedAfter, newCracks, durationSeconds, exitCode: 0 };
+    }
+
+    // Log doesn't show completion — this is a real failure
     console.error("ERROR: hashcat failed to start. Checking log...");
     try {
-      const log = sshCmd(config, `cat ${logFile} 2>/dev/null || echo '(no log)'`, 10000);
+      const log = sshCmd(config, `tail -20 ${logFile} 2>/dev/null || echo '(no log)'`, 10000);
       console.error(log);
     } catch { /* ignore */ }
     return { attack: attackName, crackedBefore, crackedAfter: crackedBefore, newCracks: 0, durationSeconds: 0, exitCode: -1 };
@@ -525,7 +540,7 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   const potContent = readFileSync(localPotPath, "utf-8");
   const lines = potContent.trim().split("\n").filter(l => l.includes(":"));
 
-  const hashPlainPairs: string[] = [];
+  const parsedPairs: { hash: string; plain: string }[] = [];
   const passwords: string[] = [];
 
   for (const line of lines) {
@@ -533,23 +548,24 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
     if (colonIdx < 0) continue;
 
     const hash = line.slice(0, colonIdx).trim();
-    const plain = line.slice(colonIdx + 1);
+    const plain = decodeHexPlain(line.slice(colonIdx + 1));
 
     // Validate SHA-1 hash format
     if (/^[a-fA-F0-9]{40}$/.test(hash)) {
-      hashPlainPairs.push(`${hash}:${plain}`);
+      parsedPairs.push({ hash, plain });
       passwords.push(plain);
     }
   }
 
-  console.log(`Parsed: ${hashPlainPairs.length.toLocaleString()} valid hash:plain pairs`);
+  console.log(`Parsed: ${parsedPairs.length.toLocaleString()} valid hash:plain pairs`);
 
-  // Write hash:plain file (same format as DiamondCollector)
-  const hashPlainPath = resolve(DIAMONDS_DIR, `${batchName}.txt`);
-  writeFileSync(hashPlainPath, hashPlainPairs.join("\n") + "\n");
-  console.log(`  Hash:plain → ${hashPlainPath}`);
+  // Append to single JSONL file (one JSON object per line — no delimiter ambiguity)
+  const jsonlPath = resolve(DIAMONDS_DIR, "hash_plaintext_pairs.jsonl");
+  const jsonlContent = parsedPairs.map(p => JSON.stringify(p)).join("\n") + "\n";
+  appendFileSync(jsonlPath, jsonlContent);
+  console.log(`  Hash:plain → ${jsonlPath} (appended ${parsedPairs.length.toLocaleString()})`);
 
-  // Write passwords-only file (same format as DiamondCollector)
+  // Write passwords-only file (plain text, one per line)
   const passwordsPath = resolve(DIAMONDS_DIR, `passwords-${batchName}.txt`);
   writeFileSync(passwordsPath, passwords.join("\n") + "\n");
   console.log(`  Passwords  → ${passwordsPath}`);
@@ -557,19 +573,15 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   // Load SAND hashlist to compute crack rate + extract GLASS
   const batch = loadSandBatch(batchName);
   const totalHashes = batch ? batch.length : 0;
-  const crackRate = totalHashes > 0 ? (hashPlainPairs.length / totalHashes * 100).toFixed(2) : "?";
+  const crackRate = totalHashes > 0 ? (parsedPairs.length / totalHashes * 100).toFixed(2) : "?";
 
-  console.log(`\nResults: ${hashPlainPairs.length.toLocaleString()} / ${totalHashes.toLocaleString()} (${crackRate}%)`);
+  console.log(`\nResults: ${parsedPairs.length.toLocaleString()} / ${totalHashes.toLocaleString()} (${crackRate}%)`);
 
   // Extract GLASS (uncracked hashes = SAND - DIAMONDS)
   if (batch && batch.length > 0) {
     const crackedHashSet = new Set<string>();
-    for (const line of lines) {
-      const colonIdx = line.indexOf(":");
-      if (colonIdx >= 0) {
-        const hash = line.slice(0, colonIdx).trim().toLowerCase();
-        if (/^[a-f0-9]{40}$/.test(hash)) crackedHashSet.add(hash);
-      }
+    for (const p of parsedPairs) {
+      crackedHashSet.add(p.hash.toLowerCase());
     }
 
     const glassHashes = batch.filter(h => !crackedHashSet.has(h.toLowerCase()));
@@ -583,15 +595,52 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   const stateManager = new SandStateManager(DATA_DIR);
   const batchState = stateManager.getBatch(batchName);
   if (batchState) {
-    stateManager.updateCracked(batchName, hashPlainPairs.length);
+    stateManager.updateCracked(batchName, parsedPairs.length);
     stateManager.completeBatch(batchName);
     console.log(`  Updated sand-state.json`);
   } else {
     // Initialize state if not tracked
     stateManager.initBatch(batchName, 0, totalHashes);
-    stateManager.updateCracked(batchName, hashPlainPairs.length);
+    stateManager.updateCracked(batchName, parsedPairs.length);
     stateManager.completeBatch(batchName);
     console.log(`  Created sand-state.json entry for ${batchName}`);
+  }
+
+  // Per-attack breakdown table (from attackResults recorded during batch run)
+  const finalBatchState = stateManager.getBatch(batchName);
+  if (finalBatchState?.attackResults && finalBatchState.attackResults.length > 0) {
+    const ar = finalBatchState.attackResults;
+    console.log(`\nPer-attack breakdown:`);
+    console.log(`  ${"Attack".padEnd(38)} ${"Cracks".padStart(8)}   ${"Rate".padStart(6)}  ${"Time".padStart(8)}`);
+    console.log(`  ${"─".repeat(38)} ${"─".repeat(8)}   ${"─".repeat(6)}  ${"─".repeat(8)}`);
+
+    let feedbackCracks = 0;
+    let feedbackTime = 0;
+    let totalTime = 0;
+
+    const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-"];
+
+    for (const entry of ar) {
+      const rate = totalHashes > 0 ? (entry.newCracks / totalHashes * 100).toFixed(2) + "%" : "?";
+      const time = formatDuration(entry.durationSeconds);
+      console.log(`  ${entry.attack.padEnd(38)} ${entry.newCracks.toLocaleString().padStart(8)}   ${rate.padStart(6)}  ${time.padStart(8)}`);
+      totalTime += entry.durationSeconds;
+
+      if (FEEDBACK_PREFIXES.some(p => entry.attack.startsWith(p))) {
+        feedbackCracks += entry.newCracks;
+        feedbackTime += entry.durationSeconds;
+      }
+    }
+
+    const totalCracksFromResults = ar.reduce((sum, e) => sum + e.newCracks, 0);
+    const totalRate = totalHashes > 0 ? (totalCracksFromResults / totalHashes * 100).toFixed(2) + "%" : "?";
+    console.log(`  ${"─".repeat(38)} ${"─".repeat(8)}   ${"─".repeat(6)}  ${"─".repeat(8)}`);
+    console.log(`  ${"TOTAL".padEnd(38)} ${totalCracksFromResults.toLocaleString().padStart(8)}   ${totalRate.padStart(6)}  ${formatDuration(totalTime).padStart(8)}`);
+
+    if (feedbackCracks > 0) {
+      const fbRate = totalHashes > 0 ? (feedbackCracks / totalHashes * 100).toFixed(2) + "%" : "?";
+      console.log(`  ${"  Feedback subtotal".padEnd(38)} ${feedbackCracks.toLocaleString().padStart(8)}   ${fbRate.padStart(6)}  ${formatDuration(feedbackTime).padStart(8)}`);
+    }
   }
 
   // Top passwords
@@ -608,6 +657,14 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
     }
   }
 
+  // Clean up BIGRED worker artifacts — potfile downloaded, no longer needed
+  // Prevents stale potfiles from corrupting future batch runs
+  try {
+    sshCmd(config, `rm -f ${config.workDir}/potfiles/${batchName}.pot ${config.workDir}/hashlists/${batchName}.txt ${config.workDir}/hashcat-*.log`, 10000);
+    sshCmd(config, `screen -X -S hc-${batchName} quit 2>/dev/null; true`, 5000);
+    console.log(`\nCleaned BIGRED: potfile + hashlist + logs removed`);
+  } catch { /* non-fatal */ }
+
   console.log(`\nNext steps:`);
   console.log(`  bun Tools/DiamondAnalyzer.ts --full ${passwordsPath}`);
   console.log(`  bun Tools/DiamondFeedback.ts --batch ${batchName}`);
@@ -620,10 +677,10 @@ function loadSandBatch(batchName: string): string[] | null {
   if (existsSync(gzPath)) {
     const compressed = readFileSync(gzPath);
     const content = gunzipSync(compressed).toString("utf-8");
-    return content.trim().split("\n").filter(h => h.length === 40);
+    return content.trim().split(/\r?\n/).filter(h => h.length === 40);
   } else if (existsSync(txtPath)) {
     const content = readFileSync(txtPath, "utf-8");
-    return content.trim().split("\n").filter(h => h.length === 40);
+    return content.trim().split(/\r?\n/).filter(h => h.length === 40);
   }
 
   return null;
@@ -633,8 +690,31 @@ function loadSandBatch(batchName: string): string[] | null {
 // Pre-flight Checks
 // =============================================================================
 
-function preflight(config: BigRedConfig, batchName: string, attacks: string[]): boolean {
+function preflight(config: BigRedConfig, batchName: string, attacks: string[], batchState?: import("./SandStateManager").BatchState): boolean {
   console.log("\n--- PRE-FLIGHT CHECKS ---");
+
+  // 0. Clean stale worker state for fresh batches
+  //    BIGRED is just a worker — potfiles, logs, and screen sessions are ephemeral.
+  //    If no attacks have been applied yet, wipe everything for a clean start.
+  const isFreshBatch = !batchState || batchState.attacksApplied.length === 0;
+  const potfilePath = `${config.workDir}/potfiles/${batchName}.pot`;
+
+  try {
+    const potSize = sshCmd(config, `stat -c %s ${potfilePath} 2>/dev/null || echo 0`);
+    if (parseInt(potSize) > 0) {
+      if (isFreshBatch) {
+        // Fresh batch but stale potfile exists — clean it
+        sshCmd(config, `rm -f ${potfilePath}`, 10000);
+        sshCmd(config, `rm -f ${config.workDir}/hashcat-*.log`, 10000);
+        sshCmd(config, `screen -X -S hc-${batchName} quit 2>/dev/null; true`, 5000);
+        console.log(`  Cleaned stale potfile + logs (fresh batch)`);
+      } else {
+        // Resuming — potfile has our prior work, keep it
+        const potLines = sshCmd(config, `wc -l < ${potfilePath}`);
+        console.log(`  Potfile: ${parseInt(potLines).toLocaleString()} entries (resuming)`);
+      }
+    }
+  } catch { /* non-fatal */ }
 
   // 1. Check hashlist exists on BIGRED
   const hashlistPath = `${config.workDir}/hashlists/${batchName}.txt`;
@@ -817,9 +897,9 @@ Attack order: ${DEFAULT_ATTACK_ORDER.join(" → ")}
       attacksToRun = (remaining && remaining.length > 0) ? remaining : [...DEFAULT_ATTACK_ORDER];
     }
 
-    // Pre-flight
+    // Pre-flight (pass batchState so preflight can detect fresh vs resume)
     if (!dryRun) {
-      if (!preflight(config, batchName, attacksToRun)) {
+      if (!preflight(config, batchName, attacksToRun, batchState ?? undefined)) {
         process.exit(1);
       }
     }

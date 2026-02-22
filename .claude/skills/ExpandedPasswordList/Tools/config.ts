@@ -71,6 +71,23 @@ export const ARCHIVE_DIR = resolve(DATA_DIR, "archive");
 export const HASH_TYPE_SHA1 = 100;
 
 /**
+ * Decode hashcat $HEX[...] encoded plaintext.
+ * Hashcat encodes passwords containing : (0x3a) and other special chars
+ * as $HEX[hex_bytes] in potfiles. These are real passwords from standard
+ * input devices that need to be decoded back to their original form.
+ */
+export function decodeHexPlain(plain: string): string {
+  const match = plain.match(/^\$HEX\[([0-9a-fA-F]+)\]$/);
+  if (!match) return plain;
+  const hex = match[1];
+  const bytes: number[] = [];
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes.push(parseInt(hex.slice(i, i + 2), 16));
+  }
+  return Buffer.from(bytes).toString("utf-8");
+}
+
+/**
  * Log the current data directory configuration
  */
 export function logDataConfig(): void {

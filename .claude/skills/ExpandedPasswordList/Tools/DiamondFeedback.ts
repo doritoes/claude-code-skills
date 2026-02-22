@@ -23,6 +23,7 @@
 import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
+// decodeHexPlain no longer needed here — $HEX decoding happens at potfile ingest (BigRedRunner/GravelProcessor)
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 
@@ -333,8 +334,18 @@ async function analyzeFile(filePath: string): Promise<AnalysisResult> {
   for await (const line of rl) {
     result.totalPasswords++;
 
-    // Handle HASH:PASSWORD format
-    const password = line.includes(":") ? line.split(":").slice(1).join(":") : line;
+    // Parse line: JSONL {"hash":"...","plain":"..."}, or plain text password
+    let password: string;
+    if (line.startsWith("{")) {
+      try {
+        const obj = JSON.parse(line);
+        password = obj.plain || "";
+      } catch {
+        continue;
+      }
+    } else {
+      password = line;
+    }
     if (!password) continue;
 
     // Dedup
@@ -536,21 +547,26 @@ async function generateFeedback(options: {
   let diamondFiles: string[] = [];
 
   if (batches && batches.length > 0) {
-    // Specific batches
+    // Specific batches — look for passwords-batch-NNNN.txt (plain text passwords)
     for (const batch of batches) {
-      const filePath = resolve(DIAMONDS_DIR, `${batch}.txt`);
-      if (existsSync(filePath)) {
-        diamondFiles.push(filePath);
+      const pwPath = resolve(DIAMONDS_DIR, `passwords-${batch}.txt`);
+      if (existsSync(pwPath)) {
+        diamondFiles.push(pwPath);
       } else {
-        console.warn(`Warning: No DIAMONDS file for ${batch}`);
+        console.warn(`Warning: No DIAMONDS password file for ${batch}`);
       }
     }
   } else {
-    // All batches
+    // All batches — use passwords-batch-*.txt files (plain text, one per line)
     if (existsSync(DIAMONDS_DIR)) {
       diamondFiles = readdirSync(DIAMONDS_DIR)
-        .filter(f => f.startsWith("batch-") && f.endsWith(".txt") && !f.includes("passwords-"))
+        .filter(f => f.startsWith("passwords-batch-") && f.endsWith(".txt"))
         .map(f => resolve(DIAMONDS_DIR, f));
+    }
+    // Also include the append-only JSONL if it exists (for hash:plain analysis)
+    const jsonlPath = resolve(DIAMONDS_DIR, "hash_plaintext_pairs.jsonl");
+    if (existsSync(jsonlPath) && diamondFiles.length === 0) {
+      diamondFiles.push(jsonlPath);
     }
   }
 
@@ -909,16 +925,24 @@ async function generateFeedback(options: {
       // Update the LAST batch in batchesAnalyzed (the one just processed)
       const targetBatch = batchesAnalyzed[batchesAnalyzed.length - 1];
       if (targetBatch && sandState.batches?.[targetBatch]) {
+        // Compute feedbackCracks from per-attack data
+        const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-"];
+        const attackResults: Array<{ attack: string; newCracks: number }> =
+          sandState.batches[targetBatch].attackResults || [];
+        const feedbackCracks = attackResults
+          .filter((r: { attack: string }) => FEEDBACK_PREFIXES.some(p => r.attack.startsWith(p)))
+          .reduce((sum: number, r: { newCracks: number }) => sum + r.newCracks, 0);
+
         sandState.batches[targetBatch].feedback = {
           newRootsDiscovered: metricsNewDiscoveries,
           hibpPromoted: 0,  // tracked by DiamondAnalyzer separately
           totalDiscoveredRoots: metricsDiscoveredTotal,
           betaSize: metricsBetaSize,
           nocapPlusSize: 0,  // populated by rebuild-nocap-plus.py
-          feedbackCracks: 0, // calculated from per-attack data
+          feedbackCracks,
         };
         writeFileSync(SAND_STATE_PATH, JSON.stringify(sandState, null, 2));
-        console.log(`  Updated sand-state.json feedback metrics for ${targetBatch}`);
+        console.log(`  Updated sand-state.json feedback metrics for ${targetBatch} (feedbackCracks: ${feedbackCracks})`);
       }
     } catch (e) {
       console.log(`  Warning: Could not update sand-state.json: ${e}`);

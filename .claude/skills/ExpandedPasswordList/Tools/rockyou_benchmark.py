@@ -2,16 +2,17 @@
 """
 rockyou_benchmark.py - Measure rockyou.txt + OneRuleToRuleThemStill crack rate on gravel
 
-Runs rockyou.txt + OneRuleToRuleThemStill.rule against a sample of gravel batches
-to get a baseline crack rate for comparison with nocap.txt + nocap.rule (30%).
+Selects N evenly-spaced gravel batches, combines into one chunk, uploads to
+BIGRED, and runs a single hashcat attack. Reports overall crack rate for
+comparison with nocap.txt + nocap.rule (29.99% across all 4,328 batches).
 
 Does NOT save PEARLS or SAND — only measures crack rate.
 
 Usage:
-  python Tools/rockyou_benchmark.py                    Sample 10 evenly-spaced batches
+  python Tools/rockyou_benchmark.py                    Sample 10 batches (default)
   python Tools/rockyou_benchmark.py --samples 20       Sample 20 batches
   python Tools/rockyou_benchmark.py --batch 1 50 100   Run specific batches
-  python Tools/rockyou_benchmark.py --dry-run           Preview which batches would run
+  python Tools/rockyou_benchmark.py --dry-run           Preview without execution
 """
 
 import os
@@ -19,6 +20,7 @@ import sys
 import re
 import time
 import subprocess
+import tempfile
 from pathlib import Path
 
 import functools
@@ -39,10 +41,11 @@ ENV_FILE = PROJECT_ROOT / ".claude" / ".env"
 SHELL = r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else "/bin/bash"
 
 HASH_TYPE = 100  # SHA-1
+CHUNK_NAME = "benchmark-chunk"
 HASHCAT_CMD = (
-    "hashcat -m {ht} hashlists/{batch}.txt "
+    "hashcat -m {ht} hashlists/{chunk}.txt "
     "wordlists/rockyou.txt -r rules/OneRuleToRuleThemStill.rule "
-    "--potfile-path potfiles/{batch}-benchmark.pot -O -w 3 --status --status-timer 60"
+    "--potfile-path potfiles/{chunk}.pot -O -w 3 --status --status-timer 60"
 )
 
 POLL_INTERVAL = 30
@@ -196,15 +199,6 @@ def get_gravel_batches():
     return batches
 
 
-def count_hashes(path):
-    count = 0
-    with open(path, "r") as f:
-        for line in f:
-            if len(line.strip()) == 40:
-                count += 1
-    return count
-
-
 def select_samples(all_batches, n):
     """Select n evenly-spaced batches from the full list."""
     total = len(all_batches)
@@ -214,43 +208,44 @@ def select_samples(all_batches, n):
     return [all_batches[int(i * step)] for i in range(n)]
 
 
+def build_chunk(batches, chunk_path):
+    """Combine multiple gravel batch files into one chunk. Returns total hash count."""
+    total = 0
+    with open(chunk_path, "w") as out:
+        for batch in batches:
+            path = GRAVEL_DIR / f"{batch}.txt"
+            with open(path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if len(line) == 40:
+                        out.write(line + "\n")
+                        total += 1
+    return total
+
+
 # =============================================================================
 # Benchmark
 # =============================================================================
 
-def run_benchmark(config, batch, dry_run=False):
-    """Run rockyou+OneRule on one gravel batch. Returns (hash_count, crack_count)."""
-    gravel_path = GRAVEL_DIR / f"{batch}.txt"
-    hash_count = count_hashes(gravel_path)
-    potfile_name = f"{batch}-benchmark.pot"
+def run_benchmark(config, chunk_path, hash_count):
+    """Run rockyou+OneRule on the combined chunk. Returns crack count."""
+    potfile_name = f"{CHUNK_NAME}.pot"
+    screen_name = f"rb-chunk"
+    log_file = f"{config.work_dir}/rockyou-benchmark.log"
 
-    print(f"\n  {batch} ({hash_count:,} hashes)")
-
-    if dry_run:
-        return hash_count, 0
-
-    # Clean stale potfile
+    # Clean stale potfile + log
     try:
-        ssh_cmd(config, f"rm -f {config.work_dir}/potfiles/{potfile_name}", timeout=10)
+        ssh_cmd(config, (
+            f"rm -f {config.work_dir}/potfiles/{potfile_name} "
+            f"{log_file}"
+        ), timeout=10)
     except Exception:
         pass
 
-    # Upload hashlist
-    local_size = gravel_path.stat().st_size
-    try:
-        remote_size = int(ssh_cmd(
-            config,
-            f"stat -c %s {config.work_dir}/hashlists/{batch}.txt 2>/dev/null || echo 0"
-        ))
-        if remote_size != local_size:
-            scp_upload(config, gravel_path, f"{config.work_dir}/hashlists/{batch}.txt")
-    except Exception:
-        scp_upload(config, gravel_path, f"{config.work_dir}/hashlists/{batch}.txt")
-
-    # Launch hashcat in screen
-    cmd = HASHCAT_CMD.format(ht=HASH_TYPE, batch=batch)
-    screen_name = f"rb-{batch}"
-    log_file = f"{config.work_dir}/rockyou-benchmark.log"
+    # Upload chunk
+    print(f"\n  Uploading chunk ({hash_count:,} hashes)...")
+    scp_upload(config, chunk_path, f"{config.work_dir}/hashlists/{CHUNK_NAME}.txt", timeout=600)
+    print(f"  Upload complete.")
 
     # Wait if hashcat busy
     if is_hashcat_running(config):
@@ -258,12 +253,14 @@ def run_benchmark(config, batch, dry_run=False):
         while is_hashcat_running(config):
             time.sleep(POLL_INTERVAL)
 
-    # Clean previous session
+    # Clean previous screen session
     try:
-        ssh_cmd(config, f"screen -X -S {screen_name} quit 2>/dev/null; rm -f {log_file}", timeout=10)
+        ssh_cmd(config, f"screen -X -S {screen_name} quit 2>/dev/null || true", timeout=10)
     except Exception:
         pass
 
+    # Launch hashcat in screen
+    cmd = HASHCAT_CMD.format(ht=HASH_TYPE, chunk=CHUNK_NAME)
     escaped = cmd.replace("'", "'\\''")
     screen_cmd = (
         f"screen -dmS {screen_name} bash -c "
@@ -271,6 +268,7 @@ def run_benchmark(config, batch, dry_run=False):
     )
     ssh_cmd(config, screen_cmd, timeout=15)
     print(f"  Running: rockyou.txt + OneRuleToRuleThemStill.rule")
+    print(f"  Keyspace: ~{hash_count:,} hashes x 693B candidates")
     time.sleep(3)
 
     # Verify started
@@ -280,7 +278,7 @@ def run_benchmark(config, batch, dry_run=False):
             print(f"  Log: {log}")
         except Exception:
             pass
-        raise RuntimeError(f"hashcat failed to start for {screen_name}")
+        raise RuntimeError(f"hashcat failed to start")
 
     # Poll for completion
     start = time.time()
@@ -304,13 +302,13 @@ def run_benchmark(config, batch, dry_run=False):
                         progress = f" | {p.strip()}"
                 except Exception:
                     pass
-                print(f"  [{el}] running - potfile: {pot:,}{progress}")
+                print(f"  [{el}] running - cracked: {pot:,}{progress}")
             elif done:
-                print(f"  Finished (log confirmed)")
+                print(f"  [{el}] Finished (log confirmed)")
                 break
             else:
                 not_running += 1
-                print(f"  [{el}] not detected ({not_running}/2) - potfile: {pot:,}")
+                print(f"  [{el}] not detected ({not_running}/2) - cracked: {pot:,}")
                 if not_running >= 2:
                     print(f"  Stopped")
                     break
@@ -334,20 +332,21 @@ def run_benchmark(config, batch, dry_run=False):
 
     # Get final crack count
     crack_count = get_potfile_count(config, potfile_name)
-    rate = crack_count / hash_count * 100 if hash_count > 0 else 0
     elapsed = time.time() - start
-    print(f"  Result: {crack_count:,} / {hash_count:,} ({rate:.1f}%) in {fmt_dur(elapsed)}")
+    rate = crack_count / hash_count * 100 if hash_count > 0 else 0
+    print(f"\n  Result: {crack_count:,} / {hash_count:,} ({rate:.2f}%) in {fmt_dur(elapsed)}")
 
     # Clean up remote files
     try:
         ssh_cmd(config, (
-            f"rm -f {config.work_dir}/hashlists/{batch}.txt "
-            f"{config.work_dir}/potfiles/{potfile_name}"
+            f"rm -f {config.work_dir}/hashlists/{CHUNK_NAME}.txt "
+            f"{config.work_dir}/potfiles/{potfile_name} "
+            f"{log_file}"
         ), timeout=10)
     except Exception:
         pass
 
-    return hash_count, crack_count
+    return crack_count
 
 
 # =============================================================================
@@ -425,9 +424,9 @@ def main():
         print("No gravel batches found.")
         return
 
-    # Select batches to benchmark
+    # Select batches
     if specific_batches:
-        batches = [b for b in specific_batches if b in [x for x in all_batches]]
+        batches = [b for b in specific_batches if b in all_batches]
         missing = [b for b in specific_batches if b not in all_batches]
         if missing:
             print(f"WARNING: batches not found: {', '.join(missing)}")
@@ -435,7 +434,7 @@ def main():
         batches = select_samples(all_batches, n_samples)
 
     print(f"\n{'=' * 60}")
-    print(f"  ROCKYOU BENCHMARK")
+    print(f"  ROCKYOU BENCHMARK (chunked)")
     print(f"  Attack: rockyou.txt + OneRuleToRuleThemStill.rule")
     print(f"  Batches: {len(batches)} of {len(all_batches)} gravel batches")
     print(f"{'=' * 60}")
@@ -443,76 +442,59 @@ def main():
     for b in batches:
         print(f"  - {b}")
 
+    # Build chunk locally
+    print(f"\n  Building combined chunk from {len(batches)} batches...")
+    chunk_path = os.path.join(tempfile.gettempdir(), f"{CHUNK_NAME}.txt")
+    hash_count = build_chunk(batches, chunk_path)
+    chunk_size = os.path.getsize(chunk_path)
+    print(f"  Chunk: {hash_count:,} hashes ({chunk_size / 1024 / 1024:.1f} MB)")
+
     if dry_run:
-        print(f"\n[DRY RUN] Would benchmark {len(batches)} batches")
+        print(f"\n[DRY RUN] Would benchmark {len(batches)} batches ({hash_count:,} hashes)")
+        os.remove(chunk_path)
         return
 
     config = BigRedConfig()
     print(f"\nBIGRED: {config.user}@{config.host}")
 
     if not preflight(config):
+        os.remove(chunk_path)
         sys.exit(1)
 
-    # Run benchmarks
-    results = []
+    # Run benchmark
     t0 = time.time()
+    try:
+        crack_count = run_benchmark(config, chunk_path, hash_count)
+    except KeyboardInterrupt:
+        print("\n\nInterrupted.")
+        os.remove(chunk_path)
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n  ERROR: {e}")
+        os.remove(chunk_path)
+        sys.exit(1)
+    finally:
+        if os.path.exists(chunk_path):
+            os.remove(chunk_path)
 
-    for i, batch in enumerate(batches):
-        try:
-            hash_count, crack_count = run_benchmark(config, batch)
-            results.append((batch, hash_count, crack_count))
-
-            done = len(results)
-            avg_time = (time.time() - t0) / done
-            remaining = avg_time * (len(batches) - done)
-            print(f"  Progress: {done}/{len(batches)} | ETA: {fmt_dur(remaining)}")
-
-        except KeyboardInterrupt:
-            print(f"\n\nInterrupted after {len(results)} batches.")
-            break
-
-        except Exception as e:
-            print(f"\n  ERROR on {batch}: {e}")
-            time.sleep(30)
-            if not wait_for_connection(config):
-                print("  BIGRED unreachable. Stopping.")
-                break
+    elapsed = time.time() - t0
+    rate = crack_count / hash_count * 100 if hash_count > 0 else 0
 
     # Summary
-    if not results:
-        print("No results.")
-        return
-
-    total_hashes = sum(h for _, h, _ in results)
-    total_cracks = sum(c for _, _, c in results)
-    overall_rate = total_cracks / total_hashes * 100 if total_hashes > 0 else 0
-    elapsed = time.time() - t0
-
     print(f"\n{'=' * 60}")
     print(f"  ROCKYOU BENCHMARK RESULTS")
     print(f"{'=' * 60}")
-    print(f"\n  Attack: rockyou.txt + OneRuleToRuleThemStill.rule")
-    print(f"  Batches sampled: {len(results)}")
-    print(f"  Time: {fmt_dur(elapsed)}")
+    print(f"\n  Attack:   rockyou.txt + OneRuleToRuleThemStill.rule")
+    print(f"  Batches:  {len(batches)} evenly-spaced from {len(all_batches)} total")
+    print(f"  Hashes:   {hash_count:,}")
+    print(f"  Cracked:  {crack_count:,}")
+    print(f"  Rate:     {rate:.2f}%")
+    print(f"  Time:     {fmt_dur(elapsed)}")
     print()
-    print(f"  {'Batch':<16} {'Hashes':>10} {'Cracked':>10} {'Rate':>8}")
-    print(f"  {'-'*16} {'-'*10} {'-'*10} {'-'*8}")
-
-    rates = []
-    for batch, hc, cc in results:
-        rate = cc / hc * 100 if hc > 0 else 0
-        rates.append(rate)
-        print(f"  {batch:<16} {hc:>10,} {cc:>10,} {rate:>7.1f}%")
-
-    print(f"  {'-'*16} {'-'*10} {'-'*10} {'-'*8}")
-    print(f"  {'TOTAL':<16} {total_hashes:>10,} {total_cracks:>10,} {overall_rate:>7.1f}%")
-
-    min_rate = min(rates)
-    max_rate = max(rates)
-    print(f"\n  Overall: {overall_rate:.1f}% ({min_rate:.1f}% - {max_rate:.1f}% range)")
-    print(f"\n  Compare: nocap.txt + nocap.rule = 30.0% (29.8% - 30.2%)")
-    print(f"  Delta:   nocap adds {overall_rate - 30.0:+.1f}pp" if overall_rate != 30.0
-          else f"  Delta:   identical")
+    print(f"  --- COMPARISON ---")
+    print(f"  nocap.txt + nocap.rule:                29.99% (all 4,328 batches)")
+    print(f"  rockyou.txt + OneRuleToRuleThemStill:  {rate:.2f}% ({len(batches)}-batch sample)")
+    print(f"  Delta:                                 {rate - 29.99:+.2f}pp")
 
 
 if __name__ == "__main__":

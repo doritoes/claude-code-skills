@@ -20,6 +20,13 @@ import { DATA_DIR as CONFIG_DATA_DIR } from "./config";
 
 export type BatchStatus = "pending" | "in_progress" | "completed" | "failed";
 
+export interface AttackResultEntry {
+  attack: string;
+  newCracks: number;
+  durationSeconds: number;
+  crackRate: number;  // newCracks / hashCount
+}
+
 export interface BatchState {
   hashlistId: number;
   hashCount: number;
@@ -27,6 +34,7 @@ export interface BatchState {
   attacksRemaining: string[];
   taskIds: Record<string, number>;  // attackName -> taskId
   cracked: number;
+  attackResults: AttackResultEntry[];
   startedAt: string;
   lastAttackAt?: string;
   completedAt?: string;
@@ -223,6 +231,13 @@ export class SandStateManager {
           attackOrder: this.state!.attackOrder || [...DEFAULT_ATTACK_ORDER],
         };
 
+        // Migration: add attackResults to existing batches that lack it
+        for (const batch of Object.values(this.state.batches)) {
+          if (!batch.attackResults) {
+            batch.attackResults = [];
+          }
+        }
+
         return this.state!;
       } catch (e) {
         console.error(`Warning: Could not parse sand-state file, creating new: ${e}`);
@@ -356,6 +371,7 @@ export class SandStateManager {
       attacksRemaining: [...currentOrder],
       taskIds: {},
       cracked: 0,
+      attackResults: [],
       startedAt: new Date().toISOString(),
       status: "pending",
     };
@@ -419,6 +435,14 @@ export class SandStateManager {
     batch.attacksApplied.push(attackName);
     batch.cracked += crackedCount;
     batch.lastAttackAt = new Date().toISOString();
+
+    // Record per-attack result (primary record for ROI analysis)
+    batch.attackResults.push({
+      attack: attackName,
+      newCracks: crackedCount,
+      durationSeconds,
+      crackRate: batch.hashCount > 0 ? crackedCount / batch.hashCount : 0,
+    });
 
     // Check if batch is complete
     if (batch.attacksRemaining.length === 0) {

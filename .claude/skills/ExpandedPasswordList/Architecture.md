@@ -6,7 +6,7 @@
 |------|------------|---------------|
 | **ROCKS** | Full HIBP Pwned Passwords | ~1B SHA-1 hashes |
 | **GRAVEL** | ROCKS minus rockyou.txt matches | ~985M hashes |
-| **PEARLS** | Cracked passwords (Stage 1: rockyou+OneRule) | ~150M passwords |
+| **PEARLS** | Cracked passwords (Stage 1: dict+rules, ~30%) | ~644M passwords |
 | **SAND** | GRAVEL minus PEARLS (uncracked after Stage 1) | ~835M hashes |
 | **DIAMONDS** | Cracked passwords from SAND (Stage 2+: escalating attacks) | ~100M passwords |
 | **GLASS** | SAND minus DIAMONDS (uncrackable via rules) | ~735M hashes |
@@ -17,11 +17,11 @@
 ```
 ROCKS (1B) ──filter──► GRAVEL (985M)
                            │
-                           ▼ Stage 1: rockyou+OneRule
+                           ▼ Stage 1: dict+rules (~30%)
                            │
               ┌────────────┴────────────┐
               ▼                         ▼
-         PEARLS (150M)              SAND (835M)
+         PEARLS (644M)             SAND (1.5B)
               │                         │
               │                         ▼ Stage 2+: Escalating attacks
               │                         │    (best64, dive, hybrid, mask,
@@ -62,6 +62,35 @@ This metadata is preserved throughout the pipeline for prioritization.
 - `data/gravel/counts-index.txt` - HASH:COUNT for all GRAVEL
 - `data/results/pearls-prioritized.txt` - PEARLS sorted by frequency
 - `data/results/pearls-with-counts.txt` - PASSWORD:COUNT for analysis
+- `data/hibp-top1000-uncracked.txt` - 50 uncracked hashes from HIBP top 1000
+
+### HIBP Top 1000 Coverage (2026-02-20)
+
+Measured against the 1,000 most frequently breached password hashes in HIBP (minimum 491,297 occurrences each, maximum 209,972,844).
+
+| Source | Cracked | % |
+|--------|---------|---|
+| nocap.txt direct match (SHA-1 of wordlist entry) | 866 | 86.6% |
+| nocap.txt + nocap.rule via hashcat (Stage 1 PEARLS) | 84 | 8.4% |
+| **TOTAL** | **950** | **95.0%** |
+| Uncracked | 50 | 5.0% |
+
+**Coverage by occurrence bracket:**
+
+| Bracket | Hashes | Cracked | Rate |
+|---------|--------|---------|------|
+| 100M+ | 1 | 1 | 100% |
+| 10M+ | 20 | 20 | 100% |
+| 1M+ | 385 | 367 | 95% |
+| 100K+ (full top 1000) | 1,000 | 950 | 95% |
+
+**Key findings:**
+- 100% coverage of all 20 hashes with 10M+ breach occurrences
+- The 50 uncracked were NOT found in Gen1 Stage 2 diamonds (including batch-0001 brute-8)
+- Top uncracked hash has 7.4M occurrences — likely non-UTF-8, binary, or locale-specific encoding
+- PEARL standouts in top 1000: `NULL` (#19, 10.6M), `None` (#25, 7.9M), `Pass@123` (#31, 6.3M)
+
+**Methodology:** Script at `scratchpad/hibp_top1000_coverage.py`. Uses cached top 1000 from full HIBP scan (`scratchpad/hibp_top1000_cache.json`) to avoid 24-minute rescan. Phase 1 hashes all nocap.txt entries (~9s), Phase 2 scans pearls master file (~8 min for 644M lines).
 
 **Usage:**
 ```bash
@@ -155,8 +184,8 @@ bun Tools/BatchSplitter.ts   # Creates pearls/ and sand/ directories
                                     │
                                     ▼
                          ┌───────────────────┐
-                         │   STAGE 1 CRACK   │  rockyou + OneRule
-                         │   15-25% cracked  │  Hashcrack parallel
+                         │   STAGE 1 CRACK   │  dict + rules (~30%)
+                         │   29.99% cracked  │  BIGRED local GPU
                          └───────────────────┘
                                     │
                     ┌───────────────┴───────────────┐
@@ -443,11 +472,14 @@ Use PEARLS to create better wordlists and rules, then measure improvement.
                     └──────────────┬──────────────┘
                                    ▼
        ┌─────────────────────────────────────────────────────────────┐
-       │                    BENCHMARK TEST                           │
+       │                    BENCHMARK TEST (2026-02-20)              │
        ├─────────────────────────────────────────────────────────────┤
-       │  Baseline:  rockyou.txt + OneRule                          │
-       │  Enhanced:  rockyou.txt + GLASS + UNOBTAINIUM              │
-       │  Measure:   Crack rate improvement on GRAVEL sample        │
+       │  nocap.txt + nocap.rule:               29.99% (all 4,328)  │
+       │  rockyou.txt + OneRuleToRuleThemStill:  29.96% (10 sample) │
+       │  Delta:                                 +0.03pp            │
+       │                                                             │
+       │  Conclusion: Base wordlist swap adds negligible value.      │
+       │  Real improvement comes from Stage 2 feedback pipeline.    │
        └─────────────────────────────────────────────────────────────┘
 ```
 

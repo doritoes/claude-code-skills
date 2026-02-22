@@ -30,6 +30,7 @@ import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+// decodeHexPlain no longer needed here — $HEX decoding happens at potfile ingest (BigRedRunner/GravelProcessor)
 
 // HIBP frequency threshold: roots with this many HIBP occurrences are included
 // in BETA.txt regardless of local batch frequency
@@ -472,9 +473,19 @@ async function analyzePasswords(inputPath: string): Promise<AnalysisResult> {
   for await (const line of rl) {
     result.totalPasswords++;
 
-    // Handle HASH:PASSWORD format
-    const password = line.includes(":") ? line.split(":").slice(1).join(":") : line;
-    if (!password || password.startsWith("$HEX[")) continue;
+    // Parse line: JSONL {"hash":"...","plain":"..."}, plain text, or legacy hash:password
+    let password: string;
+    if (line.startsWith("{")) {
+      try {
+        const obj = JSON.parse(line);
+        password = obj.plain || "";
+      } catch {
+        continue;
+      }
+    } else {
+      password = line;
+    }
+    if (!password) continue;
 
     // Dedup
     if (seen.has(password)) continue;

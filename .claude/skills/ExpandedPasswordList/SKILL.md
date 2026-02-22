@@ -25,9 +25,30 @@ Research pipeline to study password cracking effectiveness and improve tools.
 
 ### Scale
 
-- **HIBP total**: 4,000+ batches (~1B SHA-1 hashes). We've processed only 162 SAND batches so far — a small fraction.
-- **Progress**: 12 batches completed (266,637 cracks), 150 pending, thousands more available.
+- **HIBP total**: ~2.17B SHA-1 hashes across 4,340 batches (500K each)
+- **Stage 1 COMPLETE** (2026-02-20): All 4,328 GRAVEL batches processed
+  - 644,544,278 PEARLS (29.99% crack rate) via nocap.txt + nocap.rule
+  - 1,504,909,773 SAND remaining for Stage 2
+- **Stage 2**: 12 Gen1 batches completed (266,637 diamonds, ~6.5% per batch), Gen2 pending
+- **HIBP Top 1000 Coverage**: nocap.txt + nocap.rule cracks **950/1000 (95.0%)** of the most frequently breached passwords
+  - 50 uncracked hashes saved to `data/hibp-top1000-uncracked.txt` for future analysis
 - Every batch teaches us something. Every crack is a data point.
+
+### Stage 1 Attack Comparison (Benchmarked 2026-02-20)
+
+Both attacks produce virtually identical crack rates on GRAVEL:
+
+| Attack | Hashes Tested | Cracked | Rate | Rules | Wordlist Size |
+|--------|---------------|---------|------|-------|---------------|
+| **nocap.txt + nocap.rule** | 2,149,454,051 (all 4,328 batches) | 644,544,278 | **29.99%** | 48,483 | 13.8M |
+| **rockyou.txt + OneRuleToRuleThemStill.rule** | 4,967,192 (10-batch sample) | 1,488,273 | **29.96%** | 48,439 | 14.3M |
+| **Delta** | | | **+0.03pp** | | |
+
+Per-batch rate range for nocap: 29.66% - 30.33% (remarkably consistent across all 4,328 batches).
+
+**Key insight:** The rizzyou.txt supplement (203 GenZ roots added to rockyou → nocap.txt) and the 44 extra rules in nocap.rule do not measurably improve Stage 1 crack rate. The two rule files are near-identical (48K rules each, ~487KB). The real value of the expanded pipeline comes from Stage 2 feedback attacks (BETA.txt, UNOBTAINIUM.rule, cohort wordlists).
+
+**Benchmark tool:** `Tools/rockyou_benchmark.py` — selects N evenly-spaced gravel batches, combines into one chunk, runs hashcat on BIGRED, reports crack rate.
 
 ### Constraints
 
@@ -39,7 +60,7 @@ Research pipeline to study password cracking effectiveness and improve tools.
 
 | Output | Insight |
 |--------|---------|
-| **PEARLS** | Validates current tools work (rockyou + OneRule) |
+| **PEARLS** | Validates dict+rules baseline (~30% — identical for rockyou+OneRule and nocap+nocaprule) |
 | **SAND** | Reveals gaps in current approach |
 | **DIAMONDS** | Shows what additional attacks find (improvement opportunities) |
 | **GLASS** | Either truly random OR patterns we haven't figured out |
@@ -107,7 +128,7 @@ bun Tools/PipelineMonitor.ts --quick
 ROCKS       →  Full HIBP Pwned Passwords (~1B SHA-1 hashes)
 GRAVEL      →  ROCKS minus rockyou.txt matches (~985M hashes)
                 │
-                ├──► PEARLS   →  Stage 1 cracked (rockyou+OneRule)
+                ├──► PEARLS   →  Stage 1 cracked (nocap+nocaprule, ~30%)
                 │
                 └──► SAND     →  Stage 1 uncracked (hard passwords)
                                   │

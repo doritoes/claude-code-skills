@@ -7,10 +7,8 @@
  * already exist with matching size.
  *
  * Usage:
- *   bun Tools/BigRedSync.ts                      Sync all wordlists + rules
- *   bun Tools/BigRedSync.ts --force               Re-upload everything
- *   bun Tools/BigRedSync.ts --hashlist batch-0008  Upload specific batch hashlist
- *   bun Tools/BigRedSync.ts --status              Show remote file status
+ *   bun Tools/BigRedSync.ts                      Sync changed wordlists + rules (md5 compare)
+ *   bun Tools/BigRedSync.ts --hashlist batch-0008  Sync attack files + upload hashlist (main workflow command)
  *
  * @author PAI (Personal AI Infrastructure)
  * @license MIT
@@ -171,35 +169,65 @@ function getFileManifest(workDir: string): SyncFile[] {
 // Sync Logic
 // =============================================================================
 
-async function getRemoteFileSize(config: BigRedConfig, remotePath: string): Promise<number> {
+function getLocalMd5(filePath: string): string {
+  // Use system md5sum — fast even for large files
+  const cmd = process.platform === "win32"
+    ? `certutil -hashfile "${filePath}" MD5`
+    : `md5sum "${filePath}"`;
   try {
-    const result = sshCmd(config, `stat -c %s ${remotePath} 2>/dev/null || echo -1`);
-    return parseInt(result) || -1;
+    const result = execSync(cmd, { encoding: "utf-8", shell: SHELL, timeout: 120000 }).trim();
+    if (process.platform === "win32") {
+      // certutil output: line 1 = header, line 2 = hash, line 3 = footer
+      const lines = result.split("\n").map(l => l.trim());
+      return (lines[1] || "").replace(/\s/g, "").toLowerCase();
+    }
+    return result.split(/\s/)[0].toLowerCase();
   } catch {
-    return -1;
+    return "";
+  }
+}
+
+function getRemoteMd5(config: BigRedConfig, remotePath: string): string {
+  try {
+    const result = sshCmd(config, `md5sum ${remotePath} 2>/dev/null || echo MISSING`, 120000);
+    if (result === "MISSING" || result.includes("No such file")) return "";
+    return result.split(/\s/)[0].toLowerCase();
+  } catch {
+    return "";
   }
 }
 
 async function syncFile(config: BigRedConfig, file: SyncFile, force: boolean): Promise<boolean> {
-  // Check local file exists
   if (!existsSync(file.localPath)) {
     console.log(`  SKIP  ${file.description} — local file not found`);
     return false;
   }
 
   const localSize = statSync(file.localPath).size;
-  const remoteSize = await getRemoteFileSize(config, file.remotePath);
+  const localMd5 = getLocalMd5(file.localPath);
+  const remoteMd5 = getRemoteMd5(config, file.remotePath);
 
-  if (!force && remoteSize === localSize) {
-    console.log(`  OK    ${file.description} (${formatSize(localSize)})`);
+  if (remoteMd5 === "") {
+    // File missing on BIGRED
+    console.log(`  UPLOAD  ${file.description} (${formatSize(localSize)})...`);
+    scpUpload(config, file.localPath, file.remotePath);
+    console.log(`          Done.`);
+    return true;
+  }
+
+  if (!force && localMd5 === remoteMd5) {
+    console.log(`  OK      ${file.description} (${formatSize(localSize)}, md5 match)`);
     return false;
   }
 
-  const action = remoteSize === -1 ? "UPLOAD" : "UPDATE";
-  console.log(`  ${action}  ${file.description} (${formatSize(localSize)})...`);
+  if (force && localMd5 === remoteMd5) {
+    console.log(`  OK      ${file.description} (${formatSize(localSize)}, md5 match — skip)`);
+    return false;
+  }
 
+  console.log(`  UPDATE  ${file.description} (${formatSize(localSize)}, md5 changed)...`);
   scpUpload(config, file.localPath, file.remotePath);
-  console.log(`        Done.`);
+  console.log(`          Done.`);
   return true;
 }
 
@@ -251,57 +279,18 @@ function formatSize(bytes: number): string {
   return `${bytes}B`;
 }
 
-async function showStatus(config: BigRedConfig): Promise<void> {
-  console.log("\nBIGRED File Status");
-  console.log("==================");
-  console.log(`Host: ${config.host} (user: ${config.user})\n`);
-
-  const result = sshCmd(config, `find ${config.workDir} -type f -exec ls -lh {} \\; 2>/dev/null | sort`);
-  if (!result) {
-    console.log("  (no files found)");
-    return;
-  }
-
-  // Parse and display
-  for (const line of result.split("\n")) {
-    if (!line.trim()) continue;
-    const parts = line.split(/\s+/);
-    const size = parts[4] || "?";
-    const path = parts[parts.length - 1] || "";
-    const relPath = path.replace(config.workDir + "/", "");
-    console.log(`  ${relPath.padEnd(45)} ${size}`);
-  }
-
-  // GPU status
-  console.log("\nGPU Status:");
-  try {
-    const gpu = sshCmd(config, "nvidia-smi --query-gpu=name,temperature.gpu,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null || echo 'nvidia-smi not available'");
-    console.log(`  ${gpu}`);
-  } catch {
-    console.log("  (nvidia-smi not available)");
-  }
-}
-
 // =============================================================================
 // CLI
 // =============================================================================
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  let force = false;
   let hashlist: string | undefined;
-  let statusOnly = false;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case "--force":
-        force = true;
-        break;
       case "--hashlist":
         hashlist = args[++i];
-        break;
-      case "--status":
-        statusOnly = true;
         break;
       case "--help":
       case "-h":
@@ -309,13 +298,10 @@ if (import.meta.main) {
 BigRedSync - File Synchronization to BIGRED GPU Server
 
 Usage:
-  bun Tools/BigRedSync.ts                       Sync all wordlists + rules
-  bun Tools/BigRedSync.ts --force                Re-upload everything
-  bun Tools/BigRedSync.ts --hashlist batch-0008  Upload specific batch hashlist
-  bun Tools/BigRedSync.ts --status               Show remote file status
+  bun Tools/BigRedSync.ts                       Sync all wordlists + rules (md5 compare)
+  bun Tools/BigRedSync.ts --hashlist batch-0008  Sync attack files + upload hashlist
 
 Configuration: .env (BIGRED_HOST, BIGRED_USER, BIGRED_SSH_KEY, BIGRED_WORK_DIR)
-Remote dir:    Configured via BIGRED_WORK_DIR (default: /home/<user>/hashcat-work)
 `);
         process.exit(0);
     }
@@ -333,34 +319,42 @@ Remote dir:    Configured via BIGRED_WORK_DIR (default: /home/<user>/hashcat-wor
       process.exit(1);
     }
 
-    if (statusOnly) {
-      await showStatus(config);
-      process.exit(0);
-    }
-
     // Ensure remote directories exist
     sshCmd(config, `mkdir -p ${config.workDir}/{wordlists,rules,hashlists,potfiles,results}`);
 
-    if (hashlist) {
-      // Upload specific hashlist
-      console.log(`\nSyncing hashlist: ${hashlist}`);
-      await syncHashlist(config, hashlist);
+    // Sync all attack files (md5 compare, upload only changes)
+    console.log(`\nSyncing attack files...`);
+    const manifest = getFileManifest(config.workDir);
+    const missing: string[] = [];
+    let uploaded = 0;
+
+    for (const file of manifest) {
+      if (!existsSync(file.localPath)) {
+        missing.push(file.description);
+        continue;
+      }
+      const changed = await syncFile(config, file, false);
+      if (changed) uploaded++;
+    }
+
+    if (missing.length > 0) {
+      console.error(`\nBLOCKED: ${missing.length} local file(s) not found:`);
+      for (const m of missing) console.error(`  ${m}`);
+      process.exit(1);
+    }
+
+    if (uploaded > 0) {
+      console.log(`  ${uploaded} file(s) updated on BIGRED.`);
     } else {
-      // Sync all standard files
-      console.log(`\nSyncing attack files${force ? " (FORCE)" : ""}:`);
-      const manifest = getFileManifest(config.workDir);
-      let uploaded = 0;
+      console.log(`  All ${manifest.length} attack files up to date.`);
+    }
 
-      for (const file of manifest) {
-        const changed = await syncFile(config, file, force);
-        if (changed) uploaded++;
-      }
+    if (hashlist) {
+      console.log(`\nUploading hashlist: ${hashlist}`);
+      await syncHashlist(config, hashlist);
 
-      if (uploaded === 0) {
-        console.log("\nAll files up to date.");
-      } else {
-        console.log(`\n${uploaded} file(s) uploaded.`);
-      }
+      const batchNum = hashlist.replace("batch-", "").replace(/^0+/, "") || "0";
+      console.log(`\nReady: bun Tools/BigRedRunner.ts --batch ${batchNum}`);
     }
 
     console.log("\nDone.");

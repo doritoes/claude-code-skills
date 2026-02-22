@@ -24,10 +24,10 @@
  * @license MIT
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
-import { DATA_DIR, GRAVEL_DIR, SAND_DIR, PEARLS_DIR, HASH_TYPE_SHA1 } from "./config";
+import { DATA_DIR, GRAVEL_DIR, SAND_DIR, PEARLS_DIR, HASH_TYPE_SHA1, decodeHexPlain } from "./config";
 import { loadConfig, sshCmd, scpUpload, scpDownload, type BigRedConfig } from "./BigRedSync";
 
 // =============================================================================
@@ -448,28 +448,29 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   const lines = potContent.trim().split("\n").filter(l => l.includes(":"));
 
   const crackedHashes = new Set<string>();
-  const hashPlainPairs: string[] = [];
+  const parsedPairs: { hash: string; plain: string }[] = [];
   const passwords: string[] = [];
 
   for (const line of lines) {
     const colonIdx = line.indexOf(":");
     if (colonIdx < 0) continue;
     const hash = line.slice(0, colonIdx).trim().toLowerCase();
-    const plain = line.slice(colonIdx + 1);
+    const plain = decodeHexPlain(line.slice(colonIdx + 1));
 
     if (/^[a-f0-9]{40}$/.test(hash)) {
       crackedHashes.add(hash);
-      hashPlainPairs.push(`${hash}:${plain}`);
+      parsedPairs.push({ hash, plain });
       passwords.push(plain);
     }
   }
 
-  console.log(`PEARLS: ${hashPlainPairs.length.toLocaleString()} cracked passwords`);
+  console.log(`PEARLS: ${parsedPairs.length.toLocaleString()} cracked passwords`);
 
-  // Write PEARLS (hash:plain pairs)
-  const pearlsPath = resolve(PEARLS_DIR, `${batchName}.pot`);
-  writeFileSync(pearlsPath, hashPlainPairs.join("\n") + "\n");
-  console.log(`  → ${pearlsPath}`);
+  // Append to single JSONL file (one JSON object per line — no delimiter ambiguity)
+  const pearlsJsonlPath = resolve(PEARLS_DIR, "hash_plaintext_pairs.jsonl");
+  const jsonlContent = parsedPairs.map(p => JSON.stringify(p)).join("\n") + "\n";
+  appendFileSync(pearlsJsonlPath, jsonlContent);
+  console.log(`  → ${pearlsJsonlPath} (appended ${parsedPairs.length.toLocaleString()})`);
 
   // Load GRAVEL batch to compute SAND
   const gravelPath = resolve(GRAVEL_DIR, `${batchName}.txt`);
@@ -493,27 +494,27 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   writeFileSync(sandPath, gzipSync(Buffer.from(sandContent)));
   console.log(`  → ${sandPath}`);
 
-  const crackRate = totalHashes > 0 ? (hashPlainPairs.length / totalHashes * 100).toFixed(2) : "0";
-  console.log(`\nResults: ${hashPlainPairs.length.toLocaleString()} / ${totalHashes.toLocaleString()} (${crackRate}%)`);
+  const crackRate = totalHashes > 0 ? (parsedPairs.length / totalHashes * 100).toFixed(2) : "0";
+  console.log(`\nResults: ${parsedPairs.length.toLocaleString()} / ${totalHashes.toLocaleString()} (${crackRate}%)`);
 
   // Verify invariant: GRAVEL = PEARLS + SAND
-  const check = hashPlainPairs.length + sandHashes.length;
+  const check = parsedPairs.length + sandHashes.length;
   if (check !== totalHashes) {
-    console.error(`WARNING: Invariant violation! PEARLS(${hashPlainPairs.length}) + SAND(${sandHashes.length}) = ${check} != GRAVEL(${totalHashes})`);
+    console.error(`WARNING: Invariant violation! PEARLS(${parsedPairs.length}) + SAND(${sandHashes.length}) = ${check} != GRAVEL(${totalHashes})`);
   } else {
-    console.log(`Invariant OK: PEARLS(${hashPlainPairs.length}) + SAND(${sandHashes.length}) = GRAVEL(${totalHashes})`);
+    console.log(`Invariant OK: PEARLS(${parsedPairs.length}) + SAND(${sandHashes.length}) = GRAVEL(${totalHashes})`);
   }
 
   // Update gravel-state
   const state = loadGravelState();
   const batch = state.batches[batchName];
   if (batch) {
-    batch.pearlCount = hashPlainPairs.length;
+    batch.pearlCount = parsedPairs.length;
     batch.sandCount = sandHashes.length;
     batch.status = "completed";
     batch.completedAt = new Date().toISOString();
     state.totalProcessed++;
-    state.totalPearls += hashPlainPairs.length;
+    state.totalPearls += parsedPairs.length;
     state.totalSand += sandHashes.length;
     saveGravelState(state);
     console.log(`  Updated gravel-state.json`);
