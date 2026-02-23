@@ -178,26 +178,52 @@ function formatText(report: CTIReport): string {
   lines.push(`${BOLD}${CYAN}▌ EXPLOITATION TRENDS${RESET}`);
   lines.push(`${DIM}${"─".repeat(50)}${RESET}`);
 
-  // KEV Delta
+  // KEV Delta — show what was actually added
   lines.push(
     `${BOLD}KEV Catalog:${RESET} ${report.kevDelta.totalCurrent} total ` +
       `(${YELLOW}+${report.kevDelta.newEntries.length}${RESET} this period)`
   );
+  if (report.kevDelta.newEntries.length > 0) {
+    const showEntries = report.kevDelta.newEntries.slice(0, 5);
+    for (const entry of showEntries) {
+      const vendor = entry.affectedProducts[0] || "Unknown";
+      const ransomTag = entry.ransomwareAssociated ? ` ${RED}[RANSOMWARE]${RESET}` : "";
+      lines.push(
+        `  ${YELLOW}NEW${RESET}  ${BOLD}${entry.id}${RESET} ${vendor}${ransomTag}`
+      );
+      lines.push(
+        `       ${DIM}${truncateText(entry.title, 56)}${RESET}`
+      );
+    }
+    if (report.kevDelta.newEntries.length > 5) {
+      lines.push(`  ${DIM}... +${report.kevDelta.newEntries.length - 5} more${RESET}`);
+    }
+  }
+  lines.push("");
 
-  // EPSS Spikes
+  // EPSS Spikes — with product context
   if (report.epssSpikes.length > 0) {
     lines.push(`${BOLD}EPSS Spikes:${RESET}`);
     for (const spike of report.epssSpikes.slice(0, 3)) {
+      const scoreColor = spike.currentScore > 0.5 ? RED : YELLOW;
       lines.push(
-        `  ${spike.cve}: ${(spike.previousScore * 100).toFixed(1)}% → ` +
-          `${YELLOW}${(spike.currentScore * 100).toFixed(1)}%${RESET} ` +
+        `  ${BOLD}${spike.cve}${RESET}  ${(spike.previousScore * 100).toFixed(1)}% → ` +
+          `${scoreColor}${(spike.currentScore * 100).toFixed(1)}%${RESET} ` +
           `(+${spike.changePercent.toFixed(1)}%)`
       );
+      if (spike.vendorProject || spike.product) {
+        const context = [spike.vendorProject, spike.product].filter(Boolean).join(" — ");
+        lines.push(`       ${DIM}${context}${RESET}`);
+      }
+      if (spike.shortDescription) {
+        lines.push(`       ${DIM}${truncateText(spike.shortDescription, 56)}${RESET}`);
+      }
     }
   }
 
   // Ransomware campaigns
   if (report.ransomwareCampaigns.length > 0) {
+    lines.push("");
     lines.push(
       `${BOLD}Ransomware-Linked:${RESET} ${RED}${report.ransomwareCampaigns.length}${RESET} CVEs`
     );
@@ -327,17 +353,36 @@ function formatMarkdown(report: CTIReport): string {
   // Exploitation Trends
   lines.push("## Exploitation Trends");
   lines.push("");
-  lines.push(`- **KEV Catalog:** ${report.kevDelta.totalCurrent} total (+${report.kevDelta.newEntries.length} this period)`);
+  lines.push(`**KEV Catalog:** ${report.kevDelta.totalCurrent} total (+${report.kevDelta.newEntries.length} this period)`);
+
+  if (report.kevDelta.newEntries.length > 0) {
+    lines.push("");
+    lines.push("**New KEV Additions:**");
+    lines.push("");
+    lines.push("| CVE | Product | Description | Ransomware |");
+    lines.push("|-----|---------|-------------|------------|");
+    for (const entry of report.kevDelta.newEntries.slice(0, 8)) {
+      const product = entry.affectedProducts[0] || "-";
+      const desc = entry.title.length > 50 ? entry.title.slice(0, 47) + "..." : entry.title;
+      const ransomware = entry.ransomwareAssociated ? "Yes" : "No";
+      lines.push(`| ${entry.id} | ${product} | ${desc} | ${ransomware} |`);
+    }
+    if (report.kevDelta.newEntries.length > 8) {
+      lines.push("");
+      lines.push(`_... and ${report.kevDelta.newEntries.length - 8} more_`);
+    }
+  }
 
   if (report.epssSpikes.length > 0) {
     lines.push("");
     lines.push("**EPSS Score Spikes:**");
     lines.push("");
-    lines.push("| CVE | Previous | Current | Change |");
-    lines.push("|-----|----------|---------|--------|");
+    lines.push("| CVE | Vendor / Product | Previous | Current | Change |");
+    lines.push("|-----|-----------------|----------|---------|--------|");
     for (const spike of report.epssSpikes.slice(0, 5)) {
+      const context = [spike.vendorProject, spike.product].filter(Boolean).join(" / ") || "-";
       lines.push(
-        `| ${spike.cve} | ${(spike.previousScore * 100).toFixed(1)}% | ${(spike.currentScore * 100).toFixed(1)}% | +${spike.changePercent.toFixed(1)}% |`
+        `| ${spike.cve} | ${context} | ${(spike.previousScore * 100).toFixed(1)}% | ${(spike.currentScore * 100).toFixed(1)}% | +${spike.changePercent.toFixed(1)}% |`
       );
     }
   }
@@ -421,6 +466,11 @@ function getTlpColor(level: string): string {
     default:
       return COLORS.RESET;
   }
+}
+
+function truncateText(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 3) + "...";
 }
 
 function wrapText(text: string, maxWidth: number): string[] {
