@@ -461,31 +461,45 @@ function runAttackDetached(
 // Status Checking
 // =============================================================================
 
-function showStatus(config: BigRedConfig, batchName: string): void {
+function showStatus(config: BigRedConfig, batchName?: string): void {
   console.log("\nBIGRED Status");
   console.log("=============");
   console.log(`Host: ${config.host}\n`);
 
-  // Check if hashcat is running
-  try {
-    const procs = sshCmd(config, "ps aux | grep '[h]ashcat' || echo 'No hashcat processes'");
-    console.log("Hashcat processes:");
-    console.log(`  ${procs}`);
-  } catch {
-    console.log("  (could not check processes)");
-  }
-
-  // Check screen sessions
+  // Detect which batch is actually running from screen session name
+  let runningBatch: string | null = null;
   try {
     const screens = sshCmd(config, "screen -ls 2>/dev/null || echo 'No screen sessions'");
-    console.log(`\nScreen sessions:\n  ${screens}`);
+    const screenMatch = screens.match(/hc-(batch-\d+)/);
+    if (screenMatch) {
+      runningBatch = screenMatch[1];
+    }
+    console.log(`Screen sessions:\n  ${screens}`);
   } catch {
-    console.log("\n  (no screen sessions)");
+    console.log("  (no screen sessions)");
   }
 
-  // Potfile stats
-  const potCount = getPotfileCount(config, batchName);
-  console.log(`\nPotfile (${batchName}): ${potCount.toLocaleString()} cracked`);
+  // Warn if queried batch differs from running batch
+  if (batchName && runningBatch && runningBatch !== batchName) {
+    console.log(`\n  ⚠ NOTE: ${runningBatch} is running, not ${batchName}`);
+    console.log(`  Use --batch ${runningBatch.replace("batch-", "").replace(/^0+/, "")} --status for live stats`);
+  }
+
+  const hashcatRunning = isHashcatRunning(config);
+
+  // Show potfile stats
+  const effectiveBatch = runningBatch || batchName;
+  if (batchName && runningBatch && runningBatch !== batchName && hashcatRunning) {
+    // Queried a different batch than what's running — show both
+    const runningPotCount = getPotfileCount(config, runningBatch);
+    console.log(`\nPotfile (${runningBatch}): ${runningPotCount.toLocaleString()} cracked  ← ACTIVE`);
+    const queriedPotCount = getPotfileCount(config, batchName);
+    console.log(`Potfile (${batchName}): ${queriedPotCount.toLocaleString()} cracked`);
+  } else if (effectiveBatch) {
+    // No batch specified or matches running — show the active/requested one
+    const potCount = getPotfileCount(config, effectiveBatch);
+    console.log(`\nPotfile (${effectiveBatch}): ${potCount.toLocaleString()} cracked`);
+  }
 
   // GPU stats
   try {
@@ -496,15 +510,17 @@ function showStatus(config: BigRedConfig, batchName: string): void {
   }
 
   // If hashcat is running, try to get its status
-  if (isHashcatRunning(config)) {
-    console.log("\nhashcat is RUNNING. Send status request...");
+  if (hashcatRunning) {
+    const label = runningBatch || batchName || "unknown";
+    console.log(`\nhashcat is RUNNING (${label}). Send status request...`);
     try {
-      // Try to read hashcat status from a status file if configured
       const statusOutput = sshCmd(config, `cat ${config.workDir}/hashcat.status 2>/dev/null || echo 'No status file'`, 5000);
       if (!statusOutput.includes("No status file")) {
         console.log(statusOutput);
       }
     } catch { /* ignore */ }
+  } else {
+    console.log("\nhashcat is NOT running.");
   }
 }
 
@@ -838,7 +854,8 @@ Usage:
   bun Tools/BigRedRunner.ts --batch 8                 Run all 15 attacks for batch-0008
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7  Run single attack
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7 --detached  Run detached (screen)
-  bun Tools/BigRedRunner.ts --batch 8 --status        Check hashcat status
+  bun Tools/BigRedRunner.ts --status                   Check hashcat status (auto-detects batch)
+  bun Tools/BigRedRunner.ts --batch 8 --status        Check status for specific batch
   bun Tools/BigRedRunner.ts --batch 8 --collect       Collect results into DIAMOND pipeline
   bun Tools/BigRedRunner.ts --batch 8 --dry-run       Preview commands
 
@@ -851,18 +868,19 @@ Attack order: ${DEFAULT_ATTACK_ORDER.join(" → ")}
     }
   }
 
-  if (batchNumber === undefined) {
+  // --status works without --batch (auto-detects running batch)
+  if (batchNumber === undefined && !statusFlag) {
     console.error("ERROR: --batch <n> is required");
     process.exit(1);
   }
 
-  const paddedNum = String(batchNumber).padStart(4, "0");
-  const batchName = `batch-${paddedNum}`;
+  const paddedNum = batchNumber !== undefined ? String(batchNumber).padStart(4, "0") : undefined;
+  const batchName = paddedNum ? `batch-${paddedNum}` : undefined;
 
   try {
     const config = loadConfig();
     console.log(`BIGRED: ${config.user}@${config.host}`);
-    console.log(`Batch: ${batchName}`);
+    if (batchName) console.log(`Batch: ${batchName}`);
 
     // Test connectivity
     try {
