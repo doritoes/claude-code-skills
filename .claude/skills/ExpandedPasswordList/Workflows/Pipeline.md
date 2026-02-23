@@ -261,13 +261,13 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (15 attacks, v6.0)
+## Current Attack List (15 attacks, v6.1)
 
 Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 
 | Tier | Attack | Description | Gen2 ROI (4 batches) |
 |------|--------|-------------|----------------------|
-| 0 | brute-3, brute-4 | Exhaustive 3-4 chars | <1s, 610 cracks |
+| 0 | brute-4, brute-3 | Exhaustive 3-4 chars | <1s, 487 cracks |
 | 1 | brute-6 | Exhaustive 6 chars | 2.07%, ~1.6 min |
 | 1 | brute-7 | Exhaustive 7 chars | 2.51%, ~107 min |
 | 2 | feedback-beta-nocaprule | BETA.txt + nocap.rule | 0.11%, feedback loop |
@@ -278,8 +278,8 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | 3 | brute-5 | Exhaustive 5 chars | 0.28% |
 | 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 0.19% |
 | 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 0.15% |
-| 4 | hybrid-nocapplus-special-digits | rockyou + special + 3 digits | 0.12% |
 | 4 | mask-lllldddd | 4 lower + 4 digits | 0.19% |
+| 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits | 0.12% |
 | 4 | hybrid-nocapplus-3digit | nocap-plus + 3 digits | <0.01%, monitoring |
 
 **How to modify the attack list:** Edit `DEFAULT_ATTACK_ORDER` array in `Tools/SandStateManager.ts`. Use `AttackReview.ts` output to justify changes. The `ATTACK_CMDS` mapping in `BigRedRunner.ts` must also include any new attack name.
@@ -294,7 +294,7 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | `nocap-plus.txt` | `data/nocap-plus.txt` | nocap + all cohort files (14.4M words) |
 | `nocap.rule` | `data/nocap.rule` | 48K rules (OneRuleToRuleThemStill equivalent) |
 | `BETA.txt` | `data/feedback/BETA.txt` | Discovered roots from diamonds (~77K words) |
-| `unobtainium.rule` | `data/feedback/unobtainium.rule` | Learned rules from diamond patterns (194 rules) |
+| `unobtainium.rule` | `data/feedback/unobtainium.rule` | Learned rules from diamond patterns (20 rules, regrowing) |
 | `sand-state.json` | `data/sand-state.json` | Stage 2 state (batches, attack results, feedback metrics) |
 | `gravel-state.json` | `data/gravel-state.json` | Stage 1 state |
 | Cohort files | `data/cohorts/*.txt` | 12 language/cultural wordlists (52.8K+ words) |

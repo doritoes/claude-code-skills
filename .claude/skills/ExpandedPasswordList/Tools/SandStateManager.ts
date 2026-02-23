@@ -90,18 +90,18 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v6.0 (2026-02-22)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v6.1 (2026-02-22)
   // Applies to: batch-0005+ | 15 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.5K), UNOBTAINIUM.rule (37)
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.5K), UNOBTAINIUM.rule (20)
   // Principle: pair incremental files with established counterparts (new words × big rules, big words × new rules)
-  // Based on: Gen2 batches 0001-0004 (142,067 cracks / 1,392,400 hashes = 10.2% overall)
-  // Changes from v5.1: DROP brute-1/brute-2 (0 cracks ever), REORDER unobtainium before nocaprule,
-  //                     REORDER mask-lllldddd before hybrid-3digit
+  // Based on: Gen2 batches 0001-0004 (141,991 cracks / ~1.39M hashes)
+  // Changes from v6.0: REORDER brute-4 before brute-3 (1227/min vs 206/min),
+  //                     REORDER mask-lllldddd before hybrid-special-digits (1102/min vs 382/min)
   // ══════════════════════════════════════════════════════════════════════
   //
   // TIER 0: INSTANT (trivial keyspace, <1 second total)
-  "brute-3",     // 857K candidates - <1 second (69 cracks / 4 batches)
-  "brute-4",     // 81M candidates - ~2 seconds (541 cracks / 4 batches)
+  "brute-4",     // 81M candidates - ~2 seconds (418 cracks / 4 batches, 1227/min)
+  "brute-3",     // 857K candidates - <1 second (69 cracks / 4 batches, 206/min)
   //
   // TIER 1: HIGH ROI — 44.9% of cracks (excl. brute-8), dominates batch time
   "brute-6",     // 28,882 cracks / 4 runs (2.07% rate) — ~1.6 min
@@ -127,9 +127,9 @@ export const DEFAULT_ATTACK_ORDER = [
   // ── GATE 3: ~95% of achievable cracks done ───────────────────────
   //
   // TIER 4: LOW ROI — 4.5% of cracks
-  "mask-Ullllldd",                  // 2,130 cracks / 4 runs (0.15% rate)
-  "hybrid-nocapplus-special-digits",  // 1,658 cracks / 4 runs (0.12% rate)
-  "mask-lllldddd",                  // 2,636 cracks / 4 runs (0.19% rate) — moved up, 1,095 cracks/min
+  "mask-Ullllldd",                  // 2,129 cracks / 4 runs (0.15% rate)
+  "mask-lllldddd",                  // 2,636 cracks / 4 runs (0.19% rate, 1102/min) — reordered above special-digits
+  "hybrid-nocapplus-special-digits",  // 1,713 cracks / 4 runs (0.12% rate, 382/min)
   "hybrid-nocapplus-3digit",        // 4 cracks / 4 runs (<0.01% rate) — borderline, monitoring
   //
   // ══════════════════════════════════════════════════════════════════════
