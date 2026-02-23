@@ -162,14 +162,6 @@ export const DEFAULT_ATTACK_ORDER = [
   // 5. Next batch benefits from all prior discoveries
 ];
 
-/**
- * Feedback attacks - enabled when BETA.txt and unobtainium.rule exist
- */
-export const FEEDBACK_ATTACKS = [
-  "feedback-beta-onerule",
-  "feedback-rockyou-unobtainium",
-];
-
 // =============================================================================
 // Default State
 // =============================================================================

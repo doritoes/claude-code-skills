@@ -666,7 +666,6 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   } catch { /* non-fatal */ }
 
   console.log(`\nNext steps:`);
-  console.log(`  bun Tools/DiamondAnalyzer.ts --full ${passwordsPath}`);
   console.log(`  bun Tools/DiamondFeedback.ts --batch ${batchName}`);
 }
 

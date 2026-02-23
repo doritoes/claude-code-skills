@@ -35,10 +35,7 @@ hibp-batched/ (raw HIBP data)
                    diamonds/         glass/ (uncrackable)
                        |
                        v
-                   [DiamondAnalyzer] . Entropy classification, pattern extraction
-                       |
-                       v
-                   [DiamondFeedback] . BETA.txt + unobtainium.rule generation
+                   [DiamondFeedback] . Entropy classification, cohort analysis, feedback generation
                        |
                        v
                    [rebuild-nocap-plus] . Merge cohorts into nocap-plus.txt
@@ -62,10 +59,10 @@ hibp-batched/ (raw HIBP data)
 | `RocksExtractor.ts` | HIBP batched JSON → `rocks/batch-NNNN.txt` | `--resume` |
 | `GravelFilter.ts` | rocks - rockyou = gravel (1:1 batch mapping) | `--verify` |
 | `GravelProcessor.ts` | Stage 1 cracking (gravel → pearls + sand) | `--next`, `--batch N`, `--collect`, `--status`, `--dry-run` |
+| `BatchRunner.ts` | **Stage 2 orchestrator** (sync → attacks → collect → feedback → rebuild) | `--batch N`, `--through M`, `--next`, `--count N`, `--resume`, `--status` |
 | `BigRedSync.ts` | Sync wordlists/rules/hashlists to BIGRED | `--hashlist batch-NNNN` |
 | `BigRedRunner.ts` | Stage 2 cracking (sand → diamonds + glass) | `--batch N`, `--collect`, `--status`, `--attack NAME`, `--dry-run` |
-| `DiamondAnalyzer.ts` | Analyze cracked passwords, classify patterns | `--full data/diamonds/passwords-batch-NNNN.txt` |
-| `DiamondFeedback.ts` | Generate BETA.txt + unobtainium.rule | `--batch batch-NNNN` |
+| `DiamondFeedback.ts` | Analyze diamonds, classify cohorts, generate feedback | `--batch batch-NNNN`, `--full`, `--analyze <file>` |
 | `AttackReview.ts` | Attack ROI analysis + recommendations | `--batch batch-NNNN`, `--overlap`, `--json` |
 | `SandStateManager.ts` | State inspection/validation | `--stats`, `--validate`, `--json` |
 | `config.ts` | Shared paths (DATA_DIR, DIAMONDS_DIR, etc.) | — |
@@ -122,9 +119,50 @@ bun Tools/GravelProcessor.ts --batch N --collect
 
 ---
 
-## Phase 3: Stage 2 Cracking (Sand → Diamonds + Glass)
+## Phase 3: Stage 2 — Automated (BatchRunner)
 
-Runs 17 escalating attacks against SAND on BIGRED.
+**Preferred method.** `BatchRunner.ts` orchestrates the full Stage 2 pipeline for 1 or more batches.
+
+```bash
+cd .claude/skills/ExpandedPasswordList
+
+# Run a single batch end-to-end (sync → attacks → collect → feedback → rebuild)
+bun Tools/BatchRunner.ts --batch N
+
+# Run batches 1 through 10
+bun Tools/BatchRunner.ts --batch 1 --through 10
+
+# Run next 5 unprocessed batches (auto-discovers from sand-state.json)
+bun Tools/BatchRunner.ts --next --count 5
+
+# Resume an interrupted batch
+bun Tools/BatchRunner.ts --batch N --resume
+
+# Check progress
+bun Tools/BatchRunner.ts --status
+
+# Preview without executing
+bun Tools/BatchRunner.ts --next --dry-run
+
+# With HIBP validation + cohort growth on each batch
+bun Tools/BatchRunner.ts --next --count 5 --full-feedback
+
+# Pause between batches for confirmation
+bun Tools/BatchRunner.ts --batch 1 --through 10 --confirm
+```
+
+**How it works:** Calls existing tools as child processes in sequence. Never writes to sand-state.json directly — all state management (attack effectiveness, per-attack cracks/duration/rate, feedback metrics) continues to be recorded by BigRedRunner and DiamondFeedback exactly as before.
+
+**Error handling:**
+- Steps 1-3 (sync, attacks, collect) are FATAL — stops and prints resume command
+- Steps 4-5 (feedback, rebuild) are NON-FATAL — warns and continues to next batch
+- Resume with `--resume` to pick up from the last completed step
+
+---
+
+## Phase 3a: Stage 2 — Manual (Individual Tools)
+
+Use these when you need fine-grained control or debugging.
 
 ### Pre-Submission (one command)
 
@@ -136,7 +174,7 @@ bun Tools/BigRedSync.ts --hashlist batch-NNNN
 ### Run the Batch
 
 ```bash
-# Run all 17 attacks sequentially
+# Run all 15 attacks sequentially
 bun Tools/BigRedRunner.ts --batch N
 
 # Monitor while running
@@ -162,18 +200,18 @@ bun Tools/BigRedRunner.ts --batch N --collect
 
 ---
 
-## Phase 4: Post-Batch Feedback Loop
+## Phase 4: Post-Batch Feedback Loop (Manual)
+
+**Note:** If using BatchRunner, steps 1-3 below are handled automatically. This section is for manual operation only.
 
 After `--collect` completes, run these steps **in order**. Each step depends on the previous.
 
 ```bash
 cd .claude/skills/ExpandedPasswordList
 
-# Step 1: Analyze diamonds — classify patterns, extract roots
-bun Tools/DiamondAnalyzer.ts --full data/diamonds/passwords-batch-NNNN.txt
-
-# Step 2: Generate feedback — BETA.txt, unobtainium.rule, update sand-state
+# Step 1: Generate feedback — classify, extract roots, BETA.txt, unobtainium.rule
 bun Tools/DiamondFeedback.ts --batch batch-NNNN
+# Add --full for HIBP validation, cohort growth, and cohort-report.md
 
 # Step 3: Rebuild nocap-plus.txt (cohort files may have changed)
 "C:/Program Files/Python312/python.exe" scripts/rebuild-nocap-plus.py
@@ -186,8 +224,7 @@ bun Tools/AttackReview.ts
 
 | Step | Reads | Produces |
 |------|-------|----------|
-| DiamondAnalyzer | `passwords-batch-NNNN.txt` | Cohort reports, pattern analysis |
-| DiamondFeedback | Diamond files, cohort files | `feedback/BETA.txt`, `feedback/unobtainium.rule`, sand-state feedback metrics |
+| DiamondFeedback | Diamond files, cohort files | `feedback/BETA.txt`, `feedback/unobtainium.rule`, `feedback/cohort-report.md` (--full), sand-state feedback metrics |
 | rebuild-nocap-plus | `data/cohorts/*.txt` | `nocap-plus.txt` (14.4M words) |
 | AttackReview | `sand-state.json`, optionally `passwords-batch-NNNN.txt` + wordlists | ROI table, recommendations |
 
