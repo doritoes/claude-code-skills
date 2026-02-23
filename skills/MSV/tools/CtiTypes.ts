@@ -118,6 +118,12 @@ export interface EpssSpike {
   previousScore: number;
   changePercent: number;
   daysSinceSpike: number;
+  /** Vendor name from KEV entry (e.g., "Ivanti") */
+  vendorProject?: string;
+  /** Product name from KEV entry (e.g., "Endpoint Manager Mobile") */
+  product?: string;
+  /** Brief vulnerability description from KEV */
+  shortDescription?: string;
 }
 
 /**

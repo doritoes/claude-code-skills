@@ -209,7 +209,11 @@ export class IntelligenceAggregator {
     const spikes: EpssSpike[] = [];
 
     // Get EPSS scores for KEV CVEs (most relevant) - limit to 30 for EPSS batch limit
-    const kevCves = currentKev.vulnerabilities.slice(0, 30).map((v) => v.cveID);
+    const kevSlice = currentKev.vulnerabilities.slice(0, 30);
+    const kevCves = kevSlice.map((v) => v.cveID);
+
+    // Build lookup for KEV metadata by CVE ID
+    const kevMap = new Map(kevSlice.map((v) => [v.cveID, v]));
 
     // Get current EPSS scores (within 30 CVE limit)
     const currentScores = await this.epssClient.getScores(kevCves);
@@ -226,12 +230,16 @@ export class IntelligenceAggregator {
         if (previous !== undefined) {
           const change = score.epss - previous;
           if (change >= thresholdChange) {
+            const kevEntry = kevMap.get(score.cve);
             spikes.push({
               cve: score.cve,
               currentScore: score.epss,
               previousScore: previous,
               changePercent: change * 100,
               daysSinceSpike: periodDays,
+              vendorProject: kevEntry?.vendorProject,
+              product: kevEntry?.product,
+              shortDescription: kevEntry?.shortDescription,
             });
           }
         }

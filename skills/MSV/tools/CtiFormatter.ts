@@ -74,22 +74,33 @@ function formatText(report: CTIReport): string {
   const tlpColor = getTlpColor(report.tlp.level);
   const headerWidth = 66;
 
+  const innerWidth = headerWidth - 2; // visible chars between ║ borders
+
+  // Build each line with explicit visible-width padding, then wrap with ANSI
+  const title = "CYBER THREAT INTELLIGENCE REPORT";
+  const tlpLabel = ` ${report.tlp.level}`;
+  const titleGap = innerWidth - tlpLabel.length - title.length - 1; // -1 for trailing space
+  const dateText = `Week of ${report.periodStart} to ${report.periodEnd}`;
+  const dateGap = innerWidth - dateText.length - 1; // -1 for trailing space
+
   lines.push(`${tlpColor}${"═".repeat(headerWidth)}${RESET}`);
   lines.push(
-    `${tlpColor}║${RESET} ${BOLD}${report.tlp.level.padEnd(14)}${RESET}` +
-      `${BOLD}CYBER THREAT INTELLIGENCE REPORT${RESET}`.padStart(40) +
-      `${tlpColor}  ║${RESET}`
+    `${tlpColor}║${RESET}${BOLD}${tlpLabel}${RESET}` +
+      `${" ".repeat(Math.max(1, titleGap))}` +
+      `${BOLD}${title}${RESET} ${tlpColor}║${RESET}`
   );
   lines.push(
     `${tlpColor}║${RESET}` +
-      `Week of ${report.periodStart} to ${report.periodEnd}`.padStart(50) +
-      `${tlpColor}  ║${RESET}`
+      `${" ".repeat(Math.max(1, dateGap))}` +
+      `${dateText} ${tlpColor}║${RESET}`
   );
   if (report.preparedFor) {
+    const prepText = `Prepared for: ${report.preparedFor}`;
+    const prepGap = innerWidth - prepText.length - 1;
     lines.push(
       `${tlpColor}║${RESET}` +
-        `Prepared for: ${report.preparedFor}`.padStart(50) +
-        `${tlpColor}  ║${RESET}`
+        `${" ".repeat(Math.max(1, prepGap))}` +
+        `${prepText} ${tlpColor}║${RESET}`
     );
   }
   lines.push(`${tlpColor}${"═".repeat(headerWidth)}${RESET}`);
@@ -146,22 +157,17 @@ function formatText(report: CTIReport): string {
   if (report.criticalZeroDays.length === 0) {
     lines.push(`${GREEN}No critical zero-days identified in this period.${RESET}`);
   } else {
-    for (const zeroDay of report.criticalZeroDays.slice(0, 5)) {
+    for (const zeroDay of report.criticalZeroDays) {
       const priorityColor = zeroDay.priority === "CRITICAL" ? RED : YELLOW;
-      lines.push(
-        `${priorityColor}●${RESET} ${BOLD}${zeroDay.id}${RESET} - ${zeroDay.title.slice(0, 50)}`
-      );
       const tags: string[] = [];
       if (zeroDay.ransomwareAssociated) tags.push(`${RED}RANSOMWARE${RESET}`);
       if (zeroDay.epssScore && zeroDay.epssScore > 0.5) {
         tags.push(`${YELLOW}EPSS:${(zeroDay.epssScore * 100).toFixed(1)}%${RESET}`);
       }
-      if (tags.length > 0) {
-        lines.push(`    [${tags.join(", ")}]`);
-      }
-    }
-    if (report.criticalZeroDays.length > 5) {
-      lines.push(`${DIM}  ... and ${report.criticalZeroDays.length - 5} more${RESET}`);
+      const tagStr = tags.length > 0 ? ` [${tags.join(", ")}]` : "";
+      lines.push(
+        `${priorityColor}●${RESET} ${BOLD}${zeroDay.id}${RESET} - ${zeroDay.title}${tagStr}`
+      );
     }
   }
   lines.push("");
@@ -172,26 +178,52 @@ function formatText(report: CTIReport): string {
   lines.push(`${BOLD}${CYAN}▌ EXPLOITATION TRENDS${RESET}`);
   lines.push(`${DIM}${"─".repeat(50)}${RESET}`);
 
-  // KEV Delta
+  // KEV Delta — show what was actually added
   lines.push(
     `${BOLD}KEV Catalog:${RESET} ${report.kevDelta.totalCurrent} total ` +
       `(${YELLOW}+${report.kevDelta.newEntries.length}${RESET} this period)`
   );
+  if (report.kevDelta.newEntries.length > 0) {
+    const showEntries = report.kevDelta.newEntries.slice(0, 5);
+    for (const entry of showEntries) {
+      const vendor = entry.affectedProducts[0] || "Unknown";
+      const ransomTag = entry.ransomwareAssociated ? ` ${RED}[RANSOMWARE]${RESET}` : "";
+      lines.push(
+        `  ${YELLOW}NEW${RESET}  ${BOLD}${entry.id}${RESET} ${vendor}${ransomTag}`
+      );
+      lines.push(
+        `       ${DIM}${truncateText(entry.title, 56)}${RESET}`
+      );
+    }
+    if (report.kevDelta.newEntries.length > 5) {
+      lines.push(`  ${DIM}... +${report.kevDelta.newEntries.length - 5} more${RESET}`);
+    }
+  }
+  lines.push("");
 
-  // EPSS Spikes
+  // EPSS Spikes — with product context
   if (report.epssSpikes.length > 0) {
     lines.push(`${BOLD}EPSS Spikes:${RESET}`);
     for (const spike of report.epssSpikes.slice(0, 3)) {
+      const scoreColor = spike.currentScore > 0.5 ? RED : YELLOW;
       lines.push(
-        `  ${spike.cve}: ${(spike.previousScore * 100).toFixed(1)}% → ` +
-          `${YELLOW}${(spike.currentScore * 100).toFixed(1)}%${RESET} ` +
+        `  ${BOLD}${spike.cve}${RESET}  ${(spike.previousScore * 100).toFixed(1)}% → ` +
+          `${scoreColor}${(spike.currentScore * 100).toFixed(1)}%${RESET} ` +
           `(+${spike.changePercent.toFixed(1)}%)`
       );
+      if (spike.vendorProject || spike.product) {
+        const context = [spike.vendorProject, spike.product].filter(Boolean).join(" — ");
+        lines.push(`       ${DIM}${context}${RESET}`);
+      }
+      if (spike.shortDescription) {
+        lines.push(`       ${DIM}${truncateText(spike.shortDescription, 56)}${RESET}`);
+      }
     }
   }
 
   // Ransomware campaigns
   if (report.ransomwareCampaigns.length > 0) {
+    lines.push("");
     lines.push(
       `${BOLD}Ransomware-Linked:${RESET} ${RED}${report.ransomwareCampaigns.length}${RESET} CVEs`
     );
@@ -321,17 +353,36 @@ function formatMarkdown(report: CTIReport): string {
   // Exploitation Trends
   lines.push("## Exploitation Trends");
   lines.push("");
-  lines.push(`- **KEV Catalog:** ${report.kevDelta.totalCurrent} total (+${report.kevDelta.newEntries.length} this period)`);
+  lines.push(`**KEV Catalog:** ${report.kevDelta.totalCurrent} total (+${report.kevDelta.newEntries.length} this period)`);
+
+  if (report.kevDelta.newEntries.length > 0) {
+    lines.push("");
+    lines.push("**New KEV Additions:**");
+    lines.push("");
+    lines.push("| CVE | Product | Description | Ransomware |");
+    lines.push("|-----|---------|-------------|------------|");
+    for (const entry of report.kevDelta.newEntries.slice(0, 8)) {
+      const product = entry.affectedProducts[0] || "-";
+      const desc = entry.title.length > 50 ? entry.title.slice(0, 47) + "..." : entry.title;
+      const ransomware = entry.ransomwareAssociated ? "Yes" : "No";
+      lines.push(`| ${entry.id} | ${product} | ${desc} | ${ransomware} |`);
+    }
+    if (report.kevDelta.newEntries.length > 8) {
+      lines.push("");
+      lines.push(`_... and ${report.kevDelta.newEntries.length - 8} more_`);
+    }
+  }
 
   if (report.epssSpikes.length > 0) {
     lines.push("");
     lines.push("**EPSS Score Spikes:**");
     lines.push("");
-    lines.push("| CVE | Previous | Current | Change |");
-    lines.push("|-----|----------|---------|--------|");
+    lines.push("| CVE | Vendor / Product | Previous | Current | Change |");
+    lines.push("|-----|-----------------|----------|---------|--------|");
     for (const spike of report.epssSpikes.slice(0, 5)) {
+      const context = [spike.vendorProject, spike.product].filter(Boolean).join(" / ") || "-";
       lines.push(
-        `| ${spike.cve} | ${(spike.previousScore * 100).toFixed(1)}% | ${(spike.currentScore * 100).toFixed(1)}% | +${spike.changePercent.toFixed(1)}% |`
+        `| ${spike.cve} | ${context} | ${(spike.previousScore * 100).toFixed(1)}% | ${(spike.currentScore * 100).toFixed(1)}% | +${spike.changePercent.toFixed(1)}% |`
       );
     }
   }
@@ -415,6 +466,11 @@ function getTlpColor(level: string): string {
     default:
       return COLORS.RESET;
   }
+}
+
+function truncateText(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 3) + "...";
 }
 
 function wrapText(text: string, maxWidth: number): string[] {
