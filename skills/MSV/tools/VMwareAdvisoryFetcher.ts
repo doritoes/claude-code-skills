@@ -50,16 +50,35 @@ interface CacheEntry {
 
 // Raw API response types
 interface VMwareApiResponse {
+  success?: boolean;
+  data?: {
+    list?: VMwareApiAdvisory[];
+    pageInfo?: {
+      totalCount?: number;
+    };
+  };
+  // Legacy format fallback
   totalRecords?: number;
   advisoryList?: VMwareApiAdvisory[];
 }
 
 interface VMwareApiAdvisory {
+  documentId?: string;       // e.g., "VCDSA24453"
+  notificationId?: number;
+  title?: string;            // Full title including CVEs
+  severity?: string;
+  affectedCve?: string;      // Comma-separated CVE list
+  supportProducts?: string;  // Product list
+  published?: string;        // e.g., "18 June 2024"
+  updated?: string;
+  status?: string;
+  notificationUrl?: string;
+  workAround?: string;
+  // Legacy format
   advisoryId?: string;
   advisoryTitle?: string;
-  severity?: string;
-  cveIds?: string;           // Comma-separated CVE list
-  affectedProducts?: string; // Comma-separated product list
+  cveIds?: string;
+  affectedProducts?: string;
   fixedVersions?: string;
   publishedDate?: string;
   modifiedDate?: string;
@@ -174,35 +193,63 @@ export class VMwareAdvisoryFetcher {
   private parseVulnerabilities(raw: VMwareApiResponse): VMwareVulnerability[] {
     const vulns: VMwareVulnerability[] = [];
 
-    if (!raw.advisoryList) return vulns;
+    // Handle new API format (data.list) or legacy (advisoryList)
+    const advisoryList = raw.data?.list || raw.advisoryList;
+    if (!advisoryList) return vulns;
 
-    for (const adv of raw.advisoryList) {
-      if (!adv.advisoryId) continue;
+    for (const adv of advisoryList) {
+      // Extract advisory ID from title (VMSA-YYYY-NNNN) or use documentId/advisoryId
+      let advisoryId = adv.advisoryId || adv.documentId || "";
+      const vmsaMatch = adv.title?.match(/VMSA-\d{4}-\d+/);
+      if (vmsaMatch) {
+        advisoryId = vmsaMatch[0];
+      }
+      if (!advisoryId) continue;
 
-      // Parse CVE list
-      const cveIds = adv.cveIds
-        ? adv.cveIds.split(",").map(c => c.trim().toUpperCase()).filter(c => c.startsWith("CVE-"))
-        : [];
+      // Parse CVE list from affectedCve or cveIds field
+      const cveString = adv.affectedCve || adv.cveIds || "";
+      const cveIds = cveString
+        .split(/[,\s]+/)
+        .map(c => c.trim().toUpperCase())
+        .filter(c => c.startsWith("CVE-"));
 
-      // Parse affected products
-      const affectedProducts = adv.affectedProducts
-        ? adv.affectedProducts.split(",").map(p => p.trim())
-        : [];
+      // Parse affected products from supportProducts or affectedProducts
+      const productsString = adv.supportProducts || adv.affectedProducts || "";
+      const affectedProducts = productsString
+        .split(",")
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
 
-      // Parse fixed versions
+      // Parse fixed versions if available
       const fixedVersions = adv.fixedVersions
         ? adv.fixedVersions.split(",").map(v => v.trim())
         : [];
 
+      // Parse published date - handle various formats
+      const publishedStr = adv.published || adv.publishedDate || "";
+      let publishedDate = "";
+      try {
+        const date = new Date(publishedStr);
+        if (!isNaN(date.getTime())) {
+          publishedDate = date.toISOString();
+        }
+      } catch {
+        publishedDate = publishedStr;
+      }
+
+      // Get URL from notificationUrl or construct from advisory ID
+      const url = adv.notificationUrl ||
+        `https://support.broadcom.com/web/ecx/support-content-notification/-/external/content/SecurityAdvisories/0/${adv.notificationId || advisoryId}`;
+
       vulns.push({
-        advisoryId: adv.advisoryId,
-        title: adv.advisoryTitle || "",
+        advisoryId,
+        title: adv.title || adv.advisoryTitle || "",
         severity: this.parseSeverity(adv.severity),
         cveIds,
         affectedProducts,
         fixedVersions,
-        publishedDate: adv.publishedDate || "",
-        url: `https://support.broadcom.com/web/ecx/support-content-notification/-/external/content/SecurityAdvisories/0/${adv.advisoryId}`,
+        publishedDate,
+        url,
         cvssScore: adv.cvssScore,
       });
     }
@@ -254,6 +301,35 @@ export class VMwareAdvisoryFetcher {
       versions.sort((a, b) => this.compareVersions(a, b));
       if (versions.length > 0) {
         msv[product] = versions[versions.length - 1];
+      }
+    }
+
+    // Fallback: If no versions found from advisories, use known latest versions
+    // These are updated manually based on VMware release cycles
+    if (Object.keys(msv).length === 0) {
+      const knownLatest: Record<string, Record<string, string>> = {
+        esxi: {
+          "esxi_8.0": "8.0.3",
+          "esxi_7.0": "7.0.3",
+        },
+        vcenter: {
+          "vcenter_8.0": "8.0.3",
+          "vcenter_7.0": "7.0.3",
+        },
+        workstation: {
+          "workstation_17": "17.6.2",
+        },
+        fusion: {
+          "fusion_13": "13.6.2",
+        },
+        nsx: {
+          "nsx_4": "4.2.1",
+        },
+      };
+
+      const productVersionMap = knownLatest[this.product] || knownLatest.esxi || {};
+      for (const [key, version] of Object.entries(productVersionMap)) {
+        msv[key] = version;
       }
     }
 

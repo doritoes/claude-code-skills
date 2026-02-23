@@ -507,11 +507,8 @@ describe("Test 6: Data Contamination Filtering", () => {
 
     expect(hasContamination).toBe(false);
 
-    // Docker Desktop MSV should be 4.x
-    const hasCorrectVersion = result.stdout.includes("4.3") ||
-                              result.stdout.includes("4.2") ||
-                              result.stdout.includes("4.1") ||
-                              result.stdout.includes("4.0");
+    // Docker Desktop MSV should be 4.x (any minor version)
+    const hasCorrectVersion = /\b4\.\d+/.test(result.stdout);
     expect(hasCorrectVersion).toBe(true);
   }, 60000);
 

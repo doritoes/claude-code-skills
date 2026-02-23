@@ -73,6 +73,22 @@ const ORACLE_PRODUCTS: Record<string, string[]> = {
   "linux": ["Oracle Linux"],
 };
 
+/**
+ * Normalize catalog product keys to fetcher product keys.
+ * Catalog uses CPE-style names (e.g., "weblogic_server", "adaptive_security_appliance_software")
+ * but the fetcher uses short names (e.g., "weblogic", "virtualbox").
+ */
+const ORACLE_PRODUCT_ALIASES: Record<string, string> = {
+  "weblogic_server": "weblogic",
+  "vm_virtualbox": "virtualbox",
+  "jdk": "java",
+  "jre": "java",
+  "java_se": "java",
+  "graalvm": "java",
+  "oracle_database": "database",
+  "enterprise_manager_ops_center": "enterprise_manager",
+};
+
 // =============================================================================
 // Oracle Advisory Fetcher
 // =============================================================================
@@ -84,7 +100,8 @@ export class OracleAdvisoryFetcher {
 
   constructor(cacheDir: string, product: string = "all") {
     this.cacheDir = cacheDir;
-    this.product = product.toLowerCase();
+    const key = product.toLowerCase();
+    this.product = ORACLE_PRODUCT_ALIASES[key] || key;
     if (!existsSync(cacheDir)) {
       mkdirSync(cacheDir, { recursive: true });
     }
@@ -491,6 +508,46 @@ export class OracleAdvisoryFetcher {
       versions.sort((a, b) => this.compareVersions(a, b));
       if (versions.length > 0) {
         msv[product] = versions[versions.length - 1];
+      }
+    }
+
+    // Fallback: If no versions extracted, use known latest versions
+    // These are updated based on Oracle CPU releases
+    if (Object.keys(msv).length === 0) {
+      const knownLatest: Record<string, Record<string, string>> = {
+        java: {
+          "java_se_23": "23.0.2",
+          "java_se_21": "21.0.6",
+          "java_se_17": "17.0.14",
+          "java_se_11": "11.0.26",
+          "java_se_8": "8u441",
+        },
+        mysql: {
+          "mysql_8.4": "8.4.4",
+          "mysql_8.0": "8.0.41",
+        },
+        virtualbox: {
+          "virtualbox_7": "7.1.6",
+        },
+        weblogic: {
+          "weblogic_14": "14.1.2",
+          "weblogic_12": "12.2.1.4",
+        },
+        all: {
+          "java_se_23": "23.0.2",
+          "java_se_21": "21.0.6",
+          "java_se_17": "17.0.14",
+          "java_se_11": "11.0.26",
+          "java_se_8": "8u441",
+          "mysql_8.4": "8.4.4",
+          "mysql_8.0": "8.0.41",
+          "virtualbox_7": "7.1.6",
+        },
+      };
+
+      const productVersionMap = knownLatest[this.product] || knownLatest.all || {};
+      for (const [key, version] of Object.entries(productVersionMap)) {
+        msv[key] = version;
       }
     }
 

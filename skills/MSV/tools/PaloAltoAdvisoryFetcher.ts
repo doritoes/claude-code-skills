@@ -369,15 +369,15 @@ export class PaloAltoAdvisoryFetcher {
   private calculateBranchMsv(advisories: PaloAltoAdvisory[], product?: string): BranchMsv[] {
     const branchMap = new Map<string, { msv: string; latest: string }>();
 
-    // Known latest PAN-OS versions per branch
+    // Known latest PAN-OS versions per branch (updated 2026-02-03)
+    // Source: endoflife.date/panos, docs.paloaltonetworks.com
     const knownLatest: Record<string, string> = {
-      "11.2": "11.2.6",
-      "11.1": "11.1.6",
-      "11.0": "11.0.7",
-      "10.2": "10.2.13",
+      "12.1": "12.1.4",
+      "11.2": "11.2.10",
+      "11.1": "11.1.13",
+      "11.0": "11.0.6",
+      "10.2": "10.2.18",
       "10.1": "10.1.14",
-      "10.0": "10.0.13",
-      "9.1": "9.1.19",
     };
 
     for (const advisory of advisories) {

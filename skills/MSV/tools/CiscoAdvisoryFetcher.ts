@@ -1,12 +1,12 @@
 /**
  * CiscoAdvisoryFetcher.ts - Cisco PSIRT Security Advisory Fetcher
  *
- * Fetches security advisories from Cisco PSIRT openVuln API.
- * API: https://apix.cisco.com/security/advisories/v2
+ * Fetches security advisories from Cisco's free CSAF (Common Security
+ * Advisory Framework) feed. No authentication required.
  *
- * Authentication: OAuth2 Client Credentials
- * - Requires CISCO_CLIENT_ID and CISCO_CLIENT_SECRET environment variables
- * - Register at https://apiconsole.cisco.com
+ * Source: https://www.cisco.com/.well-known/csaf/
+ * - changes.csv: Index of all advisories with last-modified timestamps
+ * - {year}/cisco-sa-{id}.json: Individual CSAF advisory files
  *
  * Products covered:
  * - ASA (Adaptive Security Appliance)
@@ -15,8 +15,6 @@
  * - IOS, IOS XE, IOS XR
  * - NX-OS
  * - All Cisco security products
- *
- * Rate limits: 5 calls/sec, 30 calls/min, 5000 calls/day
  *
  * @author PAI (Personal AI Infrastructure)
  * @license MIT
@@ -30,16 +28,27 @@ import type { VendorAdvisoryResult, SecurityAdvisory, BranchMsv } from "./Vendor
 // Constants
 // =============================================================================
 
-const CISCO_TOKEN_URL = "https://cloudsso.cisco.com/as/token.oauth2";
-const CISCO_API_BASE = "https://apix.cisco.com/security/advisories/v2";
+const CISCO_CSAF_BASE = "https://www.cisco.com/.well-known/csaf";
+const CISCO_CSAF_CHANGES = `${CISCO_CSAF_BASE}/changes.csv`;
 const REQUEST_TIMEOUT_MS = 30000;
+
+// Product family keywords for filtering CSAF advisories by filename/title
+const PRODUCT_KEYWORDS: Record<string, string[]> = {
+  asa: ["asa", "adaptive-security"],
+  ftd: ["ftd", "firepower-threat-defense", "threat-defense"],
+  fmc: ["fmc", "firepower-management", "management-center"],
+  ios: ["ios-"],
+  ios_xe: ["ios-xe", "iosxe"],
+  ios_xr: ["ios-xr", "iosxr"],
+  nx_os: ["nx-os", "nxos", "nexus"],
+};
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface CiscoAdvisory {
-  advisoryId: string;        // e.g., "cisco-sa-2025-01-01-xxx"
+  advisoryId: string;
   advisoryTitle: string;
   cveIds: string[];
   bugIds: string[];
@@ -60,39 +69,60 @@ export interface CiscoAffectedProduct {
   fixedVersions: string[];
 }
 
-interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-}
-
-interface CiscoApiAdvisory {
-  advisoryId: string;
-  advisoryTitle: string;
-  CVEs?: string[];
-  bugIDs?: string[];
-  cvssBaseScore?: number;
-  cvssVector?: string;
-  severity?: string;
-  publicationDate?: string;
-  lastUpdated?: string;
-  summary?: string;
-  affectedProducts?: Array<{
-    productName: string;
-    affectedVersions?: string[];
-  }>;
-  cvrfUrl?: string;
-  csafUrl?: string;
-}
-
 interface CacheEntry {
   data: VendorAdvisoryResult;
   expiresAt: string;
 }
 
-interface TokenCacheEntry {
-  token: string;
-  expiresAt: number;
+// CSAF document types
+interface CsafDocument {
+  document?: {
+    title?: string;
+    tracking?: {
+      id?: string;
+      current_release_date?: string;
+      initial_release_date?: string;
+    };
+    aggregate_severity?: { text?: string };
+  };
+  vulnerabilities?: CsafVulnerability[];
+  product_tree?: {
+    branches?: CsafBranch[];
+    relationships?: CsafRelationship[];
+  };
+}
+
+interface CsafVulnerability {
+  cve?: string;
+  title?: string;
+  scores?: Array<{
+    cvss_v3?: { baseScore?: number; baseSeverity?: string; vectorString?: string };
+  }>;
+  product_status?: {
+    known_affected?: string[];
+    fixed?: string[];
+    known_not_affected?: string[];
+  };
+  remediations?: Array<{
+    category?: string;
+    product_ids?: string[];
+    details?: string;
+    url?: string;
+  }>;
+}
+
+interface CsafBranch {
+  name?: string;
+  category?: string;
+  product?: { product_id?: string; name?: string };
+  branches?: CsafBranch[];
+}
+
+interface CsafRelationship {
+  category?: string;
+  full_product_name?: { name?: string; product_id?: string };
+  relates_to_product_reference?: string;
+  product_reference?: string;
 }
 
 // =============================================================================
@@ -102,48 +132,50 @@ interface TokenCacheEntry {
 export class CiscoAdvisoryFetcher {
   private cacheDir: string;
   private cacheDurationMs = 4 * 60 * 60 * 1000; // 4 hours
-  private clientId: string | null;
-  private clientSecret: string | null;
-  private tokenCache: TokenCacheEntry | null = null;
 
-  constructor(cacheDir: string, clientId?: string, clientSecret?: string) {
+  constructor(cacheDir: string, _clientId?: string, _clientSecret?: string) {
     this.cacheDir = cacheDir;
-    this.clientId = clientId || process.env.CISCO_CLIENT_ID || null;
-    this.clientSecret = clientSecret || process.env.CISCO_CLIENT_SECRET || null;
-
     if (!existsSync(cacheDir)) {
       mkdirSync(cacheDir, { recursive: true });
     }
   }
 
   /**
-   * Check if API credentials are configured
-   */
-  hasCredentials(): boolean {
-    return !!(this.clientId && this.clientSecret);
-  }
-
-  /**
-   * Fetch Cisco advisories for a product
+   * Fetch Cisco advisories for a product using the free CSAF feed
    */
   async fetch(product?: string): Promise<VendorAdvisoryResult> {
     const cacheKey = product ? `cisco-${product.toLowerCase().replace(/\s+/g, "-")}` : "cisco-all";
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
 
-    if (!this.hasCredentials()) {
-      // Return empty result with guidance
-      return {
-        vendor: "Cisco",
-        product: product || "All Products",
-        advisories: [],
-        branches: [],
-        fetchedAt: new Date().toISOString(),
-        source: `${CISCO_API_BASE} (API credentials not configured - set CISCO_CLIENT_ID and CISCO_CLIENT_SECRET)`,
-      };
+    let advisories: CiscoAdvisory[] = [];
+    let source = CISCO_CSAF_BASE;
+
+    try {
+      // Step 1: Fetch changes.csv to find recent advisories
+      const recentFiles = await this.fetchRecentAdvisoryFiles(product);
+
+      // Step 2: Fetch individual CSAF advisory files (max 10 to avoid rate limits)
+      const filesToFetch = recentFiles.slice(0, 10);
+      for (const file of filesToFetch) {
+        try {
+          const advisory = await this.fetchCsafAdvisory(file.path);
+          if (advisory) {
+            advisories.push(...advisory);
+          }
+          // Throttle requests
+          if (filesToFetch.indexOf(file) < filesToFetch.length - 1) {
+            await new Promise(r => setTimeout(r, 200));
+          }
+        } catch (err) {
+          console.error(`Cisco CSAF fetch warning: ${(err as Error).message} for ${file.path}`);
+        }
+      }
+    } catch (err) {
+      console.error(`Cisco CSAF feed error: ${(err as Error).message} - using fallback data`);
+      source = `${CISCO_CSAF_BASE} (fallback)`;
     }
 
-    const advisories = await this.fetchAdvisories(product);
     const securityAdvisories = this.convertToSecurityAdvisories(advisories);
     const branches = this.calculateBranchMsv(advisories, product);
 
@@ -153,7 +185,7 @@ export class CiscoAdvisoryFetcher {
       advisories: securityAdvisories,
       branches,
       fetchedAt: new Date().toISOString(),
-      source: CISCO_API_BASE,
+      source,
     };
 
     this.setCache(cacheKey, result);
@@ -161,120 +193,220 @@ export class CiscoAdvisoryFetcher {
   }
 
   /**
-   * Get OAuth2 access token
+   * Fetch changes.csv and find recent advisory files matching the product
    */
-  private async getAccessToken(): Promise<string> {
-    // Check token cache
-    if (this.tokenCache && Date.now() < this.tokenCache.expiresAt) {
-      return this.tokenCache.token;
+  private async fetchRecentAdvisoryFiles(product?: string): Promise<Array<{ path: string; modified: string }>> {
+    const response = await fetch(CISCO_CSAF_CHANGES, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        "User-Agent": "MSV-Skill/2.0 (Security Advisory Fetcher)",
+        "Accept": "text/csv",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`CSAF changes.csv error: ${response.status}`);
     }
 
-    if (!this.clientId || !this.clientSecret) {
-      throw new Error("Cisco API credentials not configured");
+    const csv = await response.text();
+    const lines = csv.trim().split("\n");
+
+    // Parse CSV: path,modified_date
+    const entries: Array<{ path: string; modified: string }> = [];
+    for (const line of lines) {
+      const [path, modified] = line.split(",");
+      if (!path || !modified) continue;
+      entries.push({ path: path.trim(), modified: modified.trim() });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    // Filter by product keywords if specified
+    const productKey = this.detectProductKey(product);
+    const keywords = productKey ? PRODUCT_KEYWORDS[productKey] : null;
 
-    try {
-      const response = await fetch(CISCO_TOKEN_URL, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          client_id: this.clientId,
-          client_secret: this.clientSecret,
-          grant_type: "client_credentials",
-        }),
+    let filtered = entries;
+    if (keywords) {
+      filtered = entries.filter(e => {
+        const lower = e.path.toLowerCase();
+        return keywords.some(kw => lower.includes(kw));
       });
+    }
 
-      if (!response.ok) {
-        throw new Error(`Cisco OAuth failed: ${response.status}`);
+    // Sort by modified date descending (most recent first)
+    // entries are already sorted in changes.csv, but explicit sort ensures it
+    filtered.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+
+    // Filter to last 2 years
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 2);
+    filtered = filtered.filter(e => new Date(e.modified) >= cutoff);
+
+    return filtered;
+  }
+
+  /**
+   * Fetch and parse a single CSAF advisory JSON file
+   */
+  private async fetchCsafAdvisory(path: string): Promise<CiscoAdvisory[] | null> {
+    const url = `${CISCO_CSAF_BASE}/${path}`;
+
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        "User-Agent": "MSV-Skill/2.0 (Security Advisory Fetcher)",
+        "Accept": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const csaf = await response.json() as CsafDocument;
+    return this.parseCsafDocument(csaf, url);
+  }
+
+  /**
+   * Parse a CSAF document into CiscoAdvisory objects
+   */
+  private parseCsafDocument(csaf: CsafDocument, csafUrl: string): CiscoAdvisory[] {
+    const doc = csaf.document || {};
+    const tracking = doc.tracking || {};
+    const advisoryId = tracking.id || "";
+    const title = doc.title || "";
+
+    // Build product ID -> name map from product tree
+    const idMap = new Map<string, string>();
+    this.walkBranches(csaf.product_tree?.branches || [], idMap);
+    for (const rel of csaf.product_tree?.relationships || []) {
+      const fpn = rel.full_product_name;
+      if (fpn?.product_id && fpn?.name) {
+        idMap.set(fpn.product_id, fpn.name);
       }
+    }
 
-      const data = await response.json() as TokenResponse;
+    // Parse vulnerabilities
+    const advisories: CiscoAdvisory[] = [];
 
-      // Cache token with 5-minute buffer before expiry
-      this.tokenCache = {
-        token: data.access_token,
-        expiresAt: Date.now() + (data.expires_in - 300) * 1000,
-      };
+    for (const vuln of csaf.vulnerabilities || []) {
+      const cve = vuln.cve || "";
+      const cvss = vuln.scores?.[0]?.cvss_v3;
+      const severity = this.parseSeverity(cvss?.baseSeverity, cvss?.baseScore || undefined);
 
-      return data.access_token;
-    } finally {
-      clearTimeout(timeout);
+      // Extract affected and fixed product versions
+      const affected = this.extractVersionsFromProductIds(
+        vuln.product_status?.known_affected || [], idMap
+      );
+      const fixed = this.extractVersionsFromProductIds(
+        vuln.remediations?.[0]?.product_ids || vuln.product_status?.fixed || [], idMap
+      );
+
+      advisories.push({
+        advisoryId,
+        advisoryTitle: vuln.title || title,
+        cveIds: cve ? [cve] : [],
+        bugIds: [],
+        cvssScore: cvss?.baseScore || null,
+        cvssVector: cvss?.vectorString || null,
+        severity,
+        publishedDate: tracking.initial_release_date || new Date().toISOString(),
+        lastUpdatedDate: tracking.current_release_date || new Date().toISOString(),
+        summary: vuln.title || title,
+        affectedProducts: this.buildAffectedProducts(affected, fixed),
+        cvrfUrl: "",
+        csafUrl,
+      });
+    }
+
+    return advisories;
+  }
+
+  /**
+   * Walk product tree branches to build ID -> name map
+   */
+  private walkBranches(branches: CsafBranch[], idMap: Map<string, string>): void {
+    for (const b of branches) {
+      if (b.product?.product_id && b.name) {
+        idMap.set(b.product.product_id, b.name);
+      }
+      if (b.branches) {
+        this.walkBranches(b.branches, idMap);
+      }
     }
   }
 
   /**
-   * Fetch advisories from Cisco API
+   * Extract version numbers from CSAF product IDs
+   * Product names contain versions like "ASA Software 9.18.4" or "IOS XE 17.12.4"
    */
-  private async fetchAdvisories(product?: string): Promise<CiscoAdvisory[]> {
-    const token = await this.getAccessToken();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  private extractVersionsFromProductIds(
+    productIds: string[],
+    idMap: Map<string, string>
+  ): Map<string, string[]> {
+    const productVersions = new Map<string, string[]>();
 
-    try {
-      let url: string;
-      if (product) {
-        url = `${CISCO_API_BASE}/product?product=${encodeURIComponent(product)}&pageSize=50`;
-      } else {
-        url = `${CISCO_API_BASE}/latest/25`;
-      }
+    for (const pid of productIds) {
+      // Handle composite IDs (e.g., "CSAFPID-232585:277437")
+      const basePid = pid.includes(":") ? pid.split(":")[0] : pid;
+      const name = idMap.get(pid) || idMap.get(basePid) || "";
 
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Accept": "application/json",
-          "User-Agent": "MSV-Skill/1.3 (Security Advisory Fetcher)",
-        },
-      });
+      // Extract version from product name
+      // Pattern: "Product Name X.Y.Z" or "Product Name X.Y"
+      const versionMatch = name.match(/(\d+\.\d+(?:\.\d+)*)\s*(?:when|$)/i)
+        || name.match(/\b(\d+\.\d+(?:\.\d+)*)\b/);
 
-      if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error("Cisco API rate limit exceeded");
+      if (versionMatch) {
+        const version = versionMatch[1];
+        // Determine product family from name
+        const family = this.detectFamilyFromName(name);
+        if (family) {
+          if (!productVersions.has(family)) {
+            productVersions.set(family, []);
+          }
+          const versions = productVersions.get(family)!;
+          if (!versions.includes(version)) {
+            versions.push(version);
+          }
         }
-        throw new Error(`Cisco API failed: ${response.status}`);
       }
-
-      const data = await response.json() as { advisories?: CiscoApiAdvisory[] } | CiscoApiAdvisory[];
-
-      // API can return array directly or object with advisories property
-      const advisories = Array.isArray(data) ? data : (data.advisories || []);
-      return advisories.map(a => this.parseAdvisory(a));
-    } finally {
-      clearTimeout(timeout);
     }
+
+    return productVersions;
   }
 
   /**
-   * Parse API advisory into internal format
+   * Detect product family from CSAF product name
    */
-  private parseAdvisory(advisory: CiscoApiAdvisory): CiscoAdvisory {
-    const severity = this.parseSeverity(advisory.severity, advisory.cvssBaseScore);
+  private detectFamilyFromName(name: string): string | null {
+    const lower = name.toLowerCase();
+    if (lower.includes("adaptive security") || lower.includes("asa software")) return "asa";
+    if (lower.includes("threat defense") || lower.includes("ftd software")) return "ftd";
+    if (lower.includes("ios xe")) return "ios_xe";
+    if (lower.includes("ios xr")) return "ios_xr";
+    if (lower.includes("ios software") || (lower.includes("ios") && !lower.includes("ios x"))) return "ios";
+    if (lower.includes("nx-os") || lower.includes("nexus")) return "nx_os";
+    if (lower.includes("firepower management") || lower.includes("fmc")) return "fmc";
+    return null;
+  }
 
-    return {
-      advisoryId: advisory.advisoryId,
-      advisoryTitle: advisory.advisoryTitle || "",
-      cveIds: advisory.CVEs || [],
-      bugIds: advisory.bugIDs || [],
-      cvssScore: advisory.cvssBaseScore || null,
-      cvssVector: advisory.cvssVector || null,
-      severity,
-      publishedDate: advisory.publicationDate || new Date().toISOString(),
-      lastUpdatedDate: advisory.lastUpdated || advisory.publicationDate || new Date().toISOString(),
-      summary: advisory.summary || "",
-      affectedProducts: (advisory.affectedProducts || []).map(p => ({
-        productName: p.productName,
-        affectedVersions: p.affectedVersions || [],
-        fixedVersions: [],
-      })),
-      cvrfUrl: advisory.cvrfUrl || "",
-      csafUrl: advisory.csafUrl || "",
-    };
+  /**
+   * Build CiscoAffectedProduct from version maps
+   */
+  private buildAffectedProducts(
+    affected: Map<string, string[]>,
+    fixed: Map<string, string[]>
+  ): CiscoAffectedProduct[] {
+    const families = new Set([...affected.keys(), ...fixed.keys()]);
+    const products: CiscoAffectedProduct[] = [];
+
+    for (const family of families) {
+      products.push({
+        productName: family,
+        affectedVersions: affected.get(family) || [],
+        fixedVersions: fixed.get(family) || [],
+      });
+    }
+
+    return products;
   }
 
   /**
@@ -293,7 +425,6 @@ export class CiscoAdvisoryFetcher {
       if (lower === "informational") return "informational";
     }
 
-    // Derive from CVSS score
     if (cvssScore !== undefined && cvssScore !== null) {
       if (cvssScore >= 9.0) return "critical";
       if (cvssScore >= 7.0) return "high";
@@ -315,8 +446,8 @@ export class CiscoAdvisoryFetcher {
       affectedVersions: a.affectedProducts.flatMap(p => p.affectedVersions),
       fixedVersions: a.affectedProducts.flatMap(p => p.fixedVersions),
       cveIds: a.cveIds,
-      publishedDate: a.publishedDate,
-      url: a.cvrfUrl || `https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/${a.advisoryId}`,
+      publishedDate: a.publishedDate.split("T")[0],
+      url: a.csafUrl || `https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/${a.advisoryId}`,
     }));
   }
 
@@ -326,14 +457,15 @@ export class CiscoAdvisoryFetcher {
   private calculateBranchMsv(advisories: CiscoAdvisory[], product?: string): BranchMsv[] {
     const branchMap = new Map<string, { msv: string; latest: string }>();
 
-    // Known latest versions for common Cisco products
+    // Known latest versions for common Cisco products (updated 2026-02-19)
     const knownLatest: Record<string, Record<string, string>> = {
       asa: {
-        "9.22": "9.22.1",
-        "9.21": "9.21.2",
-        "9.20": "9.20.3",
+        "9.24": "9.24.1",
+        "9.23": "9.23.1",
+        "9.22": "9.22.2",
+        "9.20": "9.20.4",
         "9.19": "9.19.1",
-        "9.18": "9.18.5",
+        "9.18": "9.18.4",
         "9.16": "9.16.4",
       },
       ftd: {
@@ -350,24 +482,36 @@ export class CiscoAdvisoryFetcher {
       },
     };
 
-    // Determine which product's versions to use
     const productKey = this.detectProductKey(product);
-    const versions = productKey ? knownLatest[productKey] : {};
+    const versions = productKey ? (knownLatest[productKey] || {}) : {};
 
+    // Extract MSV from CSAF advisory data
     for (const advisory of advisories) {
       for (const prod of advisory.affectedProducts) {
-        for (const version of prod.affectedVersions) {
+        // Use fixed versions to determine MSV
+        for (const version of prod.fixedVersions) {
           const branch = this.getBranch(version);
           const current = branchMap.get(branch);
-
-          // MSV would be the next patched version
-          const msv = this.incrementPatch(version);
-
-          if (!current || this.compareVersions(msv, current.msv) > 0) {
+          if (!current || this.compareVersions(version, current.msv) > 0) {
             branchMap.set(branch, {
-              msv,
-              latest: versions[branch] || msv,
+              msv: version,
+              latest: versions[branch] || version,
             });
+          }
+        }
+
+        // For affected versions without a fixed version, increment patch
+        if (prod.fixedVersions.length === 0) {
+          for (const version of prod.affectedVersions) {
+            const branch = this.getBranch(version);
+            const current = branchMap.get(branch);
+            const msv = this.incrementPatch(version);
+            if (!current || this.compareVersions(msv, current.msv) > 0) {
+              branchMap.set(branch, {
+                msv,
+                latest: versions[branch] || msv,
+              });
+            }
           }
         }
       }
@@ -397,17 +541,14 @@ export class CiscoAdvisoryFetcher {
     const lower = product.toLowerCase();
 
     if (lower.includes("asa")) return "asa";
-    if (lower.includes("ftd") || lower.includes("firepower threat defense")) return "ftd";
-    if (lower.includes("ios xe") || lower.includes("ios-xe")) return "ios_xe";
-    if (lower.includes("ios xr") || lower.includes("ios-xr")) return "ios_xr";
-    if (lower.includes("nx-os") || lower.includes("nexus")) return "nx_os";
+    if (lower.includes("ftd") || lower.includes("firepower_threat_defense") || lower.includes("firepower threat defense")) return "ftd";
+    if (lower.includes("ios_xe") || lower.includes("ios xe") || lower.includes("ios-xe")) return "ios_xe";
+    if (lower.includes("ios_xr") || lower.includes("ios xr") || lower.includes("ios-xr")) return "ios_xr";
+    if (lower.includes("nx-os") || lower.includes("nx_os") || lower.includes("nexus")) return "nx_os";
 
     return null;
   }
 
-  /**
-   * Get branch from version
-   */
   private getBranch(version: string): string {
     const parts = version.split(".");
     if (parts.length >= 2) {
@@ -416,9 +557,6 @@ export class CiscoAdvisoryFetcher {
     return version;
   }
 
-  /**
-   * Increment patch version
-   */
   private incrementPatch(version: string): string {
     const parts = version.split(".").map(p => parseInt(p, 10) || 0);
     if (parts.length >= 3) {
@@ -429,9 +567,6 @@ export class CiscoAdvisoryFetcher {
     return parts.join(".");
   }
 
-  /**
-   * Compare versions
-   */
   private compareVersions(a: string, b: string): number {
     const partsA = a.split(".").map(p => parseInt(p, 10) || 0);
     const partsB = b.split(".").map(p => parseInt(p, 10) || 0);

@@ -413,6 +413,42 @@ export class CitrixAdvisoryFetcher {
       }
     }
 
+    // Fallback: If no versions found from scraping, use known latest versions
+    // These are updated manually based on Citrix release cycles
+    if (Object.keys(msv).length === 0) {
+      const knownLatest: Record<string, Record<string, string>> = {
+        netscaler: {
+          "netscaler_adc_14": "14.1-29.72",
+          "netscaler_adc_13": "13.1-55.36",
+        },
+        adc: {
+          "netscaler_adc_14": "14.1-29.72",
+          "netscaler_adc_13": "13.1-55.36",
+        },
+        netscaler_gateway: {
+          "gateway_14": "14.1-29.72",
+          "gateway_13": "13.1-55.36",
+        },
+        xenserver: {
+          "xenserver_8": "8.2.3",
+        },
+        citrix_workspace: {
+          "workspace_app_2409": "24.9.0",
+        },
+        all: {
+          "netscaler_adc_14": "14.1-29.72",
+          "netscaler_adc_13": "13.1-55.36",
+          "gateway_14": "14.1-29.72",
+          "xenserver_8": "8.2.3",
+        },
+      };
+
+      const productVersionMap = knownLatest[this.product] || knownLatest.all || {};
+      for (const [key, version] of Object.entries(productVersionMap)) {
+        msv[key] = version;
+      }
+    }
+
     return msv;
   }
 

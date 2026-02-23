@@ -16,6 +16,8 @@ import { COLORS } from "./types";
 import { formatRiskScore } from "./RiskScoring";
 import { formatActionBox } from "./ActionGuidance";
 import { formatRatingWithDescription, RESET_COLOR } from "./AdmiraltyScoring";
+import { compareVersions } from "./VersionCompare";
+import { checkCompliance } from "./ComplianceChecker";
 
 const { DIM, BOLD, CYAN, YELLOW, GREEN, MAGENTA, RED } = COLORS;
 
@@ -96,9 +98,13 @@ export function formatText(result: MSVResult): string {
 
     // Data freshness footer
     if (result.dataAge) {
-      const age = formatDataAge(result.dataAge);
       const indicator = getFreshnessIndicator(result.dataAge);
-      lines.push(`${indicator} Data checked ${age}${result.fromCache ? " (cached)" : ""}`);
+      if (result.fromCache) {
+        const age = formatDataAge(result.dataAge);
+        lines.push(`${indicator} Data from cache${result.dataAge.ageHours >= 1 ? ` (checked ${age})` : ""}`);
+      } else {
+        lines.push(`${indicator} Data checked just now`);
+      }
     }
 
     return lines.join("\n");
@@ -110,7 +116,7 @@ export function formatText(result: MSVResult): string {
       lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${CYAN}${result.minimumSafeVersion}${RESET_COLOR}`);
     } else {
       lines.push(`${BOLD}Minimum Safe Version:${RESET_COLOR} ${CYAN}${result.minimumSafeVersion}${RESET_COLOR} ${DIM}(oldest safe)${RESET_COLOR}`);
-      lines.push(`${BOLD}Recommended Version:${RESET_COLOR}  ${CYAN}${result.recommendedVersion}${RESET_COLOR} ${DIM}(latest safe)${RESET_COLOR}`);
+      lines.push(`${BOLD}Recommended Version:${RESET_COLOR}  ${CYAN}${result.recommendedVersion}${RESET_COLOR} ${DIM}(newest verified safe)${RESET_COLOR}`);
     }
   } else {
     // CRITICAL FIX: Always show MSV field, explain why undetermined
@@ -123,7 +129,37 @@ export function formatText(result: MSVResult): string {
   }
   // Show latest available version (from catalog)
   if (result.latestVersion) {
-    lines.push(`${BOLD}Latest Version:${RESET_COLOR}       ${GREEN}${result.latestVersion}${RESET_COLOR} ${DIM}(current release)${RESET_COLOR}`);
+    const recVersion = result.recommendedVersion || result.minimumSafeVersion;
+    const latestAhead = recVersion ? compareVersions(result.latestVersion, recVersion) > 0 : false;
+    const latestNote = latestAhead
+      ? "(current release - not yet in vulnerability databases)"
+      : "(current release)";
+    lines.push(`${BOLD}Latest Version:${RESET_COLOR}       ${GREEN}${result.latestVersion}${RESET_COLOR} ${DIM}${latestNote}${RESET_COLOR}`);
+  }
+
+  // Your Version compliance check (when --version is supplied)
+  if (result.currentVersion) {
+    const compliance = checkCompliance(
+      result.currentVersion,
+      result.minimumSafeVersion,
+      result.recommendedVersion
+    );
+    const statusColors: Record<string, string> = {
+      COMPLIANT: GREEN,
+      NON_COMPLIANT: RED,
+      OUTDATED: YELLOW,
+      UNKNOWN: YELLOW,
+    };
+    const statusColor = statusColors[compliance.status] || YELLOW;
+    lines.push(`${BOLD}Your Version:${RESET_COLOR}         ${statusColor}${result.currentVersion} (${compliance.status})${RESET_COLOR}`);
+    lines.push(`${DIM}  ${compliance.message}${RESET_COLOR}`);
+
+    // Detect version newer than latest known stable release (Fix 5)
+    if (result.latestVersion && compareVersions(result.currentVersion, result.latestVersion) > 0) {
+      lines.push(`${DIM}  Note: Your version (${result.currentVersion}) is newer than the latest version in our database (${result.latestVersion}).${RESET_COLOR}`);
+      lines.push(`${DIM}  This may mean our version data is outdated, or you are on a Dev/Beta/Canary channel.${RESET_COLOR}`);
+      lines.push(`${DIM}  Run with --force to refresh version data from live sources.${RESET_COLOR}`);
+    }
   }
   lines.push("");
 
@@ -148,10 +184,12 @@ export function formatText(result: MSVResult): string {
   }
   lines.push("");
 
-  // Branch information if available
-  if (result.branches.length > 0) {
+  // Branch information if available (filter out "default" placeholder branch)
+  // Only show real version branches (e.g., "5", "6", "7" for 5.x, 6.x, 7.x trains)
+  const realBranches = result.branches.filter(b => b.branch !== "default");
+  if (realBranches.length > 0) {
     lines.push(`${BOLD}Version Branches:${RESET_COLOR}`);
-    for (const branch of result.branches) {
+    for (const branch of realBranches) {
       if (branch.noSafeVersion) {
         // Critical warning: MSV > latest means no safe version exists in this branch
         lines.push(`  ${RED}${branch.branch}.x: NO SAFE VERSION - MSV ${branch.msv} > latest ${branch.latest}${RESET_COLOR}`);
@@ -160,6 +198,7 @@ export function formatText(result: MSVResult): string {
         lines.push(`  ${branch.branch}.x: MSV ${branch.msv} (latest: ${branch.latest})`);
       }
     }
+    lines.push(`${DIM}  Only branches with vulnerability data in our sources are shown.${RESET_COLOR}`);
     lines.push("");
   }
 
@@ -207,8 +246,10 @@ export function formatText(result: MSVResult): string {
       lines.push(`${DIM}  Run with --force to refresh vulnerability data${RESET_COLOR}`);
     } else if (result.dataAge.isStale) {
       lines.push(`${indicator} - Last checked ${age}`);
+    } else if (result.fromCache) {
+      lines.push(`${indicator} Data from cache${result.dataAge.ageHours >= 1 ? ` (checked ${age})` : ""}`);
     } else {
-      lines.push(`${indicator} Data checked ${age}${result.fromCache ? " (cached)" : ""}`);
+      lines.push(`${indicator} Data checked just now`);
     }
   }
 
@@ -248,6 +289,9 @@ export function formatMarkdown(result: MSVResult): string {
     `| **Minimum Safe Version** | **${result.minimumSafeVersion || "Unknown"}** |`,
     `| **Recommended Version** | **${result.recommendedVersion || result.minimumSafeVersion || "Unknown"}** |`,
     `| **Latest Version** | ${result.latestVersion || "N/A"} |`,
+    ...(result.currentVersion ? [
+      `| **Your Version** | **${result.currentVersion}** (${checkCompliance(result.currentVersion, result.minimumSafeVersion, result.recommendedVersion).status}) |`,
+    ] : []),
     `| Admiralty Rating | **${result.admiraltyRating.rating}** |`,
     `| Risk Score | **${result.riskScore?.score || 0}/100 ${result.riskScore?.level || "INFO"}** |`,
     `| CVE Count | ${result.cveCount} |`,
@@ -259,14 +303,15 @@ export function formatMarkdown(result: MSVResult): string {
     result.riskScore ? `**Risk Recommendation:** ${result.riskScore.recommendation}` : "",
   ].filter(Boolean);
 
-  // Show branch information
-  if (result.branches.length > 0) {
+  // Show branch information (filter out "default" placeholder branch)
+  const mdBranches = result.branches.filter(b => b.branch !== "default");
+  if (mdBranches.length > 0) {
     lines.push("");
     lines.push("### Version Branches");
     lines.push("");
     lines.push("| Branch | MSV | Latest |");
     lines.push("|--------|-----|--------|");
-    for (const branch of result.branches) {
+    for (const branch of mdBranches) {
       lines.push(`| ${branch.branch}.x | ${branch.msv} | ${branch.latest} |`);
     }
   }

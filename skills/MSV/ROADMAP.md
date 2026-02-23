@@ -1,7 +1,7 @@
 # MSV Roadmap
 
-**Last Updated:** 2026-01-22
-**Current Version:** 1.8.0
+**Last Updated:** 2026-02-03
+**Current Version:** 1.9.0
 
 This roadmap outlines planned improvements and future directions for the MSV (Minimum Safe Version) skill.
 
@@ -14,9 +14,10 @@ This roadmap outlines planned improvements and future directions for the MSV (Mi
 | Software Catalog Entries | 189 |
 | Router Catalog Models | 89 (21 vendors) |
 | Test Coverage | 325 tests (107 router tests) |
-| Vendor Advisory Fetchers | 13 |
+| Vendor Advisory Fetchers | 17 (F5 removed — no public API) |
 | Data Sources | 7 (AppThreat, CISA KEV, VulnCheck, NVD, EPSS, Vendor, Router Catalog) |
 | Supported Ecosystems | Windows desktop, GHSA (npm/pip/maven/nuget/go/rust), Router Firmware, ISP Gateways |
+| Network Security Vendors | 10 (Fortinet, Palo Alto, Cisco, SonicWall, Citrix, Juniper, Ivanti, Check Point, OPNsense, pfSense) |
 
 ---
 
@@ -220,6 +221,78 @@ Track vulnerabilities in browser extensions:
 
 ---
 
+## Next Priorities (v2.0.0 Track)
+
+### HIGH: Fallback Data Quality System
+**Discovered:** During v1.9.0 fetcher stabilization
+**Problem:** 6 fetchers rely on hardcoded fallback versions that can become stale
+
+**Current Fallback Fetchers:**
+| Fetcher | Fallback Data | Risk |
+|---------|---------------|------|
+| Fortinet FortiOS | 7.6.4, 7.4.8, 7.2.10, 7.0.17, 6.4.16 | HIGH - Active releases |
+| Palo Alto PAN-OS | 11.2.6, 11.1.6, 11.0.7, 10.2.12, 10.1.14 | HIGH - Active releases |
+| Cisco ASA | 9.22.1, 9.21.2, 9.20.3, etc. | MEDIUM - Slower release cycle |
+| Atlassian | Confluence 9.3.1/8.5.17, Jira 10.6.0 | MEDIUM - Quarterly releases |
+| Citrix | NetScaler 14.1-29.72, 13.1-55.36 | MEDIUM - Quarterly releases |
+| Adobe | Acrobat DC 25.001.20432 | HIGH - Monthly patches |
+
+**Proposed Solutions:**
+1. **Version Freshness Checker** - Compare fallback versions against vendor release pages
+2. **Confidence Rating Adjustment** - Lower Admiralty rating when using fallback data (B2 → C3)
+3. **Staleness Warning** - Display warning when fallback data > 30 days old
+4. **Automated Scraping** - Periodically scrape vendor release notes for latest versions
+
+**Trigger:** `use the algorithm to evaluate fallback fetchers`
+
+### HIGH: API Change Monitoring
+**Discovered:** VMware, Atlassian, Citrix APIs all changed without notice
+
+**Proposed Solutions:**
+1. **Health Check Endpoint** - Daily test of all fetcher endpoints
+2. **Response Schema Validation** - Detect when API response structure changes
+3. **Alert on Degradation** - Notify when fetcher starts returning fallback data
+4. **Canary Tests** - Automated tests that run periodically
+
+**Trigger:** `add API monitoring to MSV fetchers`
+
+### HIGH: Enterprise Integration (osquery/Wazuh)
+**Status:** Planned (highest value-add remaining)
+**Details:** See FutureExpansion.md Section 6
+
+**What It Enables:**
+- Import real software inventory from endpoints
+- Batch compliance checking across fleet
+- Automated pipeline from osquery → MSV → compliance report
+
+**Trigger:** `add osquery integration to MSV`
+
+### MEDIUM: New Vendor Fetchers
+**Aligned with Seth's network security focus:**
+
+| Vendor | Priority | Data Source | Notes |
+|--------|----------|-------------|-------|
+| **Juniper JunOS** | HIGH | NVD API + fallback | DONE - 8 branches (25.2R1 to 21.4R3) |
+| **Ivanti** | HIGH | Ivanti RSS feed | DONE - Connect Secure, Policy Secure, ZTA, EPMM |
+| **Check Point** | HIGH | NVD API + fallback | DONE - 8 branches (R82 to R77.30), sk articles |
+
+### MEDIUM: Future Vendor Advisory Fetchers (Roadmap)
+
+These vendors lack public machine-readable advisory feeds. Monitor for CSAF/API availability:
+
+| Vendor | Status | Blocker | Data Source Today |
+|--------|--------|---------|-------------------|
+| **F5 BIG-IP** | Deferred | No public API — my.f5.com is JS-rendered Salesforce portal | NVD/VulnCheck/KEV cover F5 CVEs |
+| **Adobe** | Deferred | No CSAF feed (404 on .well-known/csaf), helpx index times out | NVD/VulnCheck/KEV cover Adobe CVEs |
+
+**What would unblock these:**
+- F5: If F5 publishes CSAF at `.well-known/csaf/` or provides a public API
+- Adobe: If Adobe publishes CSAF or makes the APSB bulletin index machine-readable
+
+**Trigger:** `check if F5 or Adobe now have CSAF feeds`
+
+---
+
 ## Ongoing Improvements
 
 ### Catalog Expansion
@@ -273,6 +346,69 @@ Track vulnerabilities in browser extensions:
 ---
 
 ## Completed Milestones
+
+### v1.11.0 (2026-02-19) — Fetcher Integrity Cleanup
+- **Vendor Advisory Fetcher Audit & Fix** — 2nd major review, 6 fetchers repaired or removed
+  - **Cisco ASA**: Complete rewrite from OAuth2 API (required client_id/secret) to free CSAF feed
+    - Source: `cisco.com/.well-known/csaf/` — no authentication needed
+    - Parses CSAF JSON documents for affected/fixed versions per product
+    - Returns 15+ CVEs with specific ASA/FTD version data (9.8.4.48, 9.12.4.67, etc.)
+    - Confidence: A1 (was B2 with fallback data)
+  - **SolarWinds**: Complete rewrite from broken HTML regex scraping to `__NEXT_DATA__` JSON parsing
+    - SolarWinds Trust Center embeds structured ContentStack CMS data in Next.js page
+    - Parses `pagesData` array: headline, advisoryId (CVE), severity, fixedVersion (product+version)
+    - Returns 45+ Platform advisories with 11 version branches
+    - All SolarWinds products now work: Orion Platform, Serv-U, Web Help Desk, ARM
+    - Confidence: A1 (was "not queried" — fetcher existed but returned 0 results)
+  - **Oracle WebLogic**: Fixed data contamination — WebLogic advisories were bleeding into Java/MySQL results
+  - **Chrome**: Replaced stub fetcher with proper Chrome Release Blog scraper
+  - **F5 BIG-IP**: Removed — F5 has no public machine-readable advisory feed (my.f5.com is JS-rendered Salesforce)
+    - F5 CVE data still covered by NVD/VulnCheck/KEV in main pipeline
+  - **Adobe**: Deferred — no CSAF feed, no API, APSB index times out
+    - Adobe CVE data still covered by NVD/VulnCheck/KEV in main pipeline
+  - **Root cause of failures**: Fetchers returned HTTP 200 with hardcoded fallback data, masking actual fetch failures and causing them to appear "WORKING" in audits
+  - **Total Vendor Fetchers: 17** (was 18, F5 removed)
+
+### v1.10.0 (2026-02-03)
+- **Network Security Vendor Expansion - Enterprise + Open Source Firewalls**
+  - ~~**F5 BIG-IP Fetcher**~~: Removed in v1.11.0 — F5 has no public machine-readable advisory feed
+  - **Check Point Gaia OS Fetcher**: NVD API + fallback for 8 branches (R82 to R77.30)
+    - Products: Security Gateway, Management Server, CloudGuard, Maestro, VSX
+    - sk article format (sk######)
+    - Seth's primary firewall vendor (CCSE/CCME certified)
+  - **OPNsense Fetcher**: endoflife.date API + NVD for 5 branches (26.1 to 24.1)
+    - Open-source FreeBSD-based firewall (fork of pfSense)
+    - Calendar versioning: YY.R (24.7, 25.1, 26.1)
+    - Uses structured JSON from endoflife.date for accurate release tracking
+  - **pfSense Fetcher**: NVD API + fallback for Plus and CE editions
+    - pfSense Plus (commercial): YY.MM format (25.11, 24.11)
+    - pfSense CE (community): X.Y.Z format (2.8.1, 2.7.2)
+    - Advisory format: pfSense-SA-YY_XX.component
+  - **Network Security Vendors now at 10**: Fortinet, Palo Alto, Cisco, SonicWall, Citrix, Juniper, Ivanti, Check Point, OPNsense, pfSense
+  - **Total Vendor Fetchers: 17** (F5 removed in v1.11.0)
+
+### v1.9.0 (2026-02-03)
+- **Vendor Advisory Fetcher Stabilization - 100% Pass Rate**
+  - **All 14 fetchers now passing** (was 5/12 before fixes)
+  - **New Network Security Fetchers:**
+    - **Juniper JunOS**: NVD API + fallback data for 8 branches (25.2R1 to 21.4R3)
+    - **Ivanti**: RSS feed (ivanti.com/blog/topics/security-advisory/rss), 19+ advisories
+      - Products: Connect Secure, Policy Secure, ZTA Gateway, EPMM, Avalanche
+      - WARNING: Ivanti products are frequent CISA KEV targets
+  - **API Format Fixes:**
+    - Microsoft MSRC: Fixed title field extraction (`{Value: "..."}` → string)
+    - VMware: Updated for new API format (`data.list` vs `advisoryList`)
+    - Atlassian: Removed pagination params (API change caused 400 errors)
+  - **Timeout/Error Handling:**
+    - Adobe: Increased timeout to 60s, graceful fallback on timeout
+    - Citrix: Added fallback data (page became JavaScript SPA)
+  - **Branch Calculation Fixes:**
+    - Oracle: Added fallback branches for Java, MySQL, VirtualBox, WebLogic
+    - Fortinet/Cisco: Added fallback branch data
+  - **Fetcher Distribution:**
+    - 7 with live API data: Firefox, Edge, VMware, Curl, Oracle, SonicWall, Ivanti
+    - 7 with fallback branches: Fortinet, Palo Alto, Cisco, Atlassian, Citrix, Adobe, Juniper
+  - **Test Harness:** `test-all-fetchers.ts` for validating all 14 fetchers
 
 ### v1.8.0 (2026-01-22)
 - **Router Phase 7 - Popular Retail Models (Newegg/Amazon Best Sellers)**

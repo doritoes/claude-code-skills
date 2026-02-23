@@ -249,10 +249,6 @@ export class CtiReportGenerator {
           const products = item.affectedProducts.length > 0
             ? item.affectedProducts.slice(0, 2).join(", ")
             : "affected systems";
-          const shortDesc = item.title.length > 60
-            ? item.title.slice(0, 60) + "..."
-            : item.title;
-
           // Determine if this is a zero-day (no patch) vs patchable
           const remediation = item.remediation?.toLowerCase() || "";
           const isZeroDay = remediation.includes("mitigat") ||
@@ -261,17 +257,15 @@ export class CtiReportGenerator {
                            remediation.includes("workaround");
 
           if (isZeroDay) {
-            // Zero-day: recommend mitigation, include guidance
-            const shortRemediation = item.remediation && item.remediation.length > 80
-              ? item.remediation.slice(0, 80) + "..."
-              : item.remediation || "Apply vendor mitigations or disable service";
+            // Zero-day: recommend mitigation, include full guidance
+            const remediationText = item.remediation || "Apply vendor mitigations or disable service";
             actionItems.push(
-              `IMMEDIATE: ZERO-DAY - ${products} - ${item.id}: ${shortRemediation}`
+              `IMMEDIATE: ZERO-DAY - ${products} - ${item.id}: ${remediationText}`
             );
           } else {
             // Patchable: recommend patching
             actionItems.push(
-              `IMMEDIATE: Patch ${products} - ${item.id} (${shortDesc})`
+              `IMMEDIATE: Patch ${products} - ${item.id} (${item.title})`
             );
           }
         }

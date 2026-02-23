@@ -10,7 +10,7 @@
  * - VMwareAdvisoryFetcher
  * - AtlassianAdvisoryFetcher
  * - CitrixAdvisoryFetcher
- * - AdobeAdvisoryFetcher
+ * - PfSenseAdvisoryFetcher
  * - OracleAdvisoryFetcher
  * - MsrcAdvisoryFetcher
  *
@@ -211,30 +211,44 @@ describe("CitrixAdvisoryFetcher", () => {
 });
 
 // =============================================================================
-// Adobe Advisory Fetcher Tests
+// pfSense Advisory Fetcher Tests
 // =============================================================================
 
-describe("AdobeAdvisoryFetcher", () => {
-  test("parses APSB bulletin format", async () => {
-    const { AdobeAdvisoryFetcher } = await import("../AdobeAdvisoryFetcher");
+describe("PfSenseAdvisoryFetcher", () => {
+  test("can be instantiated", async () => {
+    const { PfSenseAdvisoryFetcher } = await import("../PfSenseAdvisoryFetcher");
 
-    const fetcher = new AdobeAdvisoryFetcher(TEST_CACHE_DIR, "acrobat");
+    const fetcher = new PfSenseAdvisoryFetcher(TEST_CACHE_DIR);
     expect(fetcher).toBeDefined();
   });
 
-  test("extracts APSB bulletin ID", () => {
-    const bulletinTitle = "APSB25-01: Security update for Adobe Acrobat Reader";
-    const apsbMatch = bulletinTitle.match(/APSB\d+-\d+/);
-    expect(apsbMatch?.[0]).toBe("APSB25-01");
+  test("extracts advisory ID from .asc filename pattern", () => {
+    const html = `<a href="/downloads/pfSense-SA-25_09.sshguard.asc">pfSense-SA-25_09.sshguard</a>`;
+    const pattern = /pfSense-SA-\d{2}_\d+\.\w+/g;
+    const match = pattern.exec(html);
+    expect(match?.[0]).toBe("pfSense-SA-25_09.sshguard");
   });
 
-  test("handles Adobe version format", () => {
-    // Adobe uses YY.M.build format
-    const adobeVersion = "24.001.20604.0";
-    const parts = adobeVersion.split(".");
-    expect(parts[0]).toBe("24"); // Year
-    expect(parts[1]).toBe("001"); // Month
-    expect(parts[2]).toBe("20604"); // Build
+  test("parses Affects section version constraints", () => {
+    const affectsText = "pfSense Plus software versions < 25.11";
+    const versionMatch = affectsText.match(/pfSense\s+(Plus|CE)\s+.*?([<>=]+)\s+([\d.]+)/i);
+    expect(versionMatch?.[1]).toBe("Plus");
+    expect(versionMatch?.[2]).toBe("<");
+    expect(versionMatch?.[3]).toBe("25.11");
+  });
+
+  test("parses Corrected section fix versions", () => {
+    const correctedLine = "2025-11-10 20:22:38 UTC (pfSense Plus Ports plus-RELENG_25_11, 25.11)";
+    const versionMatch = correctedLine.match(/\(pfSense\s+(Plus|CE).*?,\s*([\d.]+)\)/i);
+    expect(versionMatch?.[1]).toBe("Plus");
+    expect(versionMatch?.[2]).toBe("25.11");
+  });
+
+  test("parses CE version from Corrected section", () => {
+    const correctedLine = "2024-12-03 14:39:04 UTC (pfSense CE master, 2.8.0)";
+    const versionMatch = correctedLine.match(/\(pfSense\s+(Plus|CE).*?,\s*([\d.]+)\)/i);
+    expect(versionMatch?.[1]).toBe("CE");
+    expect(versionMatch?.[2]).toBe("2.8.0");
   });
 });
 
@@ -371,6 +385,25 @@ describe("VendorAdvisory Factory", () => {
       }
     } catch (e) {
       // Skip if dependencies are missing
+      if (String(e).includes("Cannot find package")) {
+        console.log("Skipping: dependency package not available");
+        expect(true).toBe(true);
+        return;
+      }
+      throw e;
+    }
+  });
+
+  test("returns null for retired vendors (no viable vendor source)", async () => {
+    try {
+      const { getVendorFetcher } = await import("../VendorAdvisory");
+      // These vendors have no viable vendor advisory source — covered by NVD/VulnCheck/KEV
+      expect(getVendorFetcher("adobe", "acrobat", TEST_CACHE_DIR)).toBeNull();
+      expect(getVendorFetcher("fortinet", "fortios", TEST_CACHE_DIR)).toBeNull();
+      expect(getVendorFetcher("sonicwall", "sonicos", TEST_CACHE_DIR)).toBeNull();
+      expect(getVendorFetcher("juniper", "junos", TEST_CACHE_DIR)).toBeNull();
+      expect(getVendorFetcher("checkpoint", "gaia", TEST_CACHE_DIR)).toBeNull();
+    } catch (e) {
       if (String(e).includes("Cannot find package")) {
         console.log("Skipping: dependency package not available");
         expect(true).toBe(true);

@@ -55,7 +55,7 @@ import {
 } from "./VersionCompare";
 import { NvdClient, type VersionInfo } from "./NvdClient";
 import { MsvCache, type MsvCacheEntry, type MsvBranch, type SourceResult } from "./MsvCache";
-import { getVendorFetcher, type VendorAdvisoryResult } from "./VendorAdvisory";
+import { getVendorFetcher, isLegacyProductVersion, type VendorAdvisoryResult } from "./VendorAdvisory";
 import { parseFile, parseInput, parseDirectList, type SoftwareInput } from "./InputParser";
 import { ChocolateyClient } from "./ChocolateyClient";
 import {
@@ -217,17 +217,41 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
     }
   }
 
-  // Fuzzy match (contains)
-  for (const [key, mapping] of Object.entries(catalog)) {
-    if (
-      mapping.displayName.toLowerCase().includes(normalized) ||
-      mapping.product.toLowerCase().includes(normalized)
-    ) {
-      return mapping;
+  // Strip trailing version number for fallback matching
+  // Matches patterns like "r81.20", "7.4.3", "v2.1", "24.2R1", "9.24.1" at end of string
+  const versionStripped = normalized.replace(/\s+(?:v(?:ersion)?\s*)?(?:r?\d[\d.a-z]*\s*)$/i, "").trim();
+
+  // Fuzzy match (contains) — tiered: prefer id/displayName/alias over product field
+  // Bidirectional: query-in-target OR target-in-query (for "checkpoint r81.20" matching alias "checkpoint")
+  let bestMatch: SoftwareMapping | null = null;
+  let bestTier = 99; // lower = better; 99 = no match
+  let bestLen = Infinity; // shorter displayName = more specific match
+
+  for (const query of [normalized, ...(versionStripped !== normalized ? [versionStripped] : [])]) {
+    for (const [key, mapping] of Object.entries(catalog)) {
+      let tier = 99;
+      if (key.includes(query) || query.includes(key)) {
+        tier = 1; // id contains query or query contains id
+      } else if (mapping.displayName.toLowerCase().includes(query)) {
+        tier = 2; // displayName contains query
+      } else if (mapping.aliases.some((a) => {
+        const al = a.toLowerCase();
+        return al.includes(query) || query.includes(al);
+      })) {
+        tier = 3; // alias substring match (bidirectional)
+      } else if (mapping.product.toLowerCase().includes(query)) {
+        tier = 4; // product field
+      }
+
+      if (tier < 99 && (tier < bestTier || (tier === bestTier && mapping.displayName.length < bestLen))) {
+        bestMatch = mapping;
+        bestTier = tier;
+        bestLen = mapping.displayName.length;
+      }
     }
   }
 
-  return null;
+  return bestMatch;
 }
 
 /**
@@ -639,6 +663,14 @@ async function queryMSV(
   const msvCache = new MsvCache(config.dataDir);
   const productId = `${software.vendor}:${software.product}`.toLowerCase();
 
+  // When --force is used, delete the MSV cache entry so we get completely fresh data
+  if (options.forceRefresh) {
+    const deleted = msvCache.delete(productId);
+    if (deleted) {
+      logger.debug(`Cleared MSV cache entry for ${productId}`);
+    }
+  }
+
   // Check cache first (unless force refresh)
   if (!options.forceRefresh) {
     const cached = msvCache.get(productId);
@@ -703,9 +735,9 @@ async function queryMSV(
         cached.branches[0]?.lastChecked
       );
 
-      // Use cached justification or generate meaningful one
+      // Always regenerate justification to match recalculated MSV
       const admiraltyRating = calculateMsvRating(ratingInput);
-      const justification = cached.justification || generateJustification(
+      const justification = generateJustification(
         minimumSafeVersion,
         cveCount,
         cached.hasKevCves || false,
@@ -728,25 +760,26 @@ async function queryMSV(
       }
 
       // Try to get latest version from multiple sources (in priority order):
-      // 1. Catalog (static, manually maintained)
-      // 2. Chocolatey (Windows package manager)
-      // 3. endoflife.date (structured EOL/version database)
-      let latestVersion = software.latestVersion || null;
-      if (!latestVersion) {
-        // Try Chocolatey first
-        try {
-          const chocoClient = new ChocolateyClient(config.dataDir);
-          const chocoVersion = await chocoClient.getLatestVersion(software.id);
-          if (chocoVersion) {
-            latestVersion = chocoVersion;
-            logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
-          }
-        } catch {
-          // Chocolatey lookup failed
+      // 1. Chocolatey (Windows package manager — live, 24h cache)
+      // 2. endoflife.date (structured EOL/version database — live, 24h cache)
+      // 3. Catalog (static, manually maintained — fallback)
+      // Live sources take priority over static catalog to avoid stale data.
+      let latestVersion: string | null = null;
+
+      // Try Chocolatey first (live source)
+      try {
+        const chocoClient = new ChocolateyClient(config.dataDir);
+        const chocoVersion = await chocoClient.getLatestVersion(software.id);
+        if (chocoVersion) {
+          latestVersion = chocoVersion;
+          logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
         }
+      } catch {
+        // Chocolatey lookup failed
       }
+
       if (!latestVersion) {
-        // Try endoflife.date as fallback
+        // Try endoflife.date as second live source
         try {
           const eolClient = new EndOfLifeClient(join(config.dataDir, "eol"));
           const eolData = await eolClient.getProduct(software.id);
@@ -760,10 +793,20 @@ async function queryMSV(
         }
       }
 
+      // Fall back to static catalog value
+      if (!latestVersion) {
+        latestVersion = software.latestVersion || null;
+      }
+
+      // Latest release is always at least as safe as the highest patched version
+      if (latestVersion && recommendedVersion && compareVersions(latestVersion, recommendedVersion) > 0) {
+        recommendedVersion = latestVersion;
+      }
+
       // Generate action guidance (now that we have latestVersion)
       const branchesWithNoSafeVersion = branches.filter(b => b.noSafeVersion);
       const actionInput: ActionInput = {
-        currentVersion: null,
+        currentVersion: options.currentVersion || null,
         minimumSafeVersion,
         recommendedVersion,
         admiraltyRating,
@@ -791,6 +834,22 @@ async function queryMSV(
         dataAge: dataAge?.ageHours || 0,
       };
 
+      let action = generateAction(actionInput);
+
+      // Override action if user's version is from a discontinued product line
+      if (options.currentVersion && isLegacyProductVersion(software.vendor, software.product, options.currentVersion)) {
+        action = {
+          action: "UPGRADE_CRITICAL",
+          symbol: "\u26D4",
+          color: "\x1b[31m",
+          headline: "END OF LIFE",
+          message: `Version ${options.currentVersion} is from a discontinued product line (e.g., Edge Legacy). Migrate to the current product immediately.`,
+          urgency: "critical",
+        };
+      }
+
+      riskScoreInput.isCompliant = !!(options.currentVersion && action.action === "NO_ACTION");
+
       return {
         software: softwareInput,
         displayName: software.displayName,
@@ -809,7 +868,7 @@ async function queryMSV(
         dataAge,
         hasKevCves: cached.hasKevCves || false,
         sourceResults,
-        action: generateAction(actionInput),
+        action,
         riskScore: calculateRiskScore(riskScoreInput),
       };
     }
@@ -831,6 +890,22 @@ async function queryMSV(
 
   if (vendorFetcher) {
     try {
+      // When --force is used, clear vendor advisory cache to get fresh data
+      if (options.forceRefresh) {
+        try {
+          const { readdirSync, unlinkSync } = await import("node:fs");
+          const { resolve: resolvePath } = await import("node:path");
+          const files = readdirSync(config.dataDir);
+          for (const file of files) {
+            if (file.startsWith("vendor-") && file.endsWith(".json")) {
+              try { unlinkSync(resolvePath(config.dataDir, file)); } catch { /* ignore */ }
+            }
+          }
+          logger.debug("Cleared vendor advisory cache for --force refresh");
+        } catch {
+          // Cache clear failed - continue with potentially cached data
+        }
+      }
       const vendorData = await vendorFetcher.fetch();
 
       if (vendorData.branches.length > 0) {
@@ -881,7 +956,8 @@ async function queryMSV(
         logger.debug(`Found ${vendorData.advisories.length} advisories, ${branches.length} branches`);
       }
     } catch (error) {
-      logger.warn("Vendor advisory fetch failed:", error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logger.warn(`Vendor advisory fetch failed: ${errMsg}`);
       sourceResults.push({
         source: "Vendor Advisory",
         queried: true,
@@ -987,7 +1063,8 @@ async function queryMSV(
         }
         appThreatClient.close();
       } catch (error) {
-        logger.warn("AppThreat query failed:", error);
+        const appThreatErr = error instanceof Error ? error.message : String(error);
+        logger.warn(`AppThreat query failed: ${appThreatErr}`);
         sourceResults.push({
           source: "AppThreat",
           queried: true,
@@ -1075,7 +1152,8 @@ async function queryMSV(
       });
     }
   } catch (error) {
-    logger.warn("CISA KEV query failed:", error);
+    const kevErr = error instanceof Error ? error.message : String(error);
+    logger.warn(`CISA KEV query failed: ${kevErr}`);
     evidence.push({ source: "CISA_KEV", hasData: false });
     sourceResults.push({
       source: "CISA KEV",
@@ -1139,7 +1217,8 @@ async function queryMSV(
         });
       }
     } catch (error) {
-      logger.warn("VulnCheck query failed:", error);
+      const vcErr = error instanceof Error ? error.message : String(error);
+      logger.warn(`VulnCheck query failed: ${vcErr}`);
       evidence.push({ source: "VulnCheck", hasData: false });
       sourceResults.push({
         source: "VulnCheck",
@@ -1277,7 +1356,8 @@ async function queryMSV(
         logger.debug("No CVEs found in NVD for this CPE");
       }
     } catch (error) {
-      logger.warn("NVD CPE query failed:", error);
+      const nvdCpeErr = error instanceof Error ? error.message : String(error);
+      logger.warn(`NVD CPE query failed: ${nvdCpeErr}`);
       evidence.push({ source: "NVD", hasData: false });
       sourceResults.push({
         source: "NVD",
@@ -1332,7 +1412,8 @@ async function queryMSV(
           }
         }
       } catch (error) {
-        logger.warn("NVD query failed:", error);
+        const nvdErr = error instanceof Error ? error.message : String(error);
+        logger.warn(`NVD query failed: ${nvdErr}`);
       }
     }
   }
@@ -1378,7 +1459,8 @@ async function queryMSV(
         });
       }
     } catch (error) {
-      logger.warn("EPSS query failed:", error);
+      const epssErr = error instanceof Error ? error.message : String(error);
+      logger.warn(`EPSS query failed: ${epssErr}`);
       sourceResults.push({
         source: "EPSS",
         queried: true,
@@ -1446,7 +1528,7 @@ async function queryMSV(
     .filter((v): v is string => v !== null && v !== undefined);
 
   const actionInput: ActionInput = {
-    currentVersion: null,
+    currentVersion: options.currentVersion || null,
     minimumSafeVersion,
     recommendedVersion,
     admiraltyRating,
@@ -1458,7 +1540,19 @@ async function queryMSV(
     latestVersion: software.latestVersion,
     cveFixedVersions: cveFixedVersions.length > 0 ? cveFixedVersions : undefined,
   };
-  const action = generateAction(actionInput);
+  let action = generateAction(actionInput);
+
+  // Override action if user's version is from a discontinued product line
+  if (options.currentVersion && isLegacyProductVersion(software.vendor, software.product, options.currentVersion)) {
+    action = {
+      action: "UPGRADE_CRITICAL",
+      symbol: "\u26D4",
+      color: "\x1b[31m",
+      headline: "END OF LIFE",
+      message: `Version ${options.currentVersion} is from a discontinued product line (e.g., Edge Legacy). Migrate to the current product immediately.`,
+      urgency: "critical",
+    };
+  }
 
   // Calculate aggregate risk score
   const kevCveCount = exploitedCves.filter(c => c.inCisaKev).length;
@@ -1476,6 +1570,7 @@ async function queryMSV(
     msvDetermined: minimumSafeVersion !== null,
     hasPoCExploits: exploitedCves.some(c => c.hasPoC),
     dataAge: 0, // Fresh query
+    isCompliant: !!(options.currentVersion && action.action === "NO_ACTION"),
   };
   const riskScore = calculateRiskScore(riskScoreInput);
 
@@ -1515,25 +1610,26 @@ async function queryMSV(
   const dataAge = calculateDataFreshness(now, now);
 
   // Try to get latest version from multiple sources (in priority order):
-  // 1. Catalog (static, manually maintained)
-  // 2. Chocolatey (Windows package manager)
-  // 3. endoflife.date (structured EOL/version database)
-  let latestVersion = software.latestVersion || null;
-  if (!latestVersion) {
-    // Try Chocolatey first
-    try {
-      const chocoClient = new ChocolateyClient(config.dataDir);
-      const chocoVersion = await chocoClient.getLatestVersion(software.id);
-      if (chocoVersion) {
-        latestVersion = chocoVersion;
-        logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
-      }
-    } catch {
-      // Chocolatey lookup failed
+  // 1. Chocolatey (Windows package manager — live, 24h cache)
+  // 2. endoflife.date (structured EOL/version database — live, 24h cache)
+  // 3. Catalog (static, manually maintained — fallback)
+  // Live sources take priority over static catalog to avoid stale data.
+  let latestVersion: string | null = null;
+
+  // Try Chocolatey first (live source)
+  try {
+    const chocoClient = new ChocolateyClient(config.dataDir);
+    const chocoVersion = await chocoClient.getLatestVersion(software.id);
+    if (chocoVersion) {
+      latestVersion = chocoVersion;
+      logger.debug(`Latest version from Chocolatey: ${chocoVersion}`);
     }
+  } catch {
+    // Chocolatey lookup failed
   }
+
   if (!latestVersion) {
-    // Try endoflife.date as fallback
+    // Try endoflife.date as second live source
     try {
       const eolClient = new EndOfLifeClient(join(config.dataDir, "eol"));
       const eolData = await eolClient.getProduct(software.id);
@@ -1545,6 +1641,16 @@ async function queryMSV(
     } catch {
       // endoflife.date lookup failed, continue without latest version
     }
+  }
+
+  // Fall back to static catalog value
+  if (!latestVersion) {
+    latestVersion = software.latestVersion || null;
+  }
+
+  // Latest release is always at least as safe as the highest patched version
+  if (latestVersion && recommendedVersion && compareVersions(latestVersion, recommendedVersion) > 0) {
+    recommendedVersion = latestVersion;
   }
 
   return {
@@ -1580,6 +1686,11 @@ async function cmdQuery(
 ): Promise<void> {
   const config = getConfig();
   const result = await queryMSV(softwareInput, options, config);
+
+  // Attach user-supplied version for display
+  if (options.currentVersion) {
+    result.currentVersion = options.currentVersion;
+  }
 
   switch (options.format) {
     case "json":
@@ -2216,9 +2327,9 @@ function inferPriority(vendor: string, product: string, title: string, category:
 }
 
 /**
- * Get associated vendor fetcher if available
+ * Get associated vendor fetcher name if available (for catalog tagging)
  */
-function getVendorFetcher(vendor: string, product: string): string | null {
+function getVendorFetcherName(vendor: string, product: string): string | null {
   const vendorMap: Record<string, string[]> = {
     "curl": ["curl"],
     "mozilla": ["mozilla", "firefox", "thunderbird"],
@@ -2278,7 +2389,7 @@ async function cmdDiscover(query: string, options: DiscoverOptions, config: Conf
     const match = windowsMatches[idx];
     const category = inferCategory(match.vendor, match.product, match.title);
     const priority = inferPriority(match.vendor, match.product, match.title, category);
-    const vendorFetcher = getVendorFetcher(match.vendor, match.product);
+    const vendorFetcherName = getVendorFetcherName(match.vendor, match.product);
 
     // Create enhanced entry
     const entry = {
@@ -2295,10 +2406,10 @@ async function cmdDiscover(query: string, options: DiscoverOptions, config: Conf
         `${match.vendor} ${match.product}`.replace(/_/g, " "),
       ].filter((a, i, arr) => arr.indexOf(a) === i),
       platforms: ["windows"] as string[],
-      notes: `Auto-discovered from NVD CPE${vendorFetcher ? `. Vendor: ${vendorFetcher}` : ""}`,
+      notes: `Auto-discovered from NVD CPE${vendorFetcherName ? `. Vendor: ${vendorFetcherName}` : ""}`,
       autoDiscovered: true,
       discoveredAt: new Date().toISOString(),
-      ...(vendorFetcher && { vendorFetcherId: vendorFetcher }),
+      ...(vendorFetcherName && { vendorFetcherId: vendorFetcherName }),
     };
 
     // Add to catalog
@@ -2326,7 +2437,7 @@ async function cmdDiscover(query: string, options: DiscoverOptions, config: Conf
     const match = windowsMatches[i];
     const category = inferCategory(match.vendor, match.product, match.title);
     const priority = inferPriority(match.vendor, match.product, match.title, category);
-    const vendorFetcher = getVendorFetcher(match.vendor, match.product);
+    const vendorFetcherName = getVendorFetcherName(match.vendor, match.product);
 
     const confColor = match.confidence === "high" ? "\x1b[32m" :
                      match.confidence === "medium" ? "\x1b[33m" : "\x1b[90m";
@@ -2341,8 +2452,8 @@ async function cmdDiscover(query: string, options: DiscoverOptions, config: Conf
     console.log(`   Confidence: ${confColor}${match.confidence}${RESET}`);
     console.log(`   Category: ${category} (inferred)`);
     console.log(`   Priority: ${priColor}${priority}${RESET} (inferred)`);
-    if (vendorFetcher) {
-      console.log(`   Vendor Fetcher: ${vendorFetcher} (available)`);
+    if (vendorFetcherName) {
+      console.log(`   Vendor Fetcher: ${vendorFetcherName} (available)`);
     }
     console.log("");
   }
@@ -2668,6 +2779,7 @@ CHECK COMMAND:
   Input formats auto-detected, or specify with --csv, --json, --list
 
 OPTIONS:
+  --version <ver>, -V  Your installed version (shows compliance status)
   --format <type>      Output format: text (default), json, markdown, csv
   --filter <type>      Filter batch results: kev, urgent, stale, undetermined, all
                        kev = Only CISA KEV CVEs, urgent = KEV + high CVE count,
@@ -2684,6 +2796,7 @@ OPTIONS:
 
 EXAMPLES:
   msv query "Google Chrome"
+  msv query edge --version 131.0.2903.86   # Check if your version is safe
   msv query "SolarWinds Serv-U" --format json
   msv query "Adobe Acrobat DC"
   msv batch inventory.txt --filter kev          # Only KEV-affected products
@@ -3675,6 +3788,8 @@ async function main(): Promise<void> {
       ctiRegion = args[++i];
     } else if (arg === "--output" && args[i + 1]) {
       ctiOutput = args[++i];
+    } else if ((arg === "--version" || arg === "-V") && args[i + 1]) {
+      options.currentVersion = args[++i];
     } else if (!arg.startsWith("-")) {
       positionalArgs.push(arg);
     }

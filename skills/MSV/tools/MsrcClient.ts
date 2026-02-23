@@ -355,7 +355,8 @@ export class MsrcClient {
         for (const vuln of cvrf.Vulnerability) {
           // Find affected products matching our pattern
           const affectedProducts: string[] = [];
-          for (const status of vuln.ProductStatuses) {
+          for (const status of vuln.ProductStatuses || []) {
+            if (!status.ProductID) continue;
             for (const productId of status.ProductID) {
               const productName = productMap.get(productId);
               if (productName && productPattern.test(productName)) {
@@ -404,9 +405,14 @@ export class MsrcClient {
             }
           }
 
+          // Extract title string - MSRC API returns title as { Value: string } or string
+          const titleStr = typeof vuln.Title === "object" && vuln.Title !== null
+            ? (vuln.Title as { Value?: string }).Value || ""
+            : (vuln.Title as string) || "";
+
           results.push({
             cveId: vuln.CVE,
-            title: vuln.Title,
+            title: titleStr,
             description,
             severity,
             cvssScore,
@@ -534,9 +540,14 @@ export class MsrcClient {
         }
       }
 
+      // Extract title string - MSRC API returns title as { Value: string } or string
+      const titleStr = typeof vuln.Title === "object" && vuln.Title !== null
+        ? (vuln.Title as { Value?: string }).Value || ""
+        : (vuln.Title as string) || "";
+
       const result: MsrcVulnResult = {
         cveId: vuln.CVE,
-        title: vuln.Title,
+        title: titleStr,
         description,
         severity,
         cvssScore,
