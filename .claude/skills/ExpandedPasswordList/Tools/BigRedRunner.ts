@@ -71,7 +71,7 @@ const ATTACK_CMDS: Record<string, string> = {
   "mask-lllldddd":                 "#HL# -a 3 ?l?l?l?l?d?d?d?d",
   "hybrid-beta-4any":              "#HL# -a 6 BETA.txt ?a?a?a?a",
   "hybrid-nocapplus-3any":         "#HL# -a 6 nocap-plus.txt ?a?a?a",
-  "hybrid-roots-5any":             "#HL# -a 6 top-roots.txt ?a?a?a?a?a",
+  "hybrid-roots-4any":             "#HL# -a 6 top-roots.txt ?a?a?a?a",
 };
 
 // =============================================================================

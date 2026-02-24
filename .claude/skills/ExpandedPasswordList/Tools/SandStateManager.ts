@@ -127,7 +127,7 @@ export const DEFAULT_ATTACK_ORDER = [
   // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix attacks (NEW v6.2)
   "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~14 min, primary suffix learner
   "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~27 min, broadest root coverage
-  "hybrid-roots-5any",             // top-roots × ?a^5 — ~17 min, deepest reach (14+ char)
+  "hybrid-roots-4any",             // top-roots × ?a^4 — ~11s, deepest reach (12-14+ char). ?a^5 overflows uint32 in hashcat hybrid mode
   //
   // ── GATE 3: ~95% of achievable cracks done ───────────────────────
   //

@@ -340,7 +340,7 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 0.19% |
 | 3a | hybrid-beta-4any | BETA.txt + ?a^4 | NEW — ~14 min, primary suffix learner |
 | 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | NEW — ~27 min, broadest root coverage |
-| 3a | hybrid-roots-5any | top-roots.txt + ?a^5 | NEW — ~17 min, deepest reach (14+ char) |
+| 3a | hybrid-roots-4any | top-roots.txt + ?a^4 | NEW — ~11s, deepest reach (12-14+ char) |
 | 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 0.15% |
 | 4 | mask-lllldddd | 4 lower + 4 digits | 0.19% |
 | 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits | 0.12% |
