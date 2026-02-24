@@ -33,6 +33,7 @@ const TIER_MAP: Record<string, number> = {
   "brute-6": 1, "brute-7": 1,
   "feedback-beta-nocaprule": 2, "nocapplus-nocaprule": 2, "nocapplus-unobtainium": 2,
   "hybrid-nocapplus-4digit": 3, "mask-lllllldd": 3, "brute-5": 3, "mask-Ullllllld": 3,
+  "hybrid-beta-4any": 3.5, "hybrid-nocapplus-3any": 3.5, "hybrid-roots-4any": 3.5,
   "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4, "hybrid-nocapplus-3digit": 4, "mask-lllldddd": 4,
   "brute-8": 99,
 };
@@ -42,6 +43,7 @@ const TIER_NAMES: Record<number, string> = {
   1: "Tier 1: High ROI",
   2: "Tier 2: Feedback",
   3: "Tier 3: Medium ROI",
+  3.5: "Tier 3a: Long-Password Discovery",
   4: "Tier 4: Low ROI",
   99: "Special: Manual",
 };
