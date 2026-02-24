@@ -220,7 +220,7 @@ function runBatch(batchNum: number, options: {
 
   // Step 2: RUN ATTACKS
   if (startStep <= 2) {
-    stepLog(2, TOTAL_STEPS, "ATTACKS — Running 15 attacks on BIGRED (~2.5 hrs)");
+    stepLog(2, TOTAL_STEPS, "ATTACKS — Running 18 attacks on BIGRED (~3 hrs)");
     const t0 = Date.now();
 
     if (options.dryRun) {
