@@ -1568,7 +1568,8 @@ async function generateFeedback(options: {
   if (!dryRun && existsSync(SAND_STATE_PATH)) {
     try {
       const sandState = JSON.parse(readFileSync(SAND_STATE_PATH, "utf-8"));
-      const targetBatch = batchesAnalyzed[batchesAnalyzed.length - 1];
+      const rawBatch = batchesAnalyzed[batchesAnalyzed.length - 1];
+      const targetBatch = rawBatch?.replace(/^passwords-/, "") || rawBatch;
       if (targetBatch && sandState.batches?.[targetBatch]) {
         const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-"];
         const attackResults: Array<{ attack: string; newCracks: number }> =
