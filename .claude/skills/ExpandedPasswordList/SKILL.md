@@ -903,7 +903,7 @@ bun Tools/DiamondFeedback.ts --batch batch-0008
 
 **Feedback loop status (Gen1: 12 batches, Gen2: pending fresh data):**
 - 77K+ words in BETA.txt (cohorts + discovered + HIBP-promoted)
-- 194 rules in UNOBTAINIUM.rule (new transformations not in nocap.rule)
+- 234 rules in UNOBTAINIUM.rule (20 auto-generated + 230 deep-analysis from 309K Gen2 diamonds)
 - Feedback attacks contributed 1.5% of Gen1 cracks (3,283 total) — compounds over time
 
 **A/B testing plan:**
@@ -918,7 +918,7 @@ To measure true feedback value, periodically run a batch WITHOUT feedback attack
 
 **What to watch for in coming batches:**
 - Does feedback-beta-nocaprule crack rate increase as BETA.txt grows?
-- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (194 rules now)
+- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (234 rules now, regenerated 2026-02-24)
 - Do mask-lllldddd and hybrid-nocapplus-3digit justify their slot after more data?
 
 ### Configuration
@@ -975,7 +975,7 @@ cmd /c mklink /D "<PAI_DIR>\.claude\skills\ExpandedPasswordList\data" "\\<NAS_IP
 - SAND batches: `data/sand/batch-*.txt` (uncracked from Stage 1)
 - DIAMONDS: `data/diamonds/hash_plaintext_pairs.jsonl` (JSONL, append-only) + `data/diamonds/passwords-batch-NNNN.txt`
 - GLASS: `data/glass/batch-*.txt` (uncrackable hashes)
-- UNOBTAINIUM: `data/feedback/unobtainium.rule` (194 rules)
+- UNOBTAINIUM: `data/feedback/unobtainium.rule` (234 rules — 20 auto + 230 deep-analysis)
 - BETA: `data/feedback/BETA.txt` (77K+ words)
 
 ## Generational Password Analysis

@@ -236,6 +236,24 @@ bun Tools/AttackReview.ts
 
 ---
 
+## Phase 4a: Deep Rule Analysis (Periodic)
+
+Regenerate UNOBTAINIUM.rule from the full diamond corpus. Run **every ~50 batches** or when diamonds roughly double since last run. See [`DeepRuleAnalysis.md`](DeepRuleAnalysis.md) for full documentation.
+
+```bash
+cd .claude/skills/ExpandedPasswordList
+
+# Run analysis (output is large, redirect recommended)
+bun ../../scratchpad/deep-rule-analysis.ts > ../../scratchpad/deep-analysis-output.txt 2>&1
+
+# Review output, then update data/feedback/unobtainium.rule with new rules
+# under the "# Deep analysis" marker (DiamondFeedback preserves this section)
+```
+
+**Last run:** 2026-02-24, 309K diamonds (11 batches), 230 rules at 30+ threshold.
+
+---
+
 ## Phase 5: Attack Review
 
 AttackReview evaluates attack effectiveness and recommends changes.
