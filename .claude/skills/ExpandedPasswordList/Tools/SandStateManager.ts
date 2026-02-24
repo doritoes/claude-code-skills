@@ -90,13 +90,13 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v6.1 (2026-02-22)
-  // Applies to: batch-0005+ | 15 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.5K), UNOBTAINIUM.rule (20)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v6.2 (2026-02-24)
+  // Applies to: batch-0005+ | 18 attacks
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.5K), UNOBTAINIUM.rule (234), top-roots.txt (1K)
   // Principle: pair incremental files with established counterparts (new words × big rules, big words × new rules)
   // Based on: Gen2 batches 0001-0004 (141,991 cracks / ~1.39M hashes)
-  // Changes from v6.0: REORDER brute-4 before brute-3 (1227/min vs 206/min),
-  //                     REORDER mask-lllldddd before hybrid-special-digits (1102/min vs 382/min)
+  // Changes from v6.1: ADD hybrid-beta-4any, hybrid-nocapplus-3any, hybrid-roots-5any (long-password discovery)
+  //   ?a suffix attacks discover non-digit extension patterns (word!@#$, word2024, wordPass)
   // ══════════════════════════════════════════════════════════════════════
   //
   // TIER 0: INSTANT (trivial keyspace, <1 second total)
@@ -123,6 +123,11 @@ export const DEFAULT_ATTACK_ORDER = [
   "mask-lllllldd",            // 4,718 cracks / 4 runs (0.34% rate) — 6 lower + 2 digits
   "brute-5",                  // 3,839 cracks / 4 runs (0.28% rate) — 5-char exhaustive
   "mask-Ullllllld",           // 2,588 cracks / 4 runs (0.19% rate) — Capital + 7 lower + 1 digit
+  //
+  // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix attacks (NEW v6.2)
+  "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~14 min, primary suffix learner
+  "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~27 min, broadest root coverage
+  "hybrid-roots-5any",             // top-roots × ?a^5 — ~17 min, deepest reach (14+ char)
   //
   // ── GATE 3: ~95% of achievable cracks done ───────────────────────
   //

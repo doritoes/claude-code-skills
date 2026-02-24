@@ -44,6 +44,7 @@ const FILE_MAP: Record<string, string> = {
   "UNOBTAINUM.rule":  "rules/UNOBTAINIUM.rule",
   "bussin.rule":      "rules/bussin.rule",
   "OneRuleToRuleThemStill.rule": "rules/OneRuleToRuleThemStill.rule",
+  "top-roots.txt":    "wordlists/top-roots.txt",
 };
 
 /**
@@ -68,6 +69,9 @@ const ATTACK_CMDS: Record<string, string> = {
   "hybrid-nocapplus-special-digits": "#HL# -a 6 nocap-plus.txt ?s?d?d?d",
   "hybrid-nocapplus-3digit":       "#HL# -a 6 nocap-plus.txt ?d?d?d",
   "mask-lllldddd":                 "#HL# -a 3 ?l?l?l?l?d?d?d?d",
+  "hybrid-beta-4any":              "#HL# -a 6 BETA.txt ?a?a?a?a",
+  "hybrid-nocapplus-3any":         "#HL# -a 6 nocap-plus.txt ?a?a?a",
+  "hybrid-roots-5any":             "#HL# -a 6 top-roots.txt ?a?a?a?a?a",
 };
 
 // =============================================================================
@@ -851,7 +855,7 @@ if (import.meta.main) {
 BigRedRunner - SAND Batch Attack Orchestrator for BIGRED GPU
 
 Usage:
-  bun Tools/BigRedRunner.ts --batch 8                 Run all 15 attacks for batch-0008
+  bun Tools/BigRedRunner.ts --batch 8                 Run all 18 attacks for batch-0008
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7  Run single attack
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7 --detached  Run detached (screen)
   bun Tools/BigRedRunner.ts --status                   Check hashcat status (auto-detects batch)

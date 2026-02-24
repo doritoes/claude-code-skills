@@ -145,6 +145,11 @@ function getFileManifest(workDir: string): SyncFile[] {
       remotePath: `${workDir}/wordlists/BETA.txt`,
       description: "BETA.txt (feedback roots)",
     },
+    {
+      localPath: resolve(FEEDBACK_DIR, "top-roots.txt"),
+      remotePath: `${workDir}/wordlists/top-roots.txt`,
+      description: "top-roots.txt (curated top 1K roots for long-password discovery)",
+    },
     // Rules
     {
       localPath: resolve(DATA_DIR, "nocap.rule"),

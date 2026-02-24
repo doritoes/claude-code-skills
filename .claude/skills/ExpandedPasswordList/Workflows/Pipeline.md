@@ -29,7 +29,7 @@ hibp-batched/ (raw HIBP data)
   pearls/           sand/ (survivors)
                        |
                        v
-                   [BigRedRunner] ... Stage 2: 17 escalating attacks on BIGRED
+                   [BigRedRunner] ... Stage 2: 18 escalating attacks on BIGRED
                        |                |
                        v                v
                    diamonds/         glass/ (uncrackable)
@@ -180,7 +180,7 @@ bun Tools/BigRedSync.ts --hashlist batch-NNNN
 ### Run the Batch
 
 ```bash
-# Run all 15 attacks sequentially
+# Run all 18 attacks sequentially
 bun Tools/BigRedRunner.ts --batch N
 
 # Monitor while running
@@ -322,7 +322,7 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (15 attacks, v6.1)
+## Current Attack List (18 attacks, v6.2)
 
 Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 
@@ -338,6 +338,9 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | 3 | mask-lllllldd | 6 lower + 2 digits | 0.34% |
 | 3 | brute-5 | Exhaustive 5 chars | 0.28% |
 | 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 0.19% |
+| 3a | hybrid-beta-4any | BETA.txt + ?a^4 | NEW — ~14 min, primary suffix learner |
+| 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | NEW — ~27 min, broadest root coverage |
+| 3a | hybrid-roots-5any | top-roots.txt + ?a^5 | NEW — ~17 min, deepest reach (14+ char) |
 | 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 0.15% |
 | 4 | mask-lllldddd | 4 lower + 4 digits | 0.19% |
 | 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits | 0.12% |
@@ -355,7 +358,8 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | `nocap-plus.txt` | `data/nocap-plus.txt` | nocap + all cohort files (14.4M words) |
 | `nocap.rule` | `data/nocap.rule` | 48K rules (OneRuleToRuleThemStill equivalent) |
 | `BETA.txt` | `data/feedback/BETA.txt` | Discovered roots from diamonds (~77K words) |
-| `unobtainium.rule` | `data/feedback/unobtainium.rule` | Learned rules from diamond patterns (20 rules, regrowing) |
+| `unobtainium.rule` | `data/feedback/unobtainium.rule` | Learned rules from diamond patterns (234 rules) |
+| `top-roots.txt` | `data/feedback/top-roots.txt` | Curated top 1K roots for long-password discovery |
 | `sand-state.json` | `data/sand-state.json` | Stage 2 state (batches, attack results, feedback metrics) |
 | `gravel-state.json` | `data/gravel-state.json` | Stage 1 state |
 | Cohort files | `data/cohorts/*.txt` | 12 language/cultural wordlists (52.8K+ words) |
