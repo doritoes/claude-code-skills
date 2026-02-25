@@ -643,12 +643,14 @@ interface BaselineResult {
 }
 
 /**
- * Load baseline wordlist as raw lowercased words for O(1) lookup.
- * Also loads cohort wordlists into baseline (roots we already know about).
+ * Stream baseline wordlists and remove matching entries from the candidate set.
+ * Inverted lookup: instead of loading 14M+ words into a Set, we stream the
+ * baseline files and delete matches from the small (~14K) candidate set.
+ * Memory: O(candidates.size) instead of O(baseline_lines).
  */
-async function loadBaselineRoots(): Promise<BaselineResult> {
-  const roots = new Set<string>();
-
+async function filterAgainstBaseline(
+  candidates: Set<string>
+): Promise<BaselineResult> {
   let baselinePath: string | null = null;
   if (existsSync(NOCAP_PATH)) {
     baselinePath = NOCAP_PATH;
@@ -660,11 +662,14 @@ async function loadBaselineRoots(): Promise<BaselineResult> {
     console.warn(`\nWARNING: No baseline wordlist found!`);
     console.warn(`  Expected: ${NOCAP_PATH}`);
     console.warn(`  Without a baseline, ALL roots will appear as "new".`);
-    return { roots, loaded: false, path: null, count: 0 };
+    return { roots: new Set<string>(), loaded: false, path: null, count: 0 };
   }
 
-  console.log(`\nLoading baseline words from: ${baselinePath}`);
+  const startSize = candidates.size;
+  console.log(`\nStreaming baseline filter from: ${baselinePath}`);
+  console.log(`  Candidates to check: ${startSize.toLocaleString()}`);
 
+  let linesStreamed = 0;
   const rl = createInterface({
     input: createReadStream(baselinePath),
     crlfDelay: Infinity,
@@ -672,14 +677,17 @@ async function loadBaselineRoots(): Promise<BaselineResult> {
 
   for await (const line of rl) {
     if (line.length >= MIN_ROOT_LENGTH) {
-      roots.add(line.toLowerCase().trim());
+      candidates.delete(line.toLowerCase().trim());
     }
+    linesStreamed++;
+    if (candidates.size === 0) break; // all matched, early exit
   }
 
-  // Also load cohort wordlists as baseline
+  // Also stream cohort wordlists
   if (existsSync(COHORTS_DIR)) {
     const cohortFiles = readdirSync(COHORTS_DIR).filter(f => f.endsWith(".txt"));
     for (const file of cohortFiles) {
+      if (candidates.size === 0) break;
       const cohortPath = resolve(COHORTS_DIR, file);
       const rl2 = createInterface({
         input: createReadStream(cohortPath),
@@ -688,14 +696,16 @@ async function loadBaselineRoots(): Promise<BaselineResult> {
       for await (const line of rl2) {
         const trimmed = line.trim().toLowerCase();
         if (trimmed && !trimmed.startsWith("#")) {
-          roots.add(trimmed);
+          candidates.delete(trimmed);
         }
       }
     }
   }
 
-  console.log(`  Loaded ${roots.size.toLocaleString()} unique baseline words`);
-  return { roots, loaded: true, path: baselinePath, count: roots.size };
+  const removed = startSize - candidates.size;
+  console.log(`  Streamed ${linesStreamed.toLocaleString()} baseline words`);
+  console.log(`  Removed ${removed.toLocaleString()} known roots, ${candidates.size.toLocaleString()} new`);
+  return { roots: new Set<string>(), loaded: true, path: baselinePath, count: linesStreamed };
 }
 
 interface BaselineRulesResult {
@@ -749,24 +759,33 @@ async function loadBaselineRules(): Promise<BaselineRulesResult> {
 
 /**
  * Find roots that are NOT in the baseline wordlist.
- * Classifies each root into cohorts.
+ * Streams baseline files to avoid loading 14M+ words into memory.
+ * Classifies each remaining root into cohorts.
  */
-function findNewRoots(
-  roots: Map<string, { count: number; examples: string[] }>,
-  baseline: Set<string>
-): Map<string, { count: number; examples: string[]; cohorts: string[] }> {
-  const newRoots = new Map<string, { count: number; examples: string[]; cohorts: string[] }>();
-
-  for (const [root, data] of roots) {
-    if (baseline.has(root)) continue;
+async function findNewRoots(
+  roots: Map<string, { count: number; examples: string[] }>
+): Promise<{ newRoots: Map<string, { count: number; examples: string[]; cohorts: string[] }>; baseline: BaselineResult }> {
+  // Build candidate set from root keys (small, ~14K entries)
+  const candidates = new Set<string>();
+  for (const [root] of roots) {
     if (root.length < 3) continue;
     if (/^(qwer|asdf|zxcv|abcd|pass|word|test|admin|user|login|1234)/.test(root)) continue;
+    candidates.add(root);
+  }
 
+  // Stream baseline files and remove known words from candidates
+  const baseline = await filterAgainstBaseline(candidates);
+
+  // What remains in candidates are new roots
+  const newRoots = new Map<string, { count: number; examples: string[]; cohorts: string[] }>();
+  for (const root of candidates) {
+    const data = roots.get(root);
+    if (!data) continue;
     const cohorts = classifyCohort(root);
     newRoots.set(root, { ...data, cohorts });
   }
 
-  return newRoots;
+  return { newRoots, baseline };
 }
 
 /**
@@ -1211,11 +1230,9 @@ async function generateFeedback(options: {
   console.log(`Random: ${aggregated.randomCount.toLocaleString()} (${((aggregated.randomCount / aggregated.uniquePasswords) * 100).toFixed(1)}%)`);
   console.log(`Unique roots: ${aggregated.roots.size.toLocaleString()}`);
 
-  // Load baseline for comparison
-  const baseline = await loadBaselineRoots();
-
-  // Find NEW roots with cohort classification
-  aggregated.newRoots = findNewRoots(aggregated.roots, baseline.roots);
+  // Find NEW roots (streams baseline — no bulk memory load)
+  const { newRoots: discoveredNewRoots, baseline } = await findNewRoots(aggregated.roots);
+  aggregated.newRoots = discoveredNewRoots;
 
   // Apply frequency filter for basic new root list
   const newRoots: Array<{ root: string; count: number }> = [];
@@ -1617,10 +1634,10 @@ async function analyzeStandalone(filePath: string, full: boolean): Promise<void>
   console.log(`  Random: ${result.randomCount.toLocaleString()} (${((result.randomCount / result.uniquePasswords) * 100).toFixed(1)}%)`);
   console.log(`  Unique roots: ${result.roots.size.toLocaleString()}`);
 
-  // Step 2: Load baseline
+  // Step 2: Compare roots against baseline (streams — no bulk memory load)
   console.log("\nStep 2: Comparing roots against baseline...");
-  const baseline = await loadBaselineRoots();
-  result.newRoots = findNewRoots(result.roots, baseline.roots);
+  const { newRoots: discoveredNewRoots2, baseline } = await findNewRoots(result.roots);
+  result.newRoots = discoveredNewRoots2;
   console.log(`  New roots (not in baseline): ${result.newRoots.size.toLocaleString()}`);
 
   // Step 3: Cohort classification

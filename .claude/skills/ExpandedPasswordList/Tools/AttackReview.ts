@@ -826,6 +826,7 @@ function printLengthDistribution(passwords: string[]): void {
   let cumulative = 0;
   for (let len = minLen; len <= Math.min(maxLen, 30); len++) {
     const count = lengthBuckets[len] ?? 0;
+    if (count === 0) continue; // Skip empty rows
     cumulative += count;
     const share = total > 0 ? (count / total) * 100 : 0;
     const cumulShare = total > 0 ? (cumulative / total) * 100 : 0;
