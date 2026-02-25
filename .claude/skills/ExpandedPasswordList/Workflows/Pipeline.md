@@ -1,6 +1,6 @@
 # Gen2 Pipeline — End-to-End Workflow
 
-**Last Updated:** 2026-02-21
+**Last Updated:** 2026-02-25
 **Platform:** BIGRED (local RTX 4060 Ti, 192.168.99.204)
 
 ---
@@ -29,7 +29,7 @@ hibp-batched/ (raw HIBP data)
   pearls/           sand/ (survivors)
                        |
                        v
-                   [BigRedRunner] ... Stage 2: 18 escalating attacks on BIGRED
+                   [BigRedRunner] ... Stage 2: 18 attacks on BIGRED (v7.0)
                        |                |
                        v                v
                    diamonds/         glass/ (uncrackable)
@@ -180,7 +180,7 @@ bun Tools/BigRedSync.ts --hashlist batch-NNNN
 ### Run the Batch
 
 ```bash
-# Run all 18 attacks sequentially
+# Run all attacks sequentially (v7.0: 18 attacks)
 bun Tools/BigRedRunner.ts --batch N
 
 # Monitor while running
@@ -322,29 +322,31 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (18 attacks, v6.2)
+## Current Attack List (18 attacks, v7.0 — 2026-02-25)
 
 Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 
-| Tier | Attack | Description | Gen2 ROI (4 batches) |
+| Tier | Attack | Description | Gen2 ROI (14 batches) |
 |------|--------|-------------|----------------------|
-| 0 | brute-4, brute-3 | Exhaustive 3-4 chars | <1s, 487 cracks |
-| 1 | brute-6 | Exhaustive 6 chars | 2.07%, ~1.6 min |
-| 1 | brute-7 | Exhaustive 7 chars | 2.51%, ~107 min |
-| 2 | feedback-beta-nocaprule | BETA.txt + nocap.rule | 0.11%, feedback loop |
-| 2 | nocapplus-unobtainium | nocap-plus.txt + UNOBTAINIUM.rule | <0.01%, faster than nocaprule |
-| 2 | nocapplus-nocaprule | nocap-plus.txt + nocap.rule | <0.01%, catches rule-only cracks |
-| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 0.93%, top hybrid |
-| 3 | mask-lllllldd | 6 lower + 2 digits | 0.34% |
-| 3 | brute-5 | Exhaustive 5 chars | 0.28% |
-| 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 0.19% |
-| 3a | hybrid-beta-4any | BETA.txt + ?a^4 | NEW — ~14 min, primary suffix learner |
-| 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | NEW — ~27 min, broadest root coverage |
-| 3a | hybrid-roots-4any | top-roots.txt + ?a^4 | NEW — ~11s, deepest reach (12-14+ char) |
-| 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 0.15% |
-| 4 | mask-lllldddd | 4 lower + 4 digits | 0.19% |
-| 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits | 0.12% |
-| 4 | hybrid-nocapplus-3digit | nocap-plus + 3 digits | <0.01%, monitoring |
+| 0 | brute-4, brute-3 | Exhaustive 3-4 chars | <1s, ~150 cracks/batch |
+| 1 | brute-6 | Exhaustive 6 chars | 7,154 cr/batch, ~1.7 min |
+| 1 | brute-7 | Exhaustive 7 chars | 8,662 cr/batch, ~107 min |
+| 1a | mask-l8 | ?l^8 — pure lowercase 8-char | ~19s (NEW v7.0) |
+| 1a | mask-ld8 | -1 ?l?d ?1^8 — lowercase+digit 8-char | ~4.3 min (NEW v7.0) |
+| 2 | feedback-beta-nocaprule | BETA.txt + nocap.rule | 394 cr/batch, feedback loop |
+| 2 | nocapplus-unobtainium | nocap-plus.txt + UNOBTAINIUM.rule | 51 cr/batch |
+| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 3,168 cr/batch, top hybrid |
+| 3 | mask-lllllldd | 6 lower + 2 digits | 1,168 cr/batch |
+| 3 | brute-5 | Exhaustive 5 chars | 976 cr/batch |
+| 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 640 cr/batch |
+| 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | 8,281 cr/batch, ~23 min (353 cr/min) |
+| 3a | mask-l9 | ?l^9 — pure lowercase 9-char | ~17 min (157 cr/min) |
+| 3a | hybrid-beta-4any | BETA.txt + ?a^4 | 1,061 cr/batch, ~18 min (59 cr/min) |
+| 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 522 cr/batch |
+| 4 | mask-lllldddd | 4 lower + 4 digits | 664 cr/batch |
+| 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits | 402 cr/batch |
+
+**Removed in v7.0:** hybrid-roots-4any (0 cracks/3 batches), nocapplus-nocaprule (1.6 cr/batch, redundant), hybrid-nocapplus-3digit (0.7 cr/batch, subsumed by ?a^3).
 
 **How to modify the attack list:** Edit `DEFAULT_ATTACK_ORDER` array in `Tools/SandStateManager.ts`. Use `AttackReview.ts` output to justify changes. The `ATTACK_CMDS` mapping in `BigRedRunner.ts` must also include any new attack name.
 

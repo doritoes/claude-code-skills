@@ -6,6 +6,7 @@
  * Pattern adapted from StateManager.ts.
  *
  * @author PAI (Personal AI Infrastructure)
+ * @updated 2026-02-25 — v7.1 attack order (18 attacks, reordered Tier 3a)
  * @license MIT
  */
 
@@ -90,56 +91,61 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v6.2 (2026-02-24)
-  // Applies to: batch-0005+ | 18 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.5K), UNOBTAINIUM.rule (234), top-roots.txt (1K)
-  // Principle: pair incremental files with established counterparts (new words × big rules, big words × new rules)
-  // Based on: Gen2 batches 0001-0004 (141,991 cracks / ~1.39M hashes)
-  // Changes from v6.1: ADD hybrid-beta-4any, hybrid-nocapplus-3any, hybrid-roots-5any (long-password discovery)
-  //   ?a suffix attacks discover non-digit extension patterns (word!@#$, word2024, wordPass)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.1 (2026-02-25)
+  // Applies to: batch-0018+ | 18 attacks
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.9K), UNOBTAINIUM.rule (234)
+  // Based on: Gen2 batches 0001-0014 (421,562 cracks / 4.87M hashes)
+  // Changes from v6.2:
+  //   ADD mask-l8 (19s, pure lowercase 8-char funnel)
+  //   ADD mask-ld8 (4.3 min, lowercase+digit 8-char)
+  //   ADD mask-l9 (17 min, pure lowercase 9-char — 1,958 on experiment)
+  //   DROP hybrid-roots-4any (0 cracks in 3 batches)
+  //   DROP nocapplus-nocaprule (1.6 cracks/batch, redundant)
+  //   DROP hybrid-nocapplus-3digit (0.7 cracks/batch, subsumed by ?a^3)
   // ══════════════════════════════════════════════════════════════════════
   //
   // TIER 0: INSTANT (trivial keyspace, <1 second total)
-  "brute-4",     // 81M candidates - ~2 seconds (418 cracks / 4 batches, 1227/min)
-  "brute-3",     // 857K candidates - <1 second (69 cracks / 4 batches, 206/min)
+  "brute-4",     // 133 cracks/batch avg — ~0.1 min
+  "brute-3",     // 17 cracks/batch avg — ~0.2 min
   //
-  // TIER 1: HIGH ROI — 44.9% of cracks (excl. brute-8), dominates batch time
-  "brute-6",     // 28,882 cracks / 4 runs (2.07% rate) — ~1.6 min
-  "brute-7",     // 34,882 cracks / 4 runs (2.51% rate) — ~107 min (TOP PERFORMER, stable timing)
+  // TIER 1: HIGH ROI — 52.6% of cracks, dominates batch time
+  "brute-6",     // 7,154 cracks/batch avg — ~1.7 min (3,778 cr/min)
+  "brute-7",     // 8,662 cracks/batch avg — ~107 min (79 cr/min)
   //
   // ── GATE 1: If <4% after Tier 1, STOP — something is broken ──────
   //
+  // TIER 1a: CHEAP MASKS — 8/9-char lowercase funnel (NEW v7.0)
+  "mask-l8",     // ?l^8, 26^8 = 209B — 19 seconds. Strips pure lowercase 8-char from pipeline.
+  "mask-ld8",    // -1 ?l?d ?1^8, 36^8 = 2.8T — ~4.3 min. Lowercase+digit 8-char.
+  //
   // TIER 2: FEEDBACK ATTACKS
-  // BETA.txt = new words not in nocap.txt → pair with BIG rules (nocap.rule)
-  // UNOBTAINIUM.rule = new rules not in nocap.rule → pair with BIG wordlist (nocap-plus.txt)
-  "feedback-beta-nocaprule",       // 1,532 cracks / 4 runs (0.11% rate) — BETA.txt + nocap.rule
-  "nocapplus-unobtainium",         // 52 cracks / 4 runs (<0.01% rate) — nocap-plus.txt + UNOBTAINIUM.rule (faster than nocaprule)
-  "nocapplus-nocaprule",           // 10 cracks / 4 runs (<0.01% rate) — nocap-plus.txt + nocap.rule (slow but catches rule-only cracks)
+  "feedback-beta-nocaprule",       // 394 cracks/batch — BETA.txt × nocap.rule
+  "nocapplus-unobtainium",         // 51 cracks/batch — nocap-plus.txt × UNOBTAINIUM.rule
   //
-  // ── GATE 2: Feedback = 1.1% combined. Keep: every crack teaches us something ─
+  // TIER 3: PROVEN MEDIUM ROI
+  "hybrid-nocapplus-4digit",  // 3,168 cracks/batch — top hybrid (5,204 cr/min)
+  "mask-lllllldd",            // 1,168 cracks/batch — 6 lower + 2 digits
+  "brute-5",                  // 976 cracks/batch — 5-char exhaustive
+  "mask-Ullllllld",           // 640 cracks/batch — Capital + 7 lower + 1 digit
   //
-  // TIER 3: PROVEN MEDIUM ROI — 16.9% of cracks
-  "hybrid-nocapplus-4digit",  // 12,884 cracks / 4 runs (0.93% rate) — top hybrid, 5,351 cracks/min
-  "mask-lllllldd",            // 4,718 cracks / 4 runs (0.34% rate) — 6 lower + 2 digits
-  "brute-5",                  // 3,839 cracks / 4 runs (0.28% rate) — 5-char exhaustive
-  "mask-Ullllllld",           // 2,588 cracks / 4 runs (0.19% rate) — Capital + 7 lower + 1 digit
-  //
-  // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix attacks (NEW v6.2)
-  "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~14 min, primary suffix learner
-  "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~27 min, broadest root coverage
-  "hybrid-roots-4any",             // top-roots × ?a^4 — ~11s, deepest reach (12-14+ char). ?a^5 overflows uint32 in hashcat hybrid mode
+  // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix + 9-char masks (ordered by cr/min)
+  "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~23 min, 8,281 cr/batch (353 cr/min) ★ TOP DISCOVERY
+  "mask-l9",                       // ?l^9, 26^9 — ~17 min, pure lowercase 9-char (157 cr/min)
+  "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~18 min, 1,061 cr/batch (59 cr/min)
   //
   // ── GATE 3: ~95% of achievable cracks done ───────────────────────
   //
-  // TIER 4: LOW ROI — 4.5% of cracks
-  "mask-Ullllldd",                  // 2,129 cracks / 4 runs (0.15% rate)
-  "mask-lllldddd",                  // 2,636 cracks / 4 runs (0.19% rate, 1102/min) — reordered above special-digits
-  "hybrid-nocapplus-special-digits",  // 1,713 cracks / 4 runs (0.12% rate, 382/min)
-  "hybrid-nocapplus-3digit",        // 4 cracks / 4 runs (<0.01% rate) — borderline, monitoring
+  // TIER 4: LOW ROI
+  "mask-Ullllldd",                  // 522 cracks/batch
+  "mask-lllldddd",                  // 664 cracks/batch
+  "hybrid-nocapplus-special-digits",  // 402 cracks/batch
   //
   // ══════════════════════════════════════════════════════════════════════
   // REMOVED: ZERO/MINIMAL VALUE
   // ══════════════════════════════════════════════════════════════════════
+  // ✗ hybrid-roots-4any        - 0 cracks across 3 batches (0012-0014). top-roots.txt too niche. REMOVED v7.0.
+  // ✗ nocapplus-nocaprule      - 1.6 cracks/batch across 14 batches. Redundant with other combos. REMOVED v7.0.
+  // ✗ hybrid-nocapplus-3digit  - 0.7 cracks/batch. Subsumed by hybrid-nocapplus-3any (?a^3 > ?d^3). REMOVED v7.0.
   // ✗ brute-1                  - 0 cracks across 4 Gen2 batches. 1-char passwords can't survive Stage 1.
   // ✗ brute-2                  - 0 cracks across 4 Gen2 batches. 2-char passwords can't survive Stage 1.
   // ✗ mask-dddddddd            - Redundant (covered by brute-7)

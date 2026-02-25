@@ -14,6 +14,7 @@
  * READ-ONLY: Never modifies sand-state.json, DEFAULT_ATTACK_ORDER, or any files.
  *
  * @author PAI (Personal AI Infrastructure)
+ * @updated 2026-02-25 — v7.0 tiers (added Tier 1a/3a, removed attacks → Tier -1)
  * @license MIT
  */
 
@@ -31,20 +32,27 @@ import { DATA_DIR, DIAMONDS_DIR, FEEDBACK_DIR } from "./config";
 const TIER_MAP: Record<string, number> = {
   "brute-1": 0, "brute-2": 0, "brute-3": 0, "brute-4": 0,
   "brute-6": 1, "brute-7": 1,
-  "feedback-beta-nocaprule": 2, "nocapplus-nocaprule": 2, "nocapplus-unobtainium": 2,
+  "mask-l8": 1.5, "mask-ld8": 1.5,
+  "feedback-beta-nocaprule": 2, "nocapplus-unobtainium": 2,
   "hybrid-nocapplus-4digit": 3, "mask-lllllldd": 3, "brute-5": 3, "mask-Ullllllld": 3,
-  "hybrid-beta-4any": 3.5, "hybrid-nocapplus-3any": 3.5, "hybrid-roots-4any": 3.5,
-  "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4, "hybrid-nocapplus-3digit": 4, "mask-lllldddd": 4,
+  "hybrid-beta-4any": 3.5, "hybrid-nocapplus-3any": 3.5, "mask-l9": 3.5,
+  "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4, "mask-lllldddd": 4,
+  // Removed from production v7.0 (kept for historical display)
+  "hybrid-roots-4any": -1, "nocapplus-nocaprule": -1, "hybrid-nocapplus-3digit": -1,
   "brute-8": 99,
+  "mask-ld9": 98,
 };
 
 const TIER_NAMES: Record<number, string> = {
+  [-1]: "Removed",
   0: "Tier 0: Instant",
   1: "Tier 1: High ROI",
+  1.5: "Tier 1a: Cheap Masks (8/9-char funnel)",
   2: "Tier 2: Feedback",
   3: "Tier 3: Medium ROI",
   3.5: "Tier 3a: Long-Password Discovery",
   4: "Tier 4: Low ROI",
+  98: "Experimental: One-off",
   99: "Special: Manual",
 };
 
@@ -58,6 +66,9 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "brute-6": /^.{6}$/,
   "brute-7": /^.{7}$/,
   "brute-8": /^.{8}$/,
+  "mask-l8": /^[a-z]{8}$/,
+  "mask-ld8": /^[a-z0-9]{8}$/,
+  "mask-l9": /^[a-z]{9}$/,
   "mask-lllllldd": /^[a-z]{6}[0-9]{2}$/,
   "mask-Ullllllld": /^[A-Z][a-z]{7}[0-9]$/,
   "mask-Ullllldd": /^[A-Z][a-z]{5}[0-9]{2}$/,
@@ -539,6 +550,7 @@ async function runOverlapAnalysis(
   uncoveredCount: number;
   uncoveredSample: string[];
   uncoveredPatterns: { pattern: string; count: number; sample: string }[];
+  allPasswords: string[];
 }> {
   console.log("\nLoading wordlists for overlap analysis...");
 
@@ -606,6 +618,7 @@ async function runOverlapAnalysis(
     uncoveredCount: uncovered.length,
     uncoveredSample: uncovered.slice(0, 20),
     uncoveredPatterns,
+    allPasswords,
   };
 }
 
@@ -658,9 +671,12 @@ function printROITable(roi: AttackROI[]): void {
 
   const totalCracks = roi.reduce((sum, r) => sum + r.cracks, 0);
 
-  console.log("\n" + "─".repeat(60));
-  console.log(pad("Tier", 25) + pad("Cracks", 12, "right") + pad("Share", 10, "right") + pad("Time", 12, "right"));
-  console.log("─".repeat(60));
+  const tierCol = 40;
+  const lineWidth = tierCol + 12 + 10 + 12;
+
+  console.log("\n" + "─".repeat(lineWidth));
+  console.log(pad("Tier", tierCol) + pad("Cracks", 12, "right") + pad("Share", 10, "right") + pad("Time", 12, "right"));
+  console.log("─".repeat(lineWidth));
 
   for (const tier of Object.keys(tierAgg).map(Number).sort((a, b) => a - b)) {
     const agg = tierAgg[tier];
@@ -668,20 +684,20 @@ function printROITable(roi: AttackROI[]): void {
     const tierName = TIER_NAMES[tier] ?? `Tier ${tier}`;
 
     console.log(
-      pad(tierName, 25) +
+      pad(tierName, tierCol) +
       pad(agg.cracks.toLocaleString(), 12, "right") +
       pad(share.toFixed(1) + "%", 10, "right") +
       pad(agg.durationSeconds > 0 ? formatDuration(agg.durationSeconds) : "n/a", 12, "right")
     );
   }
 
-  console.log("─".repeat(60));
+  console.log("─".repeat(lineWidth));
   const totalTime = roi.reduce((sum, r) => {
     if (r.attack === "brute-8" && r.durationSeconds === 0) return sum;
     return sum + r.durationSeconds;
   }, 0);
   console.log(
-    pad("TOTAL", 25) +
+    pad("TOTAL", tierCol) +
     pad(totalCracks.toLocaleString(), 12, "right") +
     pad("100.0%", 10, "right") +
     pad(formatDuration(totalTime), 12, "right")
@@ -789,6 +805,63 @@ function printOverlap(overlap: Awaited<ReturnType<typeof runOverlapAnalysis>>, t
   }
 }
 
+function printLengthDistribution(passwords: string[]): void {
+  console.log("\n── PASSWORD LENGTH DISTRIBUTION ──────────────────────────────\n");
+
+  const lengthBuckets: Record<number, number> = {};
+  for (const pw of passwords) {
+    const len = pw.length;
+    lengthBuckets[len] = (lengthBuckets[len] ?? 0) + 1;
+  }
+
+  const maxLen = Math.max(...Object.keys(lengthBuckets).map(Number));
+  const minLen = Math.min(...Object.keys(lengthBuckets).map(Number));
+  const total = passwords.length;
+  const maxCount = Math.max(...Object.values(lengthBuckets));
+  const barMax = 40;
+
+  console.log(pad("Len", 5) + pad("Count", 10, "right") + pad("Share", 8, "right") + pad("Cumul", 8, "right") + "  Bar");
+  console.log("─".repeat(75));
+
+  let cumulative = 0;
+  for (let len = minLen; len <= Math.min(maxLen, 30); len++) {
+    const count = lengthBuckets[len] ?? 0;
+    cumulative += count;
+    const share = total > 0 ? (count / total) * 100 : 0;
+    const cumulShare = total > 0 ? (cumulative / total) * 100 : 0;
+    const barLen = maxCount > 0 ? Math.round((count / maxCount) * barMax) : 0;
+    const bar = "#".repeat(barLen);
+
+    console.log(
+      pad(String(len), 5) +
+      pad(count.toLocaleString(), 10, "right") +
+      pad(share.toFixed(1) + "%", 8, "right") +
+      pad(cumulShare.toFixed(1) + "%", 8, "right") +
+      "  " + bar
+    );
+  }
+
+  // Aggregate 31+ if any
+  let longCount = 0;
+  for (let len = 31; len <= maxLen; len++) {
+    longCount += lengthBuckets[len] ?? 0;
+  }
+  if (longCount > 0) {
+    cumulative += longCount;
+    const share = total > 0 ? (longCount / total) * 100 : 0;
+    console.log(
+      pad("31+", 5) +
+      pad(longCount.toLocaleString(), 10, "right") +
+      pad(share.toFixed(1) + "%", 8, "right") +
+      pad("100.0%", 8, "right") +
+      "  " + "#".repeat(Math.round((longCount / maxCount) * barMax))
+    );
+  }
+
+  console.log("─".repeat(75));
+  console.log(pad("Total", 5) + pad(total.toLocaleString(), 10, "right"));
+}
+
 // =============================================================================
 // Main
 // =============================================================================
@@ -888,6 +961,7 @@ async function main(): Promise<void> {
   if (overlap) {
     const totalPasswords = roi.reduce((sum, r) => sum + r.cracks, 0);
     printOverlap(overlap, totalPasswords);
+    printLengthDistribution(overlap.allPasswords);
   }
 }
 

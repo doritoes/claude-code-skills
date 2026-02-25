@@ -13,6 +13,7 @@
  *   bun Tools/BigRedRunner.ts --batch 8 --dry-run      Preview commands without executing
  *
  * @author PAI (Personal AI Infrastructure)
+ * @updated 2026-02-25 — v7.0 attack order (added mask-l8/ld8/l9, removed 3 dead attacks)
  * @license MIT
  */
 
@@ -60,18 +61,25 @@ const ATTACK_CMDS: Record<string, string> = {
   "brute-6":                       "#HL# -a 3 ?a?a?a?a?a?a",
   "brute-7":                       "#HL# -a 3 ?a?a?a?a?a?a?a",
   "feedback-beta-nocaprule":       "#HL# BETA.txt -r nocap.rule",
-  "nocapplus-nocaprule":           "#HL# nocap-plus.txt -r nocap.rule",
   "nocapplus-unobtainium":        "#HL# nocap-plus.txt -r UNOBTAINUM.rule",
   "hybrid-nocapplus-4digit":      "#HL# -a 6 nocap-plus.txt ?d?d?d?d",
   "mask-lllllldd":                 "#HL# -a 3 ?l?l?l?l?l?l?d?d",
   "mask-Ullllllld":                "#HL# -a 3 ?u?l?l?l?l?l?l?l?d",
   "mask-Ullllldd":                 "#HL# -a 3 ?u?l?l?l?l?l?d?d",
   "hybrid-nocapplus-special-digits": "#HL# -a 6 nocap-plus.txt ?s?d?d?d",
-  "hybrid-nocapplus-3digit":       "#HL# -a 6 nocap-plus.txt ?d?d?d",
   "mask-lllldddd":                 "#HL# -a 3 ?l?l?l?l?d?d?d?d",
   "hybrid-beta-4any":              "#HL# -a 6 BETA.txt ?a?a?a?a",
   "hybrid-nocapplus-3any":         "#HL# -a 6 nocap-plus.txt ?a?a?a",
+  // 8/9-char funnel masks (production v7.0)
+  "mask-l8":                        "#HL# -a 3 ?l?l?l?l?l?l?l?l",
+  "mask-l9":                        "#HL# -a 3 ?l?l?l?l?l?l?l?l?l",
+  "mask-ld8":                       "#HL# -a 3 -1 ?l?d ?1?1?1?1?1?1?1?1",
+  // Removed from production v7.0 (kept for historical/one-off use)
   "hybrid-roots-4any":             "#HL# -a 6 top-roots.txt ?a?a?a?a",
+  "nocapplus-nocaprule":           "#HL# nocap-plus.txt -r nocap.rule",
+  "hybrid-nocapplus-3digit":       "#HL# -a 6 nocap-plus.txt ?d?d?d",
+  // Experimental (manual one-off only)
+  "mask-ld9":                       "#HL# -a 3 -1 ?l?d ?1?1?1?1?1?1?1?1?1",
 };
 
 // =============================================================================
