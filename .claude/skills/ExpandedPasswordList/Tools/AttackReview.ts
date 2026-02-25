@@ -14,7 +14,7 @@
  * READ-ONLY: Never modifies sand-state.json, DEFAULT_ATTACK_ORDER, or any files.
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-25 — v7.0 tiers (added Tier 1a/3a, removed attacks → Tier -1)
+ * @updated 2026-02-25 — v7.2 tiers (added 10-char masks, 5/6-digit hybrids)
  * @license MIT
  */
 
@@ -34,8 +34,11 @@ const TIER_MAP: Record<string, number> = {
   "brute-6": 1, "brute-7": 1,
   "mask-l8": 1.5, "mask-ld8": 1.5,
   "feedback-beta-nocaprule": 2, "nocapplus-unobtainium": 2,
+  "hybrid-beta-5digit": 2, "hybrid-beta-6digit": 2,
+  "mask-Ullllllldd": 3,
   "hybrid-nocapplus-4digit": 3, "mask-lllllldd": 3, "brute-5": 3, "mask-Ullllllld": 3,
   "hybrid-beta-4any": 3.5, "hybrid-nocapplus-3any": 3.5, "mask-l9": 3.5,
+  "mask-Ullllllllld": 3.5, "hybrid-nocapplus-5digit": 3.5,
   "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4, "mask-lllldddd": 4,
   // Removed from production v7.0 (kept for historical display)
   "hybrid-roots-4any": -1, "nocapplus-nocaprule": -1, "hybrid-nocapplus-3digit": -1,
@@ -73,6 +76,8 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "mask-Ullllllld": /^[A-Z][a-z]{7}[0-9]$/,
   "mask-Ullllldd": /^[A-Z][a-z]{5}[0-9]{2}$/,
   "mask-lllldddd": /^[a-z]{4}[0-9]{4}$/,
+  "mask-Ullllllldd": /^[A-Z][a-z]{7}[0-9]{2}$/,
+  "mask-Ullllllllld": /^[A-Z][a-z]{9}[0-9]$/,
 };
 
 /**

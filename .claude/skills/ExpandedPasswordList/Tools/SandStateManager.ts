@@ -6,7 +6,7 @@
  * Pattern adapted from StateManager.ts.
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-25 — v7.1 attack order (18 attacks, reordered Tier 3a)
+ * @updated 2026-02-25 — v7.2 attack order (23 attacks, added 10-char masks + 5/6-digit hybrids)
  * @license MIT
  */
 
@@ -91,17 +91,16 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.1 (2026-02-25)
-  // Applies to: batch-0018+ | 18 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.9K), UNOBTAINIUM.rule (234)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.2 (2026-02-25)
+  // Applies to: batch-0020+ | 23 attacks
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.9K), UNOBTAINIUM.rule (266)
   // Based on: Gen2 batches 0001-0014 (421,562 cracks / 4.87M hashes)
   // Changes from v6.2:
-  //   ADD mask-l8 (19s, pure lowercase 8-char funnel)
-  //   ADD mask-ld8 (4.3 min, lowercase+digit 8-char)
-  //   ADD mask-l9 (17 min, pure lowercase 9-char — 1,958 on experiment)
-  //   DROP hybrid-roots-4any (0 cracks in 3 batches)
-  //   DROP nocapplus-nocaprule (1.6 cracks/batch, redundant)
-  //   DROP hybrid-nocapplus-3digit (0.7 cracks/batch, subsumed by ?a^3)
+  //   ADD hybrid-beta-5digit, hybrid-beta-6digit (Tier 2, <8 sec combined)
+  //   ADD mask-Ullllllldd (Tier 3, ~74 sec, 10-char structured)
+  //   ADD hybrid-nocapplus-5digit (Tier 3a, ~3 min)
+  //   ADD mask-Ullllllllld (Tier 3a, ~3.2 min, 10-char)
+  // v7.1: ADD mask-l8/ld8/l9, DROP hybrid-roots-4any/nocapplus-nocaprule/hybrid-nocapplus-3digit
   // ══════════════════════════════════════════════════════════════════════
   //
   // TIER 0: INSTANT (trivial keyspace, <1 second total)
@@ -121,16 +120,21 @@ export const DEFAULT_ATTACK_ORDER = [
   // TIER 2: FEEDBACK ATTACKS
   "feedback-beta-nocaprule",       // 394 cracks/batch — BETA.txt × nocap.rule
   "nocapplus-unobtainium",         // 51 cracks/batch — nocap-plus.txt × UNOBTAINIUM.rule
+  "hybrid-beta-5digit",            // BETA × ?d^5 — <1 sec (v7.2)
+  "hybrid-beta-6digit",            // BETA × ?d^6 — ~7 sec (v7.2)
   //
   // TIER 3: PROVEN MEDIUM ROI
   "hybrid-nocapplus-4digit",  // 3,168 cracks/batch — top hybrid (5,204 cr/min)
   "mask-lllllldd",            // 1,168 cracks/batch — 6 lower + 2 digits
   "brute-5",                  // 976 cracks/batch — 5-char exhaustive
   "mask-Ullllllld",           // 640 cracks/batch — Capital + 7 lower + 1 digit
+  "mask-Ullllllldd",          // ?u?l^7?d^2, 10-char — ~74 sec (v7.2)
   //
   // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix + 9-char masks (ordered by cr/min)
   "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~23 min, 8,281 cr/batch (353 cr/min) ★ TOP DISCOVERY
+  "hybrid-nocapplus-5digit",       // nocap-plus × ?d^5 — ~3 min (v7.2)
   "mask-l9",                       // ?l^9, 26^9 — ~17 min, pure lowercase 9-char (157 cr/min)
+  "mask-Ullllllllld",              // ?u?l^9?d, 10-char — ~3.2 min (v7.2)
   "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~18 min, 1,061 cr/batch (59 cr/min)
   //
   // ── GATE 3: ~95% of achievable cracks done ───────────────────────
