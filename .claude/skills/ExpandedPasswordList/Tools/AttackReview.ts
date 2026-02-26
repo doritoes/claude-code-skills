@@ -457,15 +457,14 @@ function generateRecommendations(roi: AttackROI[], trend: FeedbackTrendRow[]): R
 
 /**
  * Classify which attacks COULD have found each password.
+ * Uses pre-computed lookup sets (inverted from wordlists) to avoid OOM.
  */
 function classifyPassword(
   password: string,
-  nocapPlusSet: Set<string>,
-  rockyouSet: Set<string>,
+  nocapPlusMatches: Set<string>,
   betaSet: Set<string>,
 ): string[] {
   const coveredBy: string[] = [];
-  const lower = password.toLowerCase();
 
   // Check mask/brute attacks via regex
   for (const [attack, regex] of Object.entries(ATTACK_REGEX)) {
@@ -474,40 +473,65 @@ function classifyPassword(
     }
   }
 
-  // Hybrid attacks: strip suffix digits, check if base word is in wordlist
+  // Hybrid attacks: strip suffix, check if base word was found in nocap-plus
   // hybrid-nocapplus-4digit: word + 4 digits
   const match4d = password.match(/^(.+?)(\d{4})$/);
-  if (match4d && nocapPlusSet.has(match4d[1].toLowerCase())) {
+  if (match4d && nocapPlusMatches.has(match4d[1].toLowerCase())) {
     coveredBy.push("hybrid-nocapplus-4digit");
   }
 
-  // hybrid-nocapplus-3digit: word + 3 digits
-  const match3d = password.match(/^(.+?)(\d{3})$/);
-  if (match3d && nocapPlusSet.has(match3d[1].toLowerCase())) {
-    coveredBy.push("hybrid-nocapplus-3digit");
+  // hybrid-nocapplus-5digit: word + 5 digits
+  const match5d = password.match(/^(.+?)(\d{5})$/);
+  if (match5d && nocapPlusMatches.has(match5d[1].toLowerCase())) {
+    coveredBy.push("hybrid-nocapplus-5digit");
   }
 
   // hybrid-nocapplus-special-digits: word + special + 3 digits
   const matchSpecDig = password.match(/^(.+?)([^a-zA-Z0-9])(\d{3})$/);
-  if (matchSpecDig && rockyouSet.has(matchSpecDig[1].toLowerCase())) {
+  if (matchSpecDig && nocapPlusMatches.has(matchSpecDig[1].toLowerCase())) {
     coveredBy.push("hybrid-nocapplus-special-digits");
   }
 
+  // hybrid-nocapplus-3any: word + any 3 chars
+  if (password.length >= 4) {
+    const base3 = password.slice(0, -3).toLowerCase();
+    if (nocapPlusMatches.has(base3)) {
+      coveredBy.push("hybrid-nocapplus-3any");
+    }
+  }
+
+  // hybrid-beta-4any: BETA word + any 4 chars
+  if (password.length >= 5) {
+    const base4 = password.slice(0, -4).toLowerCase();
+    if (betaSet.has(base4)) {
+      coveredBy.push("hybrid-beta-4any");
+    }
+  }
+
+  // hybrid-beta-5digit: BETA word + 5 digits
+  if (match5d && betaSet.has(match5d[1].toLowerCase())) {
+    coveredBy.push("hybrid-beta-5digit");
+  }
+
+  // hybrid-beta-6digit: BETA word + 6 digits
+  const match6d = password.match(/^(.+?)(\d{6})$/);
+  if (match6d && betaSet.has(match6d[1].toLowerCase())) {
+    coveredBy.push("hybrid-beta-6digit");
+  }
+
   // Dict+rules attacks: reverse-engineer possible roots from password,
-  // then check if any root exists in the wordlist. Covers case changes,
-  // digit/special append/prepend, leet reverse, year strip, duplicate, reverse.
+  // then check if any root was found in the wordlists.
   const roots = reverseRuleRoots(password);
   let inBeta = false;
   let inNocapPlus = false;
   for (const root of roots) {
     if (!inBeta && betaSet.has(root)) inBeta = true;
-    if (!inNocapPlus && nocapPlusSet.has(root)) inNocapPlus = true;
+    if (!inNocapPlus && nocapPlusMatches.has(root)) inNocapPlus = true;
     if (inBeta && inNocapPlus) break;
   }
 
   if (inBeta) coveredBy.push("feedback-beta-nocaprule");
   if (inNocapPlus) {
-    coveredBy.push("nocapplus-nocaprule");
     coveredBy.push("nocapplus-unobtainium");
   }
 
@@ -557,21 +581,12 @@ async function runOverlapAnalysis(
   uncoveredPatterns: { pattern: string; count: number; sample: string }[];
   allPasswords: string[];
 }> {
-  console.log("\nLoading wordlists for overlap analysis...");
+  // ── Inverted lookup pattern (same as DiamondFeedback OOM fix) ──
+  // Instead of loading 14M-word nocap-plus.txt into a Set (~1.5GB OOM),
+  // we build a candidate Set from passwords (~500MB), then STREAM
+  // nocap-plus.txt against it. O(candidates) memory, not O(wordlist).
 
-  const nocapPlusPath = resolve(DATA_DIR, "nocap-plus.txt");
-  const rockyouPath = resolve(DATA_DIR, "nocap.txt"); // nocap.txt = rockyou + rizzyou combined
-  const betaPath = resolve(FEEDBACK_DIR, "BETA.txt");
-
-  const [nocapPlusSet, rockyouSet, betaSet] = await Promise.all([
-    loadWordlistSet(nocapPlusPath),
-    loadWordlistSet(rockyouPath),
-    loadWordlistSet(betaPath),
-  ]);
-
-  console.log(`  nocap-plus.txt: ${nocapPlusSet.size.toLocaleString()} words`);
-  console.log(`  nocap.txt:      ${rockyouSet.size.toLocaleString()} words`);
-  console.log(`  BETA.txt:       ${betaSet.size.toLocaleString()} words`);
+  console.log("\nLoading passwords for overlap analysis...");
 
   // Load passwords from relevant batches
   const batchNames = filterBatch
@@ -590,19 +605,63 @@ async function runOverlapAnalysis(
 
   if (allPasswords.length === 0) {
     console.log("  No password files found for analysis.");
-    return { classification: {}, exclusive: {}, uncoveredCount: 0, uncoveredSample: [], uncoveredPatterns: [] };
+    return { classification: {}, exclusive: {}, uncoveredCount: 0, uncoveredSample: [], uncoveredPatterns: [], allPasswords: [] };
   }
 
   console.log(`  Passwords to classify: ${allPasswords.length.toLocaleString()}`);
-  console.log("  Classifying...");
 
-  // Classify each password
+  // Step 1: Generate ALL candidate lookup words from passwords
+  console.log("  Building candidate roots...");
+  const allCandidates = new Set<string>();
+  for (const pw of allPasswords) {
+    // Dict+rules reverse roots
+    const roots = reverseRuleRoots(pw);
+    for (const r of roots) allCandidates.add(r);
+    // Hybrid base words (strip digit/any suffixes)
+    const m4d = pw.match(/^(.+?)(\d{4})$/);
+    if (m4d) allCandidates.add(m4d[1].toLowerCase());
+    const m5d = pw.match(/^(.+?)(\d{5})$/);
+    if (m5d) allCandidates.add(m5d[1].toLowerCase());
+    const m6d = pw.match(/^(.+?)(\d{6})$/);
+    if (m6d) allCandidates.add(m6d[1].toLowerCase());
+    const msd = pw.match(/^(.+?)([^a-zA-Z0-9])(\d{3})$/);
+    if (msd) allCandidates.add(msd[1].toLowerCase());
+    // hybrid-3any base
+    if (pw.length >= 4) allCandidates.add(pw.slice(0, -3).toLowerCase());
+  }
+  console.log(`  Candidates: ${allCandidates.size.toLocaleString()} unique words`);
+
+  // Step 2: Load BETA.txt into Set (small — 78K, no OOM risk)
+  const betaPath = resolve(FEEDBACK_DIR, "BETA.txt");
+  const betaSet = await loadWordlistSet(betaPath);
+  console.log(`  BETA.txt: ${betaSet.size.toLocaleString()} words`);
+
+  // Step 3: Stream nocap-plus.txt — find which candidates exist in wordlist
+  console.log("  Streaming nocap-plus.txt against candidates...");
+  const nocapPlusPath = resolve(DATA_DIR, "nocap-plus.txt");
+  const nocapPlusMatches = new Set<string>();
+  let nocapPlusTotal = 0;
+  const rl = createInterface({ input: createReadStream(nocapPlusPath, "utf-8"), crlfDelay: Infinity });
+  for await (const line of rl) {
+    const word = line.trim().toLowerCase();
+    if (word) {
+      nocapPlusTotal++;
+      if (allCandidates.has(word)) nocapPlusMatches.add(word);
+    }
+  }
+  console.log(`  nocap-plus.txt: ${nocapPlusTotal.toLocaleString()} words streamed, ${nocapPlusMatches.size.toLocaleString()} candidates matched`);
+
+  // Free candidate set — no longer needed
+  allCandidates.clear();
+
+  // Step 4: Classify each password using betaSet + nocapPlusMatches + regex
+  console.log("  Classifying...");
   const classification: Record<string, number> = {};
   const exclusive: Record<string, number> = {};
   const uncovered: string[] = [];
 
   for (const pw of allPasswords) {
-    const coveredBy = classifyPassword(pw, nocapPlusSet, rockyouSet, betaSet);
+    const coveredBy = classifyPassword(pw, nocapPlusMatches, betaSet);
 
     for (const attack of coveredBy) {
       classification[attack] = (classification[attack] ?? 0) + 1;
