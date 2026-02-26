@@ -77,6 +77,8 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "mask-Ullllldd": /^[A-Z][a-z]{5}[0-9]{2}$/,
   "mask-lllldddd": /^[a-z]{4}[0-9]{4}$/,
   "mask-Ullllllldd": /^[A-Z][a-z]{7}[0-9]{2}$/,
+  // One-off experiments (not in DEFAULT_ATTACK_ORDER, but data exists for comparison)
+  "mask-ld9": /^[a-z0-9]{9}$/,
 };
 
 /**
