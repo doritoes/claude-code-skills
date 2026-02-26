@@ -871,7 +871,7 @@ if (import.meta.main) {
 BigRedRunner - SAND Batch Attack Orchestrator for BIGRED GPU
 
 Usage:
-  bun Tools/BigRedRunner.ts --batch 8                 Run all 22 attacks for batch-0008
+  bun Tools/BigRedRunner.ts --batch 8                 Run all 20 attacks for batch-0008
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7  Run single attack
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7 --detached  Run detached (screen)
   bun Tools/BigRedRunner.ts --status                   Check hashcat status (auto-detects batch)
