@@ -14,7 +14,7 @@
  * READ-ONLY: Never modifies sand-state.json, DEFAULT_ATTACK_ORDER, or any files.
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-25 — v7.2 tiers (added 10-char masks, 5/6-digit hybrids)
+ * @updated 2026-02-26 — v7.4 tiers (24 attacks with digit masks)
  * @license MIT
  */
 

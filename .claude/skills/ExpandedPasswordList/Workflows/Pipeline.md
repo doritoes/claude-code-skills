@@ -29,7 +29,7 @@ hibp-batched/ (raw HIBP data)
   pearls/           sand/ (survivors)
                        |
                        v
-                   [BigRedRunner] ... Stage 2: 20 attacks on BIGRED (v7.3)
+                   [BigRedRunner] ... Stage 2: 24 attacks on BIGRED (v7.4)
                        |                |
                        v                v
                    diamonds/         glass/ (uncrackable)
@@ -180,7 +180,7 @@ bun Tools/BigRedSync.ts --hashlist batch-NNNN
 ### Run the Batch
 
 ```bash
-# Run all attacks sequentially (v7.3: 20 attacks)
+# Run all attacks sequentially (v7.4: 24 attacks)
 bun Tools/BigRedRunner.ts --batch N
 
 # Monitor while running
@@ -322,13 +322,15 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (20 attacks, v7.3 — 2026-02-26)
+## Current Attack List (24 attacks, v7.4 — 2026-02-26)
 
 Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 
 | Tier | Attack | Description | Gen2 ROI (22 batches) |
 |------|--------|-------------|----------------------|
 | 0 | brute-4, brute-3 | Exhaustive 3-4 chars | <1s, ~150 cracks/batch |
+| 0 | mask-d9, mask-d10 | Pure digits 9-10 chars (PINs, phone numbers) | ~1s, 1,977 cracks (batch-0001 exp) (v7.4) |
+| 0 | mask-d11, mask-d12 | Pure digits 11-12 chars (international numbers) | ~100s, untested (v7.4) |
 | 1 | brute-6 | Exhaustive 6 chars | 7,154 cr/batch, ~1.7 min |
 | 1 | brute-7 | Exhaustive 7 chars | 8,662 cr/batch, ~107 min |
 | 1a | mask-l8 | ?l^8 — pure lowercase 8-char | ~19s, 13K cr/batch |
@@ -348,6 +350,7 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 522 cr/batch |
 | 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits | 402 cr/batch |
 
+**Added in v7.4:** mask-d9, mask-d10, mask-d11, mask-d12 — Tier 0 pure digit masks for phone numbers/PINs (<2 min combined).
 **Removed in v7.3:** mask-lllllldd (0 cracks post-v7.0, subsumed by mask-l8/ld8), mask-lllldddd (same).
 **Removed in v7.2:** mask-Ullllllllld (keyspace miscalculation: 1,411T not 54T).
 **Removed in v7.0:** hybrid-roots-4any (0 cracks/3 batches), nocapplus-nocaprule (1.6 cr/batch, redundant), hybrid-nocapplus-3digit (0.7 cr/batch, subsumed by ?a^3).

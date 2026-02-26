@@ -13,7 +13,7 @@
  *   bun Tools/BigRedRunner.ts --batch 8 --dry-run      Preview commands without executing
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-25 — v7.2 attack order (added 10-char masks, 5/6-digit hybrids)
+ * @updated 2026-02-26 — v7.4 attack order (24 attacks, added digit masks for phone/PINs)
  * @license MIT
  */
 
