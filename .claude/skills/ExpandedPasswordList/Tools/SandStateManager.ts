@@ -131,8 +131,8 @@ export const DEFAULT_ATTACK_ORDER = [
   "mask-Ullllllldd",          // ?u?l^7?d^2, 10-char, 26^8×100=20.9T — ~32 min (v7.2)
   //
   // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix + 9-char masks (ordered by cr/min)
+  "hybrid-nocapplus-5digit",       // nocap-plus × ?d^5 — ~3 min, 3,625 cr/batch (1,110 cr/min) (v7.2)
   "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~23 min, 8,281 cr/batch (353 cr/min) ★ TOP DISCOVERY
-  "hybrid-nocapplus-5digit",       // nocap-plus × ?d^5 — ~3 min (v7.2)
   "mask-l9",                       // ?l^9, 26^9=5.4T — ~10 min, pure lowercase 9-char (157 cr/min)
   "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~18 min, 1,061 cr/batch (59 cr/min)
   //
