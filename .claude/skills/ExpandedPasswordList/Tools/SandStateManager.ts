@@ -92,14 +92,14 @@ export interface SandState {
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
   // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.2 (2026-02-25)
-  // Applies to: batch-0020+ | 23 attacks
+  // Applies to: batch-0020+ | 22 attacks
   // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.9K), UNOBTAINIUM.rule (266)
   // Based on: Gen2 batches 0001-0014 (421,562 cracks / 4.87M hashes)
   // Changes from v6.2:
   //   ADD hybrid-beta-5digit, hybrid-beta-6digit (Tier 2, <8 sec combined)
   //   ADD mask-Ullllllldd (Tier 3, ~74 sec, 10-char structured)
   //   ADD hybrid-nocapplus-5digit (Tier 3a, ~3 min)
-  //   ADD mask-Ullllllllld (Tier 3a, ~3.2 min, 10-char)
+  //   REMOVED mask-Ullllllllld (keyspace miscalculation: 1,411T not 54T — ~36 hrs, not 3.2 min)
   // v7.1: ADD mask-l8/ld8/l9, DROP hybrid-roots-4any/nocapplus-nocaprule/hybrid-nocapplus-3digit
   // ══════════════════════════════════════════════════════════════════════
   //
@@ -134,7 +134,6 @@ export const DEFAULT_ATTACK_ORDER = [
   "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~23 min, 8,281 cr/batch (353 cr/min) ★ TOP DISCOVERY
   "hybrid-nocapplus-5digit",       // nocap-plus × ?d^5 — ~3 min (v7.2)
   "mask-l9",                       // ?l^9, 26^9 — ~17 min, pure lowercase 9-char (157 cr/min)
-  "mask-Ullllllllld",              // ?u?l^9?d, 10-char — ~3.2 min (v7.2)
   "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~18 min, 1,061 cr/batch (59 cr/min)
   //
   // ── GATE 3: ~95% of achievable cracks done ───────────────────────

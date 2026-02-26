@@ -76,7 +76,6 @@ const ATTACK_CMDS: Record<string, string> = {
   "mask-ld8":                       "#HL# -a 3 -1 ?l?d ?1?1?1?1?1?1?1?1",
   // 10-char structured masks (v7.2)
   "mask-Ullllllldd":                "#HL# -a 3 ?u?l?l?l?l?l?l?l?d?d",
-  "mask-Ullllllllld":               "#HL# -a 3 ?u?l?l?l?l?l?l?l?l?l?d",
   // Hybrid digit-suffix expansions (v7.2)
   "hybrid-beta-5digit":             "#HL# -a 6 BETA.txt ?d?d?d?d?d",
   "hybrid-beta-6digit":             "#HL# -a 6 BETA.txt ?d?d?d?d?d?d",
@@ -85,6 +84,8 @@ const ATTACK_CMDS: Record<string, string> = {
   "hybrid-roots-4any":             "#HL# -a 6 top-roots.txt ?a?a?a?a",
   "nocapplus-nocaprule":           "#HL# nocap-plus.txt -r nocap.rule",
   "hybrid-nocapplus-3digit":       "#HL# -a 6 nocap-plus.txt ?d?d?d",
+  // Removed from production v7.2 (keyspace miscalculation: 1,411T = ~36 hrs)
+  "mask-Ullllllllld":               "#HL# -a 3 ?u?l?l?l?l?l?l?l?l?l?d",
   // Experimental (manual one-off only)
   "mask-ld9":                       "#HL# -a 3 -1 ?l?d ?1?1?1?1?1?1?1?1?1",
 };
@@ -870,7 +871,7 @@ if (import.meta.main) {
 BigRedRunner - SAND Batch Attack Orchestrator for BIGRED GPU
 
 Usage:
-  bun Tools/BigRedRunner.ts --batch 8                 Run all 23 attacks for batch-0008
+  bun Tools/BigRedRunner.ts --batch 8                 Run all 22 attacks for batch-0008
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7  Run single attack
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7 --detached  Run detached (screen)
   bun Tools/BigRedRunner.ts --status                   Check hashcat status (auto-detects batch)

@@ -38,7 +38,8 @@ const TIER_MAP: Record<string, number> = {
   "mask-Ullllllldd": 3,
   "hybrid-nocapplus-4digit": 3, "mask-lllllldd": 3, "brute-5": 3, "mask-Ullllllld": 3,
   "hybrid-beta-4any": 3.5, "hybrid-nocapplus-3any": 3.5, "mask-l9": 3.5,
-  "mask-Ullllllllld": 3.5, "hybrid-nocapplus-5digit": 3.5,
+  "hybrid-nocapplus-5digit": 3.5,
+  "mask-Ullllllllld": -1,  // Removed v7.2: keyspace 1,411T (~36 hrs), not 54T as planned
   "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4, "mask-lllldddd": 4,
   // Removed from production v7.0 (kept for historical display)
   "hybrid-roots-4any": -1, "nocapplus-nocaprule": -1, "hybrid-nocapplus-3digit": -1,
@@ -77,7 +78,6 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "mask-Ullllldd": /^[A-Z][a-z]{5}[0-9]{2}$/,
   "mask-lllldddd": /^[a-z]{4}[0-9]{4}$/,
   "mask-Ullllllldd": /^[A-Z][a-z]{7}[0-9]{2}$/,
-  "mask-Ullllllllld": /^[A-Z][a-z]{9}[0-9]$/,
 };
 
 /**
