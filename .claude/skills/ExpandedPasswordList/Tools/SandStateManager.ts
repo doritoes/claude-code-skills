@@ -91,8 +91,8 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.3 (2026-02-26)
-  // Applies to: batch-0023+ | 20 attacks
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.4 (2026-02-26)
+  // Applies to: batch-0023+ | 24 attacks
   // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.9K), UNOBTAINIUM.rule (266)
   // Based on: Gen2 batches 0001-0014 (421,562 cracks / 4.87M hashes)
   // Changes from v6.2:
@@ -100,13 +100,18 @@ export const DEFAULT_ATTACK_ORDER = [
   //   ADD mask-Ullllllldd (Tier 3, ~32 min, 10-char structured)
   //   ADD hybrid-nocapplus-5digit (Tier 3a, ~3 min)
   //   REMOVED mask-Ullllllllld (keyspace miscalculation: 1,411T not 54T — ~36 hrs, not 3.2 min)
+  // v7.4: ADD mask-d9/d10/d11/d12 (Tier 0, <2 min combined — phone numbers, PINs)
   // v7.3: DROP mask-lllllldd, mask-lllldddd (0 cracks post-v7.0 — subsumed by mask-l8/ld8)
   // v7.1: ADD mask-l8/ld8/l9, DROP hybrid-roots-4any/nocapplus-nocaprule/hybrid-nocapplus-3digit
   // ══════════════════════════════════════════════════════════════════════
   //
-  // TIER 0: INSTANT (trivial keyspace, <1 second total)
+  // TIER 0: INSTANT (trivial keyspace, <2 min total)
   "brute-4",     // 133 cracks/batch avg — ~0.1 min
   "brute-3",     // 17 cracks/batch avg — ~0.2 min
+  "mask-d9",     // ?d^9, 10^9 — <1 sec. PINs, 9-digit numbers. 181 cracks (batch-0001 exp). (v7.4)
+  "mask-d10",    // ?d^10, 10^10 — ~1 sec. Phone numbers. 1,796 cracks (batch-0001 exp). (v7.4)
+  "mask-d11",    // ?d^11, 10^11 — ~9 sec. International numbers. (v7.4)
+  "mask-d12",    // ?d^12, 10^12 — ~92 sec. Full international format. (v7.4)
   //
   // TIER 1: HIGH ROI — 52.6% of cracks, dominates batch time
   "brute-6",     // 7,154 cracks/batch avg — ~1.7 min (3,778 cr/min)

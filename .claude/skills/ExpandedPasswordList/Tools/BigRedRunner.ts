@@ -88,6 +88,12 @@ const ATTACK_CMDS: Record<string, string> = {
   "mask-Ullllllllld":               "#HL# -a 3 ?u?l?l?l?l?l?l?l?l?l?d",
   // Experimental (manual one-off only)
   "mask-ld9":                       "#HL# -a 3 -1 ?l?d ?1?1?1?1?1?1?1?1?1",
+  "mask-d9":                        "#HL# -a 3 ?d?d?d?d?d?d?d?d?d",
+  "mask-d10":                       "#HL# -a 3 ?d?d?d?d?d?d?d?d?d?d",
+  "mask-d11":                       "#HL# -a 3 ?d?d?d?d?d?d?d?d?d?d?d",
+  "mask-d12":                       "#HL# -a 3 ?d?d?d?d?d?d?d?d?d?d?d?d",
+  "mask-Ulllllldd":                 "#HL# -a 3 ?u?l?l?l?l?l?l?d?d",
+  "mask-l10":                       "#HL# -a 3 ?l?l?l?l?l?l?l?l?l?l",
 };
 
 // =============================================================================
@@ -871,7 +877,7 @@ if (import.meta.main) {
 BigRedRunner - SAND Batch Attack Orchestrator for BIGRED GPU
 
 Usage:
-  bun Tools/BigRedRunner.ts --batch 8                 Run all 20 attacks for batch-0008
+  bun Tools/BigRedRunner.ts --batch 8                 Run all 24 attacks for batch-0008
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7  Run single attack
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7 --detached  Run detached (screen)
   bun Tools/BigRedRunner.ts --status                   Check hashcat status (auto-detects batch)

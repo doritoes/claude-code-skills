@@ -31,6 +31,7 @@ import { DATA_DIR, DIAMONDS_DIR, FEEDBACK_DIR } from "./config";
 
 const TIER_MAP: Record<string, number> = {
   "brute-1": 0, "brute-2": 0, "brute-3": 0, "brute-4": 0,
+  "mask-d9": 0, "mask-d10": 0, "mask-d11": 0, "mask-d12": 0,
   "brute-6": 1, "brute-7": 1,
   "mask-l8": 1.5, "mask-ld8": 1.5,
   "feedback-beta-nocaprule": 2, "nocapplus-unobtainium": 2,
@@ -78,6 +79,10 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "mask-Ullllldd": /^[A-Z][a-z]{5}[0-9]{2}$/,
   "mask-lllldddd": /^[a-z]{4}[0-9]{4}$/,
   "mask-Ullllllldd": /^[A-Z][a-z]{7}[0-9]{2}$/,
+  "mask-d9": /^[0-9]{9}$/,
+  "mask-d10": /^[0-9]{10}$/,
+  "mask-d11": /^[0-9]{11}$/,
+  "mask-d12": /^[0-9]{12}$/,
   // One-off experiments (not in DEFAULT_ATTACK_ORDER, but data exists for comparison)
   "mask-ld9": /^[a-z0-9]{9}$/,
 };
