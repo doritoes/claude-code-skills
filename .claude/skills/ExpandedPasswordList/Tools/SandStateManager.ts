@@ -97,7 +97,7 @@ export const DEFAULT_ATTACK_ORDER = [
   // Based on: Gen2 batches 0001-0014 (421,562 cracks / 4.87M hashes)
   // Changes from v6.2:
   //   ADD hybrid-beta-5digit, hybrid-beta-6digit (Tier 2, <8 sec combined)
-  //   ADD mask-Ullllllldd (Tier 3, ~74 sec, 10-char structured)
+  //   ADD mask-Ullllllldd (Tier 3, ~32 min, 10-char structured)
   //   ADD hybrid-nocapplus-5digit (Tier 3a, ~3 min)
   //   REMOVED mask-Ullllllllld (keyspace miscalculation: 1,411T not 54T — ~36 hrs, not 3.2 min)
   // v7.1: ADD mask-l8/ld8/l9, DROP hybrid-roots-4any/nocapplus-nocaprule/hybrid-nocapplus-3digit
@@ -128,12 +128,12 @@ export const DEFAULT_ATTACK_ORDER = [
   "mask-lllllldd",            // 1,168 cracks/batch — 6 lower + 2 digits
   "brute-5",                  // 976 cracks/batch — 5-char exhaustive
   "mask-Ullllllld",           // 640 cracks/batch — Capital + 7 lower + 1 digit
-  "mask-Ullllllldd",          // ?u?l^7?d^2, 10-char — ~74 sec (v7.2)
+  "mask-Ullllllldd",          // ?u?l^7?d^2, 10-char, 26^8×100=20.9T — ~32 min (v7.2)
   //
   // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix + 9-char masks (ordered by cr/min)
   "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~23 min, 8,281 cr/batch (353 cr/min) ★ TOP DISCOVERY
   "hybrid-nocapplus-5digit",       // nocap-plus × ?d^5 — ~3 min (v7.2)
-  "mask-l9",                       // ?l^9, 26^9 — ~17 min, pure lowercase 9-char (157 cr/min)
+  "mask-l9",                       // ?l^9, 26^9=5.4T — ~10 min, pure lowercase 9-char (157 cr/min)
   "hybrid-beta-4any",              // BETA.txt × ?a^4 — ~18 min, 1,061 cr/batch (59 cr/min)
   //
   // ── GATE 3: ~95% of achievable cracks done ───────────────────────
