@@ -60,16 +60,15 @@ const TIER_NAMES: Record<number, string> = {
   99: "Special: Manual",
 };
 
-/** Regex patterns for mask/brute attacks (used in --overlap classification) */
+/** Regex patterns for mask/brute attacks (used in --overlap classification).
+ *  Only includes attacks in DEFAULT_ATTACK_ORDER (production pipeline).
+ *  brute-8 excluded — one-off experiment on batch-0001, not in production. */
 const ATTACK_REGEX: Record<string, RegExp> = {
-  "brute-1": /^.{1}$/,
-  "brute-2": /^.{2}$/,
   "brute-3": /^.{3}$/,
   "brute-4": /^.{4}$/,
   "brute-5": /^.{5}$/,
   "brute-6": /^.{6}$/,
   "brute-7": /^.{7}$/,
-  "brute-8": /^.{8}$/,
   "mask-l8": /^[a-z]{8}$/,
   "mask-ld8": /^[a-z0-9]{8}$/,
   "mask-l9": /^[a-z]{9}$/,
