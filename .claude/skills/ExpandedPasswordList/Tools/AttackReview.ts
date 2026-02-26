@@ -36,12 +36,13 @@ const TIER_MAP: Record<string, number> = {
   "feedback-beta-nocaprule": 2, "nocapplus-unobtainium": 2,
   "hybrid-beta-5digit": 2, "hybrid-beta-6digit": 2,
   "mask-Ullllllldd": 3,
-  "hybrid-nocapplus-4digit": 3, "mask-lllllldd": 3, "brute-5": 3, "mask-Ullllllld": 3,
+  "hybrid-nocapplus-4digit": 3, "brute-5": 3, "mask-Ullllllld": 3,
   "hybrid-beta-4any": 3.5, "hybrid-nocapplus-3any": 3.5, "mask-l9": 3.5,
   "hybrid-nocapplus-5digit": 3.5,
   "mask-Ullllllllld": -1,  // Removed v7.2: keyspace 1,411T (~36 hrs), not 54T as planned
-  "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4, "mask-lllldddd": 4,
-  // Removed from production v7.0 (kept for historical display)
+  "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4,
+  // Removed from production (kept for historical display)
+  "mask-lllllldd": -1, "mask-lllldddd": -1,  // v7.3: subsumed by mask-l8/ld8
   "hybrid-roots-4any": -1, "nocapplus-nocaprule": -1, "hybrid-nocapplus-3digit": -1,
   "brute-8": 99,
   "mask-ld9": 98,

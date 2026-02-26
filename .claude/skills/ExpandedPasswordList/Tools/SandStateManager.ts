@@ -91,8 +91,8 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.2 (2026-02-25)
-  // Applies to: batch-0020+ | 22 attacks
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.3 (2026-02-26)
+  // Applies to: batch-0023+ | 20 attacks
   // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.9K), UNOBTAINIUM.rule (266)
   // Based on: Gen2 batches 0001-0014 (421,562 cracks / 4.87M hashes)
   // Changes from v6.2:
@@ -100,6 +100,7 @@ export const DEFAULT_ATTACK_ORDER = [
   //   ADD mask-Ullllllldd (Tier 3, ~32 min, 10-char structured)
   //   ADD hybrid-nocapplus-5digit (Tier 3a, ~3 min)
   //   REMOVED mask-Ullllllllld (keyspace miscalculation: 1,411T not 54T — ~36 hrs, not 3.2 min)
+  // v7.3: DROP mask-lllllldd, mask-lllldddd (0 cracks post-v7.0 — subsumed by mask-l8/ld8)
   // v7.1: ADD mask-l8/ld8/l9, DROP hybrid-roots-4any/nocapplus-nocaprule/hybrid-nocapplus-3digit
   // ══════════════════════════════════════════════════════════════════════
   //
@@ -125,7 +126,6 @@ export const DEFAULT_ATTACK_ORDER = [
   //
   // TIER 3: PROVEN MEDIUM ROI
   "hybrid-nocapplus-4digit",  // 3,168 cracks/batch — top hybrid (5,204 cr/min)
-  "mask-lllllldd",            // 1,168 cracks/batch — 6 lower + 2 digits
   "brute-5",                  // 976 cracks/batch — 5-char exhaustive
   "mask-Ullllllld",           // 640 cracks/batch — Capital + 7 lower + 1 digit
   "mask-Ullllllldd",          // ?u?l^7?d^2, 10-char, 26^8×100=20.9T — ~32 min (v7.2)
@@ -140,12 +140,13 @@ export const DEFAULT_ATTACK_ORDER = [
   //
   // TIER 4: LOW ROI
   "mask-Ullllldd",                  // 522 cracks/batch
-  "mask-lllldddd",                  // 664 cracks/batch
   "hybrid-nocapplus-special-digits",  // 402 cracks/batch
   //
   // ══════════════════════════════════════════════════════════════════════
   // REMOVED: ZERO/MINIMAL VALUE
   // ══════════════════════════════════════════════════════════════════════
+  // ✗ mask-lllllldd             - 0 cracks post-v7.0 (batches 0020-0022). Subsumed by mask-l8/ld8 in Tier 1a. REMOVED v7.3.
+  // ✗ mask-lllldddd             - 0 cracks post-v7.0 (batches 0020-0022). Subsumed by mask-l8/ld8 in Tier 1a. REMOVED v7.3.
   // ✗ hybrid-roots-4any        - 0 cracks across 3 batches (0012-0014). top-roots.txt too niche. REMOVED v7.0.
   // ✗ nocapplus-nocaprule      - 1.6 cracks/batch across 14 batches. Redundant with other combos. REMOVED v7.0.
   // ✗ hybrid-nocapplus-3digit  - 0.7 cracks/batch. Subsumed by hybrid-nocapplus-3any (?a^3 > ?d^3). REMOVED v7.0.
