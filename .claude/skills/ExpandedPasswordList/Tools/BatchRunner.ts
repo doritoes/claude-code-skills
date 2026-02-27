@@ -22,6 +22,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { DEFAULT_ATTACK_ORDER } from "./SandStateManager";
 
 const CURRENT_FILE = fileURLToPath(import.meta.url);
 const TOOLS_DIR = dirname(CURRENT_FILE);
@@ -220,7 +221,7 @@ function runBatch(batchNum: number, options: {
 
   // Step 2: RUN ATTACKS
   if (startStep <= 2) {
-    stepLog(2, TOTAL_STEPS, "ATTACKS — Running 18 attacks on BIGRED (~3 hrs)");
+    stepLog(2, TOTAL_STEPS, `ATTACKS — Running ${DEFAULT_ATTACK_ORDER.length} attacks on BIGRED`);
     const t0 = Date.now();
 
     if (options.dryRun) {

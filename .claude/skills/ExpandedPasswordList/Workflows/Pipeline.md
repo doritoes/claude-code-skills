@@ -1,6 +1,6 @@
 # Gen2 Pipeline — End-to-End Workflow
 
-**Last Updated:** 2026-02-26
+**Last Updated:** 2026-02-27
 **Platform:** BIGRED (local RTX 4060 Ti, 192.168.99.204)
 
 ---
@@ -29,7 +29,7 @@ hibp-batched/ (raw HIBP data)
   pearls/           sand/ (survivors)
                        |
                        v
-                   [BigRedRunner] ... Stage 2: 24 attacks on BIGRED (v7.4)
+                   [BigRedRunner] ... Stage 2: 35 attacks on BIGRED (v7.7)
                        |                |
                        v                v
                    diamonds/         glass/ (uncrackable)
@@ -180,7 +180,7 @@ bun Tools/BigRedSync.ts --hashlist batch-NNNN
 ### Run the Batch
 
 ```bash
-# Run all attacks sequentially (v7.4: 24 attacks)
+# Run all attacks sequentially (v7.7: 35 attacks)
 bun Tools/BigRedRunner.ts --batch N
 
 # Monitor while running
@@ -322,38 +322,52 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (24 attacks, v7.4 — 2026-02-26)
+## Current Attack List (35 attacks, v7.7 — 2026-02-27)
 
 Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 
-| Tier | Attack | Description | Gen2 ROI (22 batches) |
-|------|--------|-------------|----------------------|
+| Tier | Attack | Description | ROI (measured) |
+|------|--------|-------------|----------------|
 | 0 | brute-4, brute-3 | Exhaustive 3-4 chars | <1s, ~150 cracks/batch |
-| 0 | mask-d9, mask-d10 | Pure digits 9-10 chars (PINs, phone numbers) | ~1s, 1,977 cracks (batch-0001 exp) (v7.4) |
-| 0 | mask-d11, mask-d12 | Pure digits 11-12 chars (international numbers) | ~100s, untested (v7.4) |
+| 0 | mask-d9, mask-d10 | Pure digits 9-10 chars (PINs, phone numbers) | ~1s, 1,977 cracks (batch-0001) |
+| 0 | mask-d11, mask-d12 | Pure digits 11-12 chars (international numbers) | ~100s, 2,975 cracks (batch-0001) |
 | 1 | brute-6 | Exhaustive 6 chars | 7,154 cr/batch, ~1.7 min |
 | 1 | brute-7 | Exhaustive 7 chars | 8,662 cr/batch, ~107 min |
 | 1a | mask-l8 | ?l^8 — pure lowercase 8-char | ~19s, 13K cr/batch |
 | 1a | mask-ld8 | -1 ?l?d ?1^8 — lowercase+digit 8-char | ~4.3 min, 13K cr/batch |
 | 2 | feedback-beta-nocaprule | BETA.txt + nocap.rule | 394 cr/batch |
 | 2 | nocapplus-unobtainium | nocap-plus.txt + UNOBTAINIUM.rule | 450 cr/batch |
-| 2 | hybrid-beta-5digit | BETA.txt + ?d^5 | 118 cr/batch, <1s (v7.2) |
-| 2 | hybrid-beta-6digit | BETA.txt + ?d^6 | 359 cr/batch, ~7s (v7.2) |
-| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 3,168 cr/batch, top hybrid |
+| 2 | hybrid-beta-5digit | BETA.txt + ?d^5 | 118 cr/batch, <1s |
+| 2 | hybrid-beta-6digit | BETA.txt + ?d^6 | 359 cr/batch, ~7s |
+| 2 | reverse-nocapplus-3digit | **-a 7** ?d^3 + nocap-plus (prefix) | **596 cr, 14s (2,554 cr/min) (v7.7)** |
+| 2 | reverse-nocapplus-4digit | **-a 7** ?d^4 + nocap-plus (prefix) | **2,759 cr, 28s (5,912 cr/min) (v7.7)** |
+| 2 | reverse-nocapplus-1special | **-a 7** ?s + nocap-plus (prefix) | 44 cr, 13s (203 cr/min) (v7.7) |
+| 2 | combo-beta-beta | **-a 1** BETA × BETA (word+word) | 130 cr, <1s (7,800 cr/min) (v7.7) |
+| 2 | combo-beta-beta-cap | **-a 1** -j c BETA × BETA (Cap+word) | 45 cr, <1s (2,700 cr/min) (v7.7) |
+| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 3,077 cr/batch (5,042 cr/min) |
 | 3 | brute-5 | Exhaustive 5 chars | 976 cr/batch |
 | 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 640 cr/batch |
-| 3 | mask-Ullllllldd | Cap + 7 lower + 2 digits (10-char) | 1,075 cr/batch, ~32 min (v7.2) |
-| 3a | hybrid-nocapplus-5digit | nocap-plus + ?d^5 | 3,625 cr/batch, ~3 min (1,110 cr/min) (v7.2) |
-| 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | 8,281 cr/batch, ~23 min (353 cr/min) |
-| 3a | mask-l9 | ?l^9 — pure lowercase 9-char | ~10 min, 1,700 cr/batch (157 cr/min) |
-| 3a | hybrid-beta-4any | BETA.txt + ?a^4 | 1,061 cr/batch, ~18 min (59 cr/min) |
+| 3 | mask-Ullllllldd | Cap + 7 lower + 2 digits (10-char) | 1,075 cr/batch, ~32 min |
+| 3 | combo-beta-nocapplus-cap | **-a 1** -j c BETA × nocap-plus | **1,350 cr, 2.2m (614 cr/min) (v7.7)** |
+| 3a | hybrid-nocapplus-5digit | nocap-plus + ?d^5 | 2,970 cr/batch, ~3.8 min (780 cr/min) |
+| 3a | hybrid-nocapplus-3digit-1special | nocap-plus + ?d?d?d?s | 1,549 cr, 2.2 min (704 cr/min) (v7.6) |
+| 3a | combo-beta-nocapplus | **-a 1** BETA × nocap-plus | **1,093 cr, 2.4m (455 cr/min) (v7.7)** |
+| 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | 7,311 cr/batch, ~25 min (286 cr/min) |
+| 3a | mask-l9 | ?l^9 — pure lowercase 9-char | ~10 min, 1,699 cr/batch (165 cr/min) |
+| 3a | hybrid-nocapplus-4digit-1special | nocap-plus + ?d?d?d?d?s | 1,324 cr, 19.3 min (68 cr/min) (v7.6) |
+| 3a | hybrid-beta-4any | BETA.txt + ?a^4 | 638 cr/batch, ~21 min (30 cr/min) |
 | 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 522 cr/batch |
-| 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits | 402 cr/batch |
+| 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits (?s?d?d?d) | 372 cr/batch |
+| 4 | hybrid-nocapplus-digit-1special | nocap-plus + ?d?s | 76 cr/batch, <1s |
+| 4 | reverse-nocapplus-special-3digit | **-a 7** ?s?d^3 + nocap-plus | 34 cr, 64s (32 cr/min) (v7.7) |
 
-**Added in v7.4:** mask-d9, mask-d10, mask-d11, mask-d12 — Tier 0 pure digit masks for phone numbers/PINs (<2 min combined).
-**Removed in v7.3:** mask-lllllldd (0 cracks post-v7.0, subsumed by mask-l8/ld8), mask-lllldddd (same).
-**Removed in v7.2:** mask-Ullllllllld (keyspace miscalculation: 1,411T not 54T).
-**Removed in v7.0:** hybrid-roots-4any (0 cracks/3 batches), nocapplus-nocaprule (1.6 cr/batch, redundant), hybrid-nocapplus-3digit (0.7 cr/batch, subsumed by ?a^3).
+**Added in v7.7:** 4 reverse hybrids (-a 7, prefix+word) + 4 combinators (-a 1, word+word). Filled two structural blind spots — all prior attacks were -a 0/3/6 only. Star: reverse-nocapplus-4digit (5,912 cr/min). Total: ~7 min added per batch.
+**Added in v7.6:** hybrid-nocapplus-3digit-1special, 4digit-1special. Removed: digit-2special (0 cr), digit-3special (3.2 cr/min).
+**Added in v7.4:** mask-d9/d10/d11/d12 — Tier 0 pure digit masks (<2 min combined).
+**Removed in v7.3:** mask-lllllldd, mask-lllldddd (0 cracks post-v7.0, subsumed by mask-l8/ld8).
+**Removed in v7.0:** hybrid-roots-4any, nocapplus-nocaprule, hybrid-nocapplus-3digit.
+
+**Speed note:** nocap-plus hybrids run at ~4 GH/s (0.37× mask speed). Reverse hybrids (-a 7) are faster: 1-7.5 GH/s. Combinators (-a 1): 4.8-8.4 GH/s.
 
 **How to modify the attack list:** Edit `DEFAULT_ATTACK_ORDER` array in `Tools/SandStateManager.ts`. Use `AttackReview.ts` output to justify changes. The `ATTACK_CMDS` mapping in `BigRedRunner.ts` must also include any new attack name.
 

@@ -14,7 +14,7 @@
  * READ-ONLY: Never modifies sand-state.json, DEFAULT_ATTACK_ORDER, or any files.
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-26 — v7.4 tiers (24 attacks with digit masks)
+ * @updated 2026-02-27 — v7.7 tiers (35 attacks, +reverse hybrids -a 7, +combinators -a 1)
  * @license MIT
  */
 
@@ -42,11 +42,19 @@ const TIER_MAP: Record<string, number> = {
   "hybrid-nocapplus-5digit": 3.5,
   "mask-Ullllllllld": -1,  // Removed v7.2: keyspace 1,411T (~36 hrs), not 54T as planned
   "mask-Ullllldd": 4, "hybrid-nocapplus-special-digits": 4,
+  "hybrid-nocapplus-digit-1special": 4,
+  "hybrid-nocapplus-3digit-1special": 3.5, "hybrid-nocapplus-4digit-1special": 3.5,  // v7.6: targeted Nd+1s
+  "hybrid-nocapplus-digit-2special": -1, "hybrid-nocapplus-digit-3special": -1,  // v7.6: removed (0 cracks / poor ROI)
+  // v7.7: reverse hybrids (-a 7) and combinators (-a 1)
+  "reverse-nocapplus-3digit": 2, "reverse-nocapplus-4digit": 2, "reverse-nocapplus-1special": 2,
+  "combo-beta-beta": 2, "combo-beta-beta-cap": 2,
+  "combo-beta-nocapplus-cap": 3, "combo-beta-nocapplus": 3.5,
+  "reverse-nocapplus-special-3digit": 4,
   // Removed from production (kept for historical display)
   "mask-lllllldd": -1, "mask-lllldddd": -1,  // v7.3: subsumed by mask-l8/ld8
   "hybrid-roots-4any": -1, "nocapplus-nocaprule": -1, "hybrid-nocapplus-3digit": -1,
   "brute-8": 99,
-  "mask-ld9": 98,
+  "mask-ld9": 98, "mask-l10": 98, "mask-Ulllllldd": 98,
 };
 
 const TIER_NAMES: Record<number, string> = {
@@ -85,6 +93,8 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "mask-d12": /^[0-9]{12}$/,
   // One-off experiments (not in DEFAULT_ATTACK_ORDER, but data exists for comparison)
   "mask-ld9": /^[a-z0-9]{9}$/,
+  "mask-l10": /^[a-z]{10}$/,
+  "mask-Ulllllldd": /^[A-Z][a-z]{6}[0-9]{2}$/,
 };
 
 /**
@@ -617,49 +627,60 @@ async function runOverlapAnalysis(
 
   console.log(`  Passwords to classify: ${allPasswords.length.toLocaleString()}`);
 
-  // Step 1: Generate ALL candidate lookup words from passwords
-  console.log("  Building candidate roots...");
-  const allCandidates = new Set<string>();
-  for (const pw of allPasswords) {
-    // Dict+rules reverse roots
-    const roots = reverseRuleRoots(pw);
-    for (const r of roots) allCandidates.add(r);
-    // Hybrid base words (strip digit/any suffixes)
-    const m4d = pw.match(/^(.+?)(\d{4})$/);
-    if (m4d) allCandidates.add(m4d[1].toLowerCase());
-    const m5d = pw.match(/^(.+?)(\d{5})$/);
-    if (m5d) allCandidates.add(m5d[1].toLowerCase());
-    const m6d = pw.match(/^(.+?)(\d{6})$/);
-    if (m6d) allCandidates.add(m6d[1].toLowerCase());
-    const msd = pw.match(/^(.+?)([^a-zA-Z0-9])(\d{3})$/);
-    if (msd) allCandidates.add(msd[1].toLowerCase());
-    // hybrid-3any base
-    if (pw.length >= 4) allCandidates.add(pw.slice(0, -3).toLowerCase());
+  // Steps 1-3 combined: Chunk passwords to cap candidate Set memory (~200MB/chunk
+  // instead of ~1.2GB all-at-once). Streams nocap-plus.txt once per chunk.
+  // Trade-off: ~5 passes over nocap-plus.txt vs 1, but avoids OOM at 900K+ passwords.
+  const OVERLAP_CHUNK_SIZE = 100_000;
+  const nocapPlusPath = resolve(DATA_DIR, "nocap-plus.txt");
+  const nocapPlusMatches = new Set<string>();
+  let nocapPlusTotal = 0;
+  const numChunks = Math.ceil(allPasswords.length / OVERLAP_CHUNK_SIZE);
+
+  console.log(`  Processing in ${numChunks} chunk(s) of ${OVERLAP_CHUNK_SIZE.toLocaleString()}...`);
+
+  for (let ci = 0; ci < numChunks; ci++) {
+    const chunk = allPasswords.slice(ci * OVERLAP_CHUNK_SIZE, (ci + 1) * OVERLAP_CHUNK_SIZE);
+    const chunkCandidates = new Set<string>();
+
+    for (const pw of chunk) {
+      // Dict+rules reverse roots
+      const roots = reverseRuleRoots(pw);
+      for (const r of roots) chunkCandidates.add(r);
+      // Hybrid base words (strip digit/any suffixes)
+      const m4d = pw.match(/^(.+?)(\d{4})$/);
+      if (m4d) chunkCandidates.add(m4d[1].toLowerCase());
+      const m5d = pw.match(/^(.+?)(\d{5})$/);
+      if (m5d) chunkCandidates.add(m5d[1].toLowerCase());
+      const m6d = pw.match(/^(.+?)(\d{6})$/);
+      if (m6d) chunkCandidates.add(m6d[1].toLowerCase());
+      const msd = pw.match(/^(.+?)([^a-zA-Z0-9])(\d{3})$/);
+      if (msd) chunkCandidates.add(msd[1].toLowerCase());
+      // hybrid-3any base
+      if (pw.length >= 4) chunkCandidates.add(pw.slice(0, -3).toLowerCase());
+    }
+
+    // Stream nocap-plus.txt — only keep words that match this chunk's candidates
+    let lineCount = 0;
+    const rl = createInterface({ input: createReadStream(nocapPlusPath, "utf-8"), crlfDelay: Infinity });
+    for await (const line of rl) {
+      const word = line.trim().toLowerCase();
+      if (word) {
+        lineCount++;
+        if (chunkCandidates.has(word)) nocapPlusMatches.add(word);
+      }
+    }
+    if (ci === 0) nocapPlusTotal = lineCount;
+
+    chunkCandidates.clear();
+    console.log(`  Chunk ${ci + 1}/${numChunks}: ${chunk.length.toLocaleString()} passwords, ${nocapPlusMatches.size.toLocaleString()} wordlist matches`);
   }
-  console.log(`  Candidates: ${allCandidates.size.toLocaleString()} unique words`);
+
+  console.log(`  nocap-plus.txt: ${nocapPlusTotal.toLocaleString()} words, ${nocapPlusMatches.size.toLocaleString()} candidates matched (${numChunks} passes)`);
 
   // Step 2: Load BETA.txt into Set (small — 78K, no OOM risk)
   const betaPath = resolve(FEEDBACK_DIR, "BETA.txt");
   const betaSet = await loadWordlistSet(betaPath);
   console.log(`  BETA.txt: ${betaSet.size.toLocaleString()} words`);
-
-  // Step 3: Stream nocap-plus.txt — find which candidates exist in wordlist
-  console.log("  Streaming nocap-plus.txt against candidates...");
-  const nocapPlusPath = resolve(DATA_DIR, "nocap-plus.txt");
-  const nocapPlusMatches = new Set<string>();
-  let nocapPlusTotal = 0;
-  const rl = createInterface({ input: createReadStream(nocapPlusPath, "utf-8"), crlfDelay: Infinity });
-  for await (const line of rl) {
-    const word = line.trim().toLowerCase();
-    if (word) {
-      nocapPlusTotal++;
-      if (allCandidates.has(word)) nocapPlusMatches.add(word);
-    }
-  }
-  console.log(`  nocap-plus.txt: ${nocapPlusTotal.toLocaleString()} words streamed, ${nocapPlusMatches.size.toLocaleString()} candidates matched`);
-
-  // Free candidate set — no longer needed
-  allCandidates.clear();
 
   // Step 4: Classify each password using betaSet + nocapPlusMatches + regex
   console.log("  Classifying...");

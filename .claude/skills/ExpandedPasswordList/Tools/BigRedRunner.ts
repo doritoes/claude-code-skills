@@ -13,7 +13,7 @@
  *   bun Tools/BigRedRunner.ts --batch 8 --dry-run      Preview commands without executing
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-26 — v7.4 attack order (24 attacks, added digit masks for phone/PINs)
+ * @updated 2026-02-27 — v7.7 attack order (35 attacks, +reverse hybrids -a 7, +combinators -a 1)
  * @license MIT
  */
 
@@ -80,6 +80,19 @@ const ATTACK_CMDS: Record<string, string> = {
   "hybrid-beta-5digit":             "#HL# -a 6 BETA.txt ?d?d?d?d?d",
   "hybrid-beta-6digit":             "#HL# -a 6 BETA.txt ?d?d?d?d?d?d",
   "hybrid-nocapplus-5digit":        "#HL# -a 6 nocap-plus.txt ?d?d?d?d?d",
+  // Targeted digit+special suffix hybrids (v7.6 — from 12+/3-class analysis)
+  "hybrid-nocapplus-3digit-1special": "#HL# -a 6 nocap-plus.txt ?d?d?d?s",
+  "hybrid-nocapplus-4digit-1special": "#HL# -a 6 nocap-plus.txt ?d?d?d?d?s",
+  // Reverse hybrid experiments (v7.7 — prefix+word, -a 7)
+  "reverse-nocapplus-3digit":          "#HL# -a 7 ?d?d?d nocap-plus.txt",
+  "reverse-nocapplus-4digit":          "#HL# -a 7 ?d?d?d?d nocap-plus.txt",
+  "reverse-nocapplus-1special":        "#HL# -a 7 ?s nocap-plus.txt",
+  "reverse-nocapplus-special-3digit":  "#HL# -a 7 ?s?d?d?d nocap-plus.txt",
+  // Combinator experiments (v7.7 — word+word, -a 1)
+  "combo-beta-beta":                   "#HL# -a 1 BETA.txt BETA.txt",
+  "combo-beta-beta-cap":               "#HL# -a 1 -j c BETA.txt BETA.txt",
+  "combo-beta-nocapplus":              "#HL# -a 1 BETA.txt nocap-plus.txt",
+  "combo-beta-nocapplus-cap":          "#HL# -a 1 -j c BETA.txt nocap-plus.txt",
   // Removed from production v7.0 (kept for historical/one-off use)
   "hybrid-roots-4any":             "#HL# -a 6 top-roots.txt ?a?a?a?a",
   "nocapplus-nocaprule":           "#HL# nocap-plus.txt -r nocap.rule",
@@ -94,6 +107,10 @@ const ATTACK_CMDS: Record<string, string> = {
   "mask-d12":                       "#HL# -a 3 ?d?d?d?d?d?d?d?d?d?d?d?d",
   "mask-Ulllllldd":                 "#HL# -a 3 ?u?l?l?l?l?l?l?d?d",
   "mask-l10":                       "#HL# -a 3 ?l?l?l?l?l?l?l?l?l?l",
+  "hybrid-nocapplus-digit-1special": "#HL# -a 6 nocap-plus.txt ?d?s",
+  // Removed from production v7.6 (poor ROI — digit-2special: 0 cracks, digit-3special: 33 cracks in 10 min)
+  "hybrid-nocapplus-digit-2special": "#HL# -a 6 nocap-plus.txt ?d?s?s",
+  "hybrid-nocapplus-digit-3special": "#HL# -a 6 nocap-plus.txt ?d?s?s?s",
 };
 
 // =============================================================================
@@ -877,7 +894,7 @@ if (import.meta.main) {
 BigRedRunner - SAND Batch Attack Orchestrator for BIGRED GPU
 
 Usage:
-  bun Tools/BigRedRunner.ts --batch 8                 Run all 24 attacks for batch-0008
+  bun Tools/BigRedRunner.ts --batch 8                 Run all attacks for batch-0008
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7  Run single attack
   bun Tools/BigRedRunner.ts --batch 8 --attack brute-7 --detached  Run detached (screen)
   bun Tools/BigRedRunner.ts --status                   Check hashcat status (auto-detects batch)
