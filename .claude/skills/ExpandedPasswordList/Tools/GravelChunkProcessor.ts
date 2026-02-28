@@ -13,7 +13,7 @@
  *
  * Usage:
  *   bun Tools/GravelChunkProcessor.ts --run                Process all gravel (40 chunks)
- *   bun Tools/GravelChunkProcessor.ts --run --chunks 20    Use 20 chunks instead of 40
+ *   bun Tools/GravelChunkProcessor.ts --run --chunks 50    Use 50 chunks instead of 40
  *   bun Tools/GravelChunkProcessor.ts --status             Show progress
  *   bun Tools/GravelChunkProcessor.ts --dry-run            Preview chunking plan
  *
@@ -884,7 +884,7 @@ per-batch PEARLS (JSONL) and SAND (gzipped).
 
 Usage:
   bun Tools/GravelChunkProcessor.ts --run                Process all gravel (40 chunks)
-  bun Tools/GravelChunkProcessor.ts --run --chunks 20    Use 20 chunks instead of 40
+  bun Tools/GravelChunkProcessor.ts --run --chunks 50    Use 50 chunks instead of 40
   bun Tools/GravelChunkProcessor.ts --status             Show progress
   bun Tools/GravelChunkProcessor.ts --dry-run            Preview chunking plan
 
