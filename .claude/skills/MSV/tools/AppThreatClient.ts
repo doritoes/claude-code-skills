@@ -502,14 +502,15 @@ export class AppThreatClient {
 
     // Extract vendor and product from CPE
     // cpe:2.3:a:vendor:product:version:...
+    // Strip CPE 2.3 backslash escapes (e.g., notepad\+\+ → notepad++)
     const cpeParts = cpe.split(":");
-    const vendor = cpeParts[3] || "";
-    const product = cpeParts[4] || "";
+    const vendor = (cpeParts[3] || "").replace(/\\(.)/g, "$1");
+    const product = (cpeParts[4] || "").replace(/\\(.)/g, "$1");
 
     // Query index by name (product)
     // Optionally exclude MAL-* entries (malware, not CVEs for the product itself)
     const malwareFilter = excludeMalware ? "AND cve_id NOT LIKE 'MAL-%'" : "";
-    const indexResults = this.indexDb!.query<
+    let indexResults = this.indexDb!.query<
       { cve_id: string; vers: string; purl_prefix: string },
       [string, number]
     >(`
@@ -519,6 +520,22 @@ export class AppThreatClient {
       ${malwareFilter}
       LIMIT ?
     `).all(`%${product}%`, limit);
+
+    // Fallback: if product search found nothing, try matching by vendor in purl_prefix
+    // AppThreat stores some products with simplified names (e.g., "notepad" for "notepad++")
+    // but the purl_prefix contains the full vendor (e.g., "pkg:generic/notepad-plus-plus/notepad")
+    if (indexResults.length === 0 && vendor) {
+      indexResults = this.indexDb!.query<
+        { cve_id: string; vers: string; purl_prefix: string },
+        [string, number]
+      >(`
+        SELECT DISTINCT cve_id, vers, purl_prefix
+        FROM cve_index
+        WHERE purl_prefix LIKE ?
+        ${malwareFilter}
+        LIMIT ?
+      `).all(`%${vendor}%`, limit);
+    }
 
     if (indexResults.length === 0) {
       return [];

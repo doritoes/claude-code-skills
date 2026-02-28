@@ -531,13 +531,25 @@ export class NvdClient {
 
     // Extract vendor and product from CPE for keyword search
     // CPE format: cpe:2.3:a:vendor:product:version:...
+    // Strip CPE 2.3 backslash escapes (e.g., notepad\+\+ → notepad++)
     const cpeParts = cpe23.split(":");
-    const vendor = cpeParts[3] || "";
-    const product = cpeParts[4] || "";
+    const vendor = (cpeParts[3] || "").replace(/\\(.)/g, "$1");
+    const product = (cpeParts[4] || "").replace(/\\(.)/g, "$1");
 
-    // Use keywordSearch with vendor+product for better compatibility
-    // cpeName requires exact CPE match (no wildcards), which often fails
-    const searchKeyword = `${vendor} ${product}`.trim();
+    // Use keywordSearch for NVD API queries
+    // NVD ANDs multiple keywords, so "vendor product" fails when they're variants
+    // of the same name (e.g., "notepad-plus-plus notepad++" → 0 results).
+    // Use product alone if it differs from vendor; use vendor if product is just "*"
+    let searchKeyword: string;
+    if (!product || product === "*") {
+      searchKeyword = vendor;
+    } else if (vendor && vendor !== product && !product.includes(vendor.replace(/-/g, ""))) {
+      // Different names: combine (e.g., "microsoft edge" → both needed)
+      searchKeyword = `${vendor} ${product}`;
+    } else {
+      // Same or similar names: use product only (e.g., "notepad++" is enough)
+      searchKeyword = product;
+    }
     const url = `${NVD_BASE_URL}?keywordSearch=${encodeURIComponent(searchKeyword)}&resultsPerPage=${maxResults}`;
 
     // Use rate-limited fetch with retry

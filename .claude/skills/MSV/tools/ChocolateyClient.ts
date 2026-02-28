@@ -33,7 +33,7 @@ const CHOCO_PACKAGE_MAP: Record<string, string> = {
   "mobaxterm": "mobaxterm",
 
   // Utilities
-  "notepad": "notepadplusplus",
+  "notepadpp": "notepadplusplus",
   "vscode": "vscode",
   "git": "git",
   "nodejs": "nodejs",
