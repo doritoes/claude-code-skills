@@ -502,23 +502,62 @@ export class AppThreatClient {
 
     // Extract vendor and product from CPE
     // cpe:2.3:a:vendor:product:version:...
+    // Strip CPE 2.3 backslash escapes (e.g., notepad\+\+ → notepad++)
     const cpeParts = cpe.split(":");
-    const vendor = cpeParts[3] || "";
-    const product = cpeParts[4] || "";
+    const vendor = (cpeParts[3] || "").replace(/\\(.)/g, "$1");
+    const product = (cpeParts[4] || "").replace(/\\(.)/g, "$1");
 
-    // Query index by name (product)
+    // Query index by name (product) with vendor-qualified filtering
     // Optionally exclude MAL-* entries (malware, not CVEs for the product itself)
     const malwareFilter = excludeMalware ? "AND cve_id NOT LIKE 'MAL-%'" : "";
-    const indexResults = this.indexDb!.query<
-      { cve_id: string; vers: string; purl_prefix: string },
-      [string, number]
-    >(`
-      SELECT DISTINCT cve_id, vers, purl_prefix
-      FROM cve_index
-      WHERE name LIKE ?
-      ${malwareFilter}
-      LIMIT ?
-    `).all(`%${product}%`, limit);
+
+    // Strategy: vendor-qualified first (precise), then broad name, then vendor fallback
+    // This prevents short product names (e.g., "git") from being swamped by noise
+    // (gitlab, github, digital, etc.) when the LIMIT cuts off real results.
+    let indexResults: { cve_id: string; vers: string; purl_prefix: string }[] = [];
+
+    // 1. Vendor-qualified: name matches product AND purl_prefix contains vendor
+    if (vendor && vendor !== product) {
+      indexResults = this.indexDb!.query<
+        { cve_id: string; vers: string; purl_prefix: string },
+        [string, string, number]
+      >(`
+        SELECT DISTINCT cve_id, vers, purl_prefix
+        FROM cve_index
+        WHERE name LIKE ?
+        AND purl_prefix LIKE ?
+        ${malwareFilter}
+        LIMIT ?
+      `).all(`%${product}%`, `%${vendor}%`, limit);
+    }
+
+    // 2. Broad name search (original behavior) — only if vendor-qualified found nothing
+    if (indexResults.length === 0) {
+      indexResults = this.indexDb!.query<
+        { cve_id: string; vers: string; purl_prefix: string },
+        [string, number]
+      >(`
+        SELECT DISTINCT cve_id, vers, purl_prefix
+        FROM cve_index
+        WHERE name LIKE ?
+        ${malwareFilter}
+        LIMIT ?
+      `).all(`%${product}%`, limit);
+    }
+
+    // 3. Vendor fallback via purl_prefix (e.g., "notepad" for "notepad++")
+    if (indexResults.length === 0 && vendor) {
+      indexResults = this.indexDb!.query<
+        { cve_id: string; vers: string; purl_prefix: string },
+        [string, number]
+      >(`
+        SELECT DISTINCT cve_id, vers, purl_prefix
+        FROM cve_index
+        WHERE purl_prefix LIKE ?
+        ${malwareFilter}
+        LIMIT ?
+      `).all(`%${vendor}%`, limit);
+    }
 
     if (indexResults.length === 0) {
       return [];

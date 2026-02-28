@@ -540,8 +540,8 @@
         "server"
       ],
       "notes": "Popular text editor for developers and admins.",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "8.7.10"
+      "lastChecked": "2026-02-28",
+      "latestVersion": "8.9.2"
     },
     {
       "id": "vscode",
@@ -560,8 +560,9 @@
         "server"
       ],
       "notes": "Popular IDE/editor. Extension ecosystem is attack surface.",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "1.108.2"
+      "lastChecked": "2026-02-28",
+      "latestVersion": "1.109.5",
+      "versionPattern": "^1\\."
     },
     {
       "id": "sublimetext",
@@ -700,6 +701,7 @@
       ],
       "notes": "Voice/text chat. Growing enterprise adoption.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^1\\.",
       "latestVersion": "1.0.9222"
     },
     {
@@ -949,6 +951,7 @@
       ],
       "notes": "Google cloud sync client.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^([1-9]\\d?|1\\d{2})\\.",
       "latestVersion": "103.0.5"
     },
     {
@@ -1255,6 +1258,7 @@
       ],
       "notes": "Bootable USB creation tool.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[1-5]\\.",
       "latestVersion": "4.7"
     },
     {
@@ -1475,6 +1479,7 @@
       ],
       "notes": "Open-source database.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^([7-9]|1[0-9])\\.",
       "latestVersion": "18.1.0"
     },
     {
@@ -1549,9 +1554,9 @@
         "windows",
         "server"
       ],
-      "notes": "In-memory data store.",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "3.1.0"
+      "notes": "In-memory data store. Windows port (3.x) discontinued; use Docker/WSL for current versions.",
+      "lastChecked": "2026-02-28",
+      "latestVersion": "7.4.2"
     },
     {
       "id": "nginx",
@@ -1570,6 +1575,7 @@
       ],
       "notes": "Web server/reverse proxy.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^1\\.",
       "excludePatterns": [
         "\\bnginx\\s*plus\\b",
         "\\bopenresty\\b",
@@ -1598,6 +1604,7 @@
       ],
       "notes": "Web server. Multiple KEV entries.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^2\\.",
       "excludePatterns": [
         "\\btomcat\\b",
         "\\bstruts\\b",
@@ -1656,6 +1663,7 @@
       ],
       "notes": "Windows web server. Part of Windows Server.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^(\\d|10)\\.",
       "latestVersion": "10.0.26100"
     },
     {
@@ -1740,6 +1748,7 @@
       ],
       "notes": "Infrastructure as Code.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[01]\\.",
       "latestVersion": "1.15.0-alpha20251203"
     },
     {
@@ -2184,6 +2193,7 @@
       ],
       "notes": "Audio driver.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[56]\\.",
       "latestVersion": "6.0.9722.1"
     },
     {
@@ -2203,6 +2213,7 @@
       ],
       "notes": "Legacy communication. Being replaced by Teams.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[78]\\.",
       "latestVersion": "8.140.0.407"
     },
     {
@@ -2260,6 +2271,7 @@
       ],
       "notes": "Messaging platform.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^2\\.",
       "latestVersion": "2.2520.2"
     },
     {
@@ -2491,6 +2503,7 @@
       ],
       "notes": "IT service management and ticketing. Multiple CVEs.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^1[0-2]\\.",
       "latestVersion": "12.10.0"
     },
     {
@@ -2577,6 +2590,7 @@
       ],
       "notes": "Full remote support suite. Includes remote control and system tools.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^1[0-2]\\.",
       "latestVersion": "12.4"
     },
     {
@@ -2640,6 +2654,7 @@
       ],
       "notes": "Free SFTP/SCP server from SolarWinds.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[2-6]\\.",
       "latestVersion": "5.1"
     },
     {
@@ -2797,6 +2812,7 @@
       ],
       "notes": "Classic track (perpetual license). Extended support until 2025. Quarterly updates.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^20\\.",
       "latestVersion": "20.005.30773"
     },
     {
@@ -2839,6 +2855,7 @@
       ],
       "notes": "Free PDF reader. Classic track (perpetual). Extended support until 2025.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^20\\.",
       "latestVersion": "20.005.30773"
     },
     {
@@ -2901,7 +2918,8 @@
         "server"
       ],
       "notes": "Enterprise CMS. Has KEV entries. Used for web content management.",
-      "lastChecked": "2026-02-03",
+      "lastChecked": "2026-02-28",
+      "versionPattern": "^6\\.",
       "latestVersion": "6.5 SP22"
     },
     {
@@ -3451,6 +3469,7 @@
       ],
       "notes": "EDR/endpoint protection. Sensor and cloud connector.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[1-5]\\.",
       "latestVersion": "4.3.0"
     },
     {
@@ -3473,6 +3492,7 @@
       ],
       "notes": "Formerly McAfee. Enterprise endpoint protection.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^10\\.",
       "latestVersion": "10.7.10"
     },
     {
@@ -3516,6 +3536,7 @@
       ],
       "notes": "CRITICAL: Enterprise VPN client. Authentication and RCE vulnerabilities.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[3-7]\\.",
       "latestVersion": "6.3.4"
     },
     {
@@ -3537,6 +3558,7 @@
       ],
       "notes": "CRITICAL: Enterprise VPN client. Privilege escalation vulnerabilities.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^[3-6]\\.",
       "latestVersion": "5.1.8"
     },
     {
@@ -3837,8 +3859,15 @@
         "windows"
       ],
       "notes": "IDE for Windows development. Occasional RCE via project files.",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "18.2.1"
+      "lastChecked": "2026-02-28",
+      "latestVersion": "18.3.2",
+      "versionPattern": "^1[5-8]\\.",
+      "excludePatterns": [
+        "\\bvisual studio code\\b",
+        "\\bvs code\\b",
+        "\\bvscode\\b"
+      ],
+      "eolProductId": "visual-studio"
     },
     {
       "id": "intellij_idea",
@@ -3923,6 +3952,7 @@
       ],
       "notes": "CRITICAL: MDM solution. Authentication bypass CVEs in KEV.",
       "lastChecked": "2026-02-03",
+      "versionPattern": "^([1-9]|1[0-3])\\.",
       "latestVersion": "12.5.0"
     },
     {
@@ -4159,6 +4189,7 @@
       ],
       "notes": "Next-gen Junos OS on Linux base. PTX, ACX, QFX series.",
       "lastChecked": "2026-02-20",
+      "versionPattern": "^\\d{1,2}\\.",
       "latestVersion": "24.2R1-EVO"
     },
     {
@@ -4180,6 +4211,7 @@
       ],
       "notes": "SD-WAN router. Formerly 128 Technology.",
       "lastChecked": "2026-02-20",
+      "versionPattern": "^[1-9]\\.",
       "latestVersion": "6.3.0"
     },
     {
@@ -4409,6 +4441,7 @@
       ],
       "notes": "CRITICAL: 3 CISA KEV entries. Email security appliance.",
       "lastChecked": "2026-02-20",
+      "versionPattern": "^([7-9]|10)\\.",
       "latestVersion": "10.0.17"
     },
     {

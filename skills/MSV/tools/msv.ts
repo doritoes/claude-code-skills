@@ -688,11 +688,17 @@ async function queryMSV(
       logger.debug("Returning cached MSV result...");
 
       // Build result from cache
-      const branches: BranchMsvResult[] = cached.branches.map(b => ({
+      let branches: BranchMsvResult[] = cached.branches.map(b => ({
         branch: b.branch,
         msv: b.msv,
         latest: b.latestKnown,
       }));
+
+      // Apply versionPattern filtering to cached branches (prevents stale contamination)
+      if (software.versionPattern) {
+        const versionRegex = new RegExp(software.versionPattern);
+        branches = branches.filter(b => versionRegex.test(b.msv));
+      }
 
       // Calculate minimum (lowest) and recommended (highest) safe versions
       let minimumSafeVersion: string | null = null;
@@ -908,12 +914,33 @@ async function queryMSV(
       }
       const vendorData = await vendorFetcher.fetch();
 
-      if (vendorData.branches.length > 0) {
+      // Filter vendor advisory data by versionPattern (prevents sub-component contamination)
+      // e.g., Visual Studio ^1[5-8]\. filters out SQLite 3.44.x, ASP.NET 9.0.x, VSTA 20.2.x
+      let filteredBranches = vendorData.branches;
+      let filteredAdvisories = vendorData.advisories;
+      if (software.versionPattern) {
+        const versionRegex = new RegExp(software.versionPattern);
+        const originalBranchCount = filteredBranches.length;
+        filteredBranches = filteredBranches.filter(b => versionRegex.test(b.msv));
+        if (originalBranchCount !== filteredBranches.length) {
+          logger.debug(`Filtered ${originalBranchCount - filteredBranches.length} vendor advisory branches with invalid version patterns`);
+        }
+        const originalAdvCount = filteredAdvisories.length;
+        filteredAdvisories = filteredAdvisories.filter(adv => {
+          if (adv.fixedVersions.length === 0) return true;  // Keep CVEs without fixed version
+          return adv.fixedVersions.some(v => versionRegex.test(v));
+        });
+        if (originalAdvCount !== filteredAdvisories.length) {
+          logger.debug(`Filtered ${originalAdvCount - filteredAdvisories.length} vendor advisories with invalid version patterns`);
+        }
+      }
+
+      if (filteredBranches.length > 0) {
         hasVendorAdvisory = true;
         sources.push("Vendor Advisory");
 
         // Use vendor advisory branches as primary MSV source
-        for (const branch of vendorData.branches) {
+        for (const branch of filteredBranches) {
           // Detect if MSV > latest (no safe version available yet in this branch)
           const noSafeVersion = compareVersions(branch.msv, branch.latest) > 0;
           branches.push({
@@ -931,8 +958,8 @@ async function queryMSV(
           recommendedVersion = sortedByMsv[sortedByMsv.length - 1].msv;  // Highest safe version (best protection)
         }
 
-        // Collect CVEs from advisories
-        for (const adv of vendorData.advisories) {
+        // Collect CVEs from filtered advisories
+        for (const adv of filteredAdvisories) {
           for (const cveId of adv.cveIds) {
             if (!exploitedCves.find(c => c.cve === cveId)) {
               exploitedCves.push({
@@ -1163,17 +1190,17 @@ async function queryMSV(
     });
   }
 
-  // 3. Query VulnCheck by CPE if API key available and we need more CVE data
-  if (config.vulncheckApiKey && software.cpe23) {
-    logger.debug("Querying VulnCheck by CPE...");
+  // 3. Query VulnCheck by vendor/product if API key available
+  if (config.vulncheckApiKey && software.vendor && software.product) {
+    logger.debug("Querying VulnCheck by vendor/product...");
     try {
       const vulnCheckClient = new VulnCheckClient(
         { apiKey: config.vulncheckApiKey },
         config.dataDir
       );
 
-      // Query by CPE to find CVEs
-      const cpeResults = await vulnCheckClient.queryCpe(software.cpe23);
+      // Query by vendor/product — more reliable than CPE wildcard on nist-nvd2 endpoint
+      const cpeResults = await vulnCheckClient.searchByProduct(software.vendor, software.product);
 
       if (cpeResults.length > 0) {
         if (!sources.includes("VulnCheck")) sources.push("VulnCheck");

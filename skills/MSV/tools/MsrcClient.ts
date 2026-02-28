@@ -167,7 +167,7 @@ const PRODUCT_PATTERNS: Record<string, RegExp> = {
   "office": /microsoft (office|365|word|excel|powerpoint|outlook|access)/i,
   "teams": /microsoft teams/i,
   "dotnet": /\.net (framework|core|\d)/i,
-  "visual_studio": /visual studio/i,
+  "visual_studio": /visual studio(?! code)/i,
   "visual_studio_code": /visual studio code/i,
   "windows": /windows (10|11|server)/i,
   "exchange": /microsoft exchange/i,

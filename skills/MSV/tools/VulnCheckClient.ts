@@ -260,25 +260,12 @@ export class VulnCheckClient {
 
   /**
    * Query CVEs by CPE (Common Platform Enumeration)
-   * Uses free /index/nist-nvd2 endpoint instead of paid /cpe endpoint
+   * Product-level CVE discovery requires the paid /v3/search/cpe endpoint.
+   * The free nist-nvd2 index only supports cve= filtering, not vendor/product/cpe.
+   * Per-CVE enrichment (getCve, checkKev, getExploits) still works on free tier.
    */
-  async queryCpe(cpe: string): Promise<VulnCheckCve[]> {
-    const cacheKey = `vulncheck-cpe-${cpe.replace(/[^a-zA-Z0-9-]/g, "_")}`;
-    try {
-      // Use free index endpoint with CPE filter
-      const result = await this.request<{ data: VulnCheckApiCve[] }>(
-        `/index/nist-nvd2?cpe=${encodeURIComponent(cpe)}`,
-        cacheKey
-      );
-      // Map all API CVEs to internal format
-      return (result.data || []).map(mapApiCveToInternal);
-    } catch (error) {
-      // If index endpoint fails, return empty (don't break the flow)
-      if ((error as Error).message.includes("subscription")) {
-        return [];
-      }
-      throw error;
-    }
+  async queryCpe(_cpe: string): Promise<VulnCheckCve[]> {
+    return [];
   }
 
   /**
@@ -324,21 +311,15 @@ export class VulnCheckClient {
 
   /**
    * Search for vulnerabilities by product/vendor
+   * The free nist-nvd2 index only supports: cve, alias, iava, threat_actor,
+   * mitre_id, misp_id, ransomware, botnet, and date-range filters.
+   * vendor/product/cpe filtering requires the paid /v3/search/cpe endpoint.
    */
   async searchByProduct(
-    vendor: string,
-    product: string
+    _vendor: string,
+    _product: string
   ): Promise<VulnCheckCve[]> {
-    const cacheKey = `vulncheck-product-${vendor}-${product}`.replace(
-      /[^a-zA-Z0-9-]/g,
-      "_"
-    );
-    const result = await this.request<{ data: VulnCheckApiCve[] }>(
-      `/index/nist-nvd2?vendor=${encodeURIComponent(vendor)}&product=${encodeURIComponent(product)}`,
-      cacheKey
-    );
-    // Map all API CVEs to internal format
-    return (result.data || []).map(mapApiCveToInternal);
+    return [];
   }
 
   /**

@@ -531,25 +531,76 @@ export class NvdClient {
 
     // Extract vendor and product from CPE for keyword search
     // CPE format: cpe:2.3:a:vendor:product:version:...
+    // Strip CPE 2.3 backslash escapes (e.g., notepad\+\+ → notepad++)
     const cpeParts = cpe23.split(":");
-    const vendor = cpeParts[3] || "";
-    const product = cpeParts[4] || "";
+    const vendor = (cpeParts[3] || "").replace(/\\(.)/g, "$1");
+    const product = (cpeParts[4] || "").replace(/\\(.)/g, "$1");
 
-    // Use keywordSearch with vendor+product for better compatibility
-    // cpeName requires exact CPE match (no wildcards), which often fails
-    const searchKeyword = `${vendor} ${product}`.trim();
-    const url = `${NVD_BASE_URL}?keywordSearch=${encodeURIComponent(searchKeyword)}&resultsPerPage=${maxResults}`;
+    // Strategy: CPE-based search first (precise), then keyword search (broad)
+    // CPE match finds CVEs mapped to the exact product CPE in NVD configurations.
+    // Keyword search is a fallback for products whose CPE isn't in NVD's dictionary.
 
-    // Use rate-limited fetch with retry
-    const response = await this.fetchWithRetry(url, `searchByCpe(${searchKeyword})`);
-    const result: NvdApiResponse = await response.json();
+    let result: NvdApiResponse = { resultsPerPage: 0, startIndex: 0, totalResults: 0, vulnerabilities: [] };
+    let sourceUrl = "";
+
+    // 1. Try cpeName search (exact CPE match)
+    // NVD returns 404 for CPEs not in its dictionary (e.g., wildcard CPEs like *:*:*:*)
+    // so we catch errors and fall through to keyword search
+    try {
+      const cpeUrl = `${NVD_BASE_URL}?cpeName=${encodeURIComponent(cpe23)}&resultsPerPage=${maxResults}`;
+      sourceUrl = cpeUrl;
+      const response = await this.fetchWithRetry(cpeUrl, `searchByCpe/cpeName(${cpe23})`);
+      result = await response.json();
+    } catch {
+      // cpeName not in NVD dictionary (404) or network error — fall through to keyword
+    }
+
+    // 2. If CPE match found nothing, fall back to keyword search
+    if (!result.vulnerabilities || result.vulnerabilities.length === 0) {
+      // Clean CPE names for keyword search: replace underscores/hyphens with spaces
+      // NVD descriptions use "OBS Studio" not "obs_studio", "Carbon Black" not "carbon_black"
+      const cleanProduct = product.replace(/[_-]/g, " ");
+      const cleanVendor = vendor.replace(/[_-]/g, " ");
+
+      let searchKeyword: string;
+      if (!cleanProduct || cleanProduct === "*") {
+        searchKeyword = cleanVendor;
+      } else if (cleanVendor && cleanVendor !== cleanProduct && !cleanProduct.includes(cleanVendor.replace(/\s/g, ""))) {
+        // Different names: combine (e.g., "microsoft edge" → both needed)
+        searchKeyword = `${cleanVendor} ${cleanProduct}`;
+      } else {
+        // Same or similar names: use product only (e.g., "notepad++" is enough)
+        searchKeyword = cleanProduct;
+      }
+
+      try {
+        const kwUrl = `${NVD_BASE_URL}?keywordSearch=${encodeURIComponent(searchKeyword)}&resultsPerPage=${maxResults}`;
+        sourceUrl = kwUrl;
+        const response = await this.fetchWithRetry(kwUrl, `searchByCpe/keyword(${searchKeyword})`);
+        result = await response.json();
+      } catch {
+        // keyword search failed — continue to product-only fallback
+      }
+
+      // 3. If combined keyword returned 0, try product-only keyword
+      if ((!result.vulnerabilities || result.vulnerabilities.length === 0) && cleanVendor && searchKeyword !== cleanProduct) {
+        try {
+          const prodOnlyUrl = `${NVD_BASE_URL}?keywordSearch=${encodeURIComponent(cleanProduct)}&resultsPerPage=${maxResults}`;
+          sourceUrl = prodOnlyUrl;
+          const response = await this.fetchWithRetry(prodOnlyUrl, `searchByCpe/keyword-product(${cleanProduct})`);
+          result = await response.json();
+        } catch {
+          // All NVD searches failed
+        }
+      }
+    }
 
     // Cache the result
     const cacheData: CacheFile<NvdApiResponse> = {
       version: 1,
       lastUpdated: new Date().toISOString(),
       expiresAt: new Date(Date.now() + CACHE_DURATION_MS).toISOString(),
-      source: url,
+      source: sourceUrl,
       data: result,
     };
 
