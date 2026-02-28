@@ -1588,7 +1588,7 @@ async function generateFeedback(options: {
       const rawBatch = batchesAnalyzed[batchesAnalyzed.length - 1];
       const targetBatch = rawBatch?.replace(/^passwords-/, "") || rawBatch;
       if (targetBatch && sandState.batches?.[targetBatch]) {
-        const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-"];
+        const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-", "hybrid-beta-", "combo-beta-"];
         const attackResults: Array<{ attack: string; newCracks: number }> =
           sandState.batches[targetBatch].attackResults || [];
         const feedbackCracks = attackResults

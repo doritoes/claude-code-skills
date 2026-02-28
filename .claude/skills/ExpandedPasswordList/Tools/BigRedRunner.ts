@@ -677,7 +677,7 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
     let feedbackTime = 0;
     let totalTime = 0;
 
-    const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-"];
+    const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-", "hybrid-beta-", "combo-beta-"];
 
     for (const entry of ar) {
       const rate = totalHashes > 0 ? (entry.newCracks / totalHashes * 100).toFixed(2) + "%" : "?";

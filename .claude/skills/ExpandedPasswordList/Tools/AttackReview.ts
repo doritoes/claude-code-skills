@@ -184,12 +184,8 @@ function reverseRuleRoots(password: string): Set<string> {
   return roots;
 }
 
-/** Feedback attack names (for trend tracking) */
-const FEEDBACK_ATTACK_NAMES = [
-  "feedback-beta-nocaprule",
-  "nocapplus-nocaprule",
-  "nocapplus-unobtainium",
-];
+/** Feedback attack prefixes (for trend tracking) */
+const FEEDBACK_PREFIXES = ["feedback-", "nocapplus-", "hybrid-beta-", "combo-beta-"];
 
 // =============================================================================
 // Types
@@ -369,7 +365,7 @@ function computeFeedbackTrend(batches: Record<string, BatchState>): FeedbackTren
     // Sum feedback attack cracks from attackResults
     let feedbackCracks = 0;
     for (const result of batch.attackResults) {
-      if (FEEDBACK_ATTACK_NAMES.includes(result.attack)) {
+      if (FEEDBACK_PREFIXES.some(p => result.attack.startsWith(p))) {
         feedbackCracks += result.newCracks;
       }
     }
