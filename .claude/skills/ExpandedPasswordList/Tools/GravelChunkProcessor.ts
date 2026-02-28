@@ -12,8 +12,8 @@
  *   - 1 attack per chunk vs 8 per batch = massive time savings
  *
  * Usage:
- *   bun Tools/GravelChunkProcessor.ts --run                Process all gravel (10 chunks)
- *   bun Tools/GravelChunkProcessor.ts --run --chunks 20    Use 20 chunks instead of 10
+ *   bun Tools/GravelChunkProcessor.ts --run                Process all gravel (40 chunks)
+ *   bun Tools/GravelChunkProcessor.ts --run --chunks 20    Use 20 chunks instead of 40
  *   bun Tools/GravelChunkProcessor.ts --status             Show progress
  *   bun Tools/GravelChunkProcessor.ts --dry-run            Preview chunking plan
  *
@@ -41,7 +41,7 @@ import { loadConfig, sshCmd, scpUpload, scpDownload, type BigRedConfig } from ".
 // =============================================================================
 
 const GRAVEL_STATE_PATH = resolve(DATA_DIR, "gravel-state.json");
-const DEFAULT_CHUNKS = 10;
+const DEFAULT_CHUNKS = 40;
 
 // =============================================================================
 // State Management
@@ -556,16 +556,13 @@ function cleanupBigred(config: BigRedConfig, chunkIndex: number): void {
   const chunkName = `chunk-${String(chunkIndex).padStart(2, "0")}`;
   console.log(`  Cleaning up BIGRED: ${chunkName}...`);
 
-  try {
-    sshCmd(config, [
-      `rm -f ${config.workDir}/hashlists/${chunkName}.txt`,
-      `rm -f ${config.workDir}/potfiles/${chunkName}.pot`,
-      `rm -f ${config.workDir}/hashcat-${chunkName}.log`,
-    ].join(" && "), 15000);
-    console.log(`  Cleaned.`);
-  } catch {
-    console.log(`  WARNING: Could not clean BIGRED files (non-fatal)`);
-  }
+  // Hard failure — leftover files accumulate ~5.5GB per chunk and will fill disk
+  sshCmd(config, [
+    `rm -f ${config.workDir}/hashlists/${chunkName}.txt`,
+    `rm -f ${config.workDir}/potfiles/${chunkName}.pot`,
+    `rm -f ${config.workDir}/hashcat-${chunkName}.log`,
+  ].join(" && "), 120000);
+  console.log(`  Cleaned.`);
 }
 
 // =============================================================================
@@ -719,8 +716,8 @@ function dryRun(numChunks: number): void {
 
   console.log(`\nTotal estimated hashes: ${totalHashes.toLocaleString()}`);
   console.log(`Estimated total file size: ${formatSize(totalHashes * 41)}`);
-  console.log(`\nEstimated time per chunk: ~25-30 min (build + upload + hashcat + download + distribute)`);
-  console.log(`Estimated total time: ~${(chunks.length * 27.5 / 60).toFixed(1)} hours\n`);
+  console.log(`\nTime estimate unknown — depends on NAS speed, SCP throughput, and hashcat dict+rules speed.`);
+  console.log(`First chunk will establish a baseline.\n`);
 }
 
 // =============================================================================
@@ -886,14 +883,14 @@ nocap.txt + nocap.rule on each chunk, then distributing results to
 per-batch PEARLS (JSONL) and SAND (gzipped).
 
 Usage:
-  bun Tools/GravelChunkProcessor.ts --run                Process all gravel (10 chunks)
-  bun Tools/GravelChunkProcessor.ts --run --chunks 20    Use 20 chunks instead of 10
+  bun Tools/GravelChunkProcessor.ts --run                Process all gravel (40 chunks)
+  bun Tools/GravelChunkProcessor.ts --run --chunks 20    Use 20 chunks instead of 40
   bun Tools/GravelChunkProcessor.ts --status             Show progress
   bun Tools/GravelChunkProcessor.ts --dry-run            Preview chunking plan
 
 Attack: nocap.txt × nocap.rule (48,428 rules)
 Expected crack rate: ~30%
-Expected time: ~4-5 hours total (10 chunks × ~25-30 min each)
+Expected time: unknown until first chunk completes (chunk 1 benchmarked ~1.5 hrs)
 
 Pipeline: GRAVEL → [GravelChunkProcessor] → PEARLS + SAND → [BigRedRunner Stage 2] → DIAMONDS + GLASS
 `);
