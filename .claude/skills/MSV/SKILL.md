@@ -1,6 +1,6 @@
 ---
 name: MSV
-version: 1.4.0
+version: 1.5.0
 description: Minimum Safe Version calculator and CTI report generator for Windows software. USE WHEN user needs safe software versions OR user asks about vulnerability-free versions OR user mentions patching decisions OR user wants minimum version to upgrade to OR user asks about KEV vulnerabilities for specific software OR user wants threat intelligence reports. Queries CISA KEV, VulnCheck, AppThreat, EPSS to determine lowest version free of known-exploited vulnerabilities and generate actionable CTI briefings.
 ---
 
