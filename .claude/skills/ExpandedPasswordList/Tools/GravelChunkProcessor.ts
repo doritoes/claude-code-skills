@@ -2,20 +2,22 @@
 /**
  * GravelChunkProcessor.ts - Chunked Stage 1: ALL GRAVEL → PEARLS + SAND on BIGRED
  *
- * Processes all 4,328 gravel batches by grouping them into chunks (~433 batches each),
- * concatenating into a single hashlist per chunk, running one hashcat attack
- * (nocap.txt + nocap.rule), then distributing results back to per-batch PEARLS + SAND.
+ * Processes all gravel batches by grouping into VRAM-optimal chunks (10 batches
+ * = ~5M hashes), running one hashcat attack per chunk (nocap.txt × nocap.rule),
+ * then distributing results back to per-batch PEARLS and SAND.
  *
- * This replaces the per-batch 8-attack GravelProcessor approach:
- *   - nocap+nocap.rule = 29.99% crack rate (benchmarked across all batches)
- *   - brute-1 through brute-7 are redundant (Stage 2 runs them on SAND anyway)
- *   - 1 attack per chunk vs 8 per batch = massive time savings
+ * Why 10 batches per chunk?
+ *   RTX 4060 Ti hash-lookup speed degrades catastrophically above 5M hashes
+ *   (bitmap table overflow). At 10M hashes, speed drops to 34% of baseline.
+ *   10 batches (5M) stays in the flat zone (~85%+) while amortizing hashcat
+ *   startup cost across 10 batches → ~10× faster than per-batch processing.
  *
  * Usage:
- *   bun Tools/GravelChunkProcessor.ts --run                Process all gravel (40 chunks)
- *   bun Tools/GravelChunkProcessor.ts --run --chunks 50    Use 50 chunks instead of 40
- *   bun Tools/GravelChunkProcessor.ts --status             Show progress
- *   bun Tools/GravelChunkProcessor.ts --dry-run            Preview chunking plan
+ *   bun Tools/GravelChunkProcessor.ts                           Process all remaining gravel
+ *   bun Tools/GravelChunkProcessor.ts --dry-run                 Preview plan (read-only, no SSH)
+ *   bun Tools/GravelChunkProcessor.ts --status                  Show progress
+ *   bun Tools/GravelChunkProcessor.ts --collect-chunk 1         Re-collect chunk 1 results (fallback)
+ *   bun Tools/GravelChunkProcessor.ts --batches-per-chunk 20    Override chunk size
  *
  * @author PAI (Personal AI Infrastructure)
  * @license MIT
@@ -30,6 +32,7 @@ import {
   readdirSync,
   unlinkSync,
   statSync,
+  renameSync,
 } from "node:fs";
 import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -41,66 +44,67 @@ import { loadConfig, sshCmd, scpUpload, scpDownload, type BigRedConfig } from ".
 // =============================================================================
 
 const GRAVEL_STATE_PATH = resolve(DATA_DIR, "gravel-state.json");
-const DEFAULT_CHUNKS = 40;
+const TMP_DIR = resolve(DATA_DIR, "tmp");
+const DEFAULT_BATCHES_PER_CHUNK = 10; // 10 × 500K = 5M hashes: RTX 4060 Ti sweet spot
 
 // =============================================================================
-// State Management
+// State Management — Compatible with GravelProcessor.ts
 // =============================================================================
 
-interface ChunkBatchState {
-  status: "pending" | "completed";
+interface GravelBatchState {
+  status: "completed";
+  hashCount: number;
   pearlCount: number;
   sandCount: number;
-  chunk: number;
+  crackRate: string;
+  durationSeconds: number;
+  completedAt: string;
+  chunk?: number;
 }
 
-interface GravelChunkState {
+interface GravelState {
   version: string;
-  attack: string;
-  chunks: number;
-  currentChunk: number;
-  batches: Record<string, ChunkBatchState>;
+  batches: Record<string, GravelBatchState>;
+  totalProcessed: number;
+  totalPearls: number;
+  totalSand: number;
   lastUpdated: string | null;
 }
 
-function loadState(): GravelChunkState {
+function loadState(): GravelState {
   if (existsSync(GRAVEL_STATE_PATH)) {
     const raw = JSON.parse(readFileSync(GRAVEL_STATE_PATH, "utf-8"));
-    // If it has the chunk fields, it's our format
-    if (raw.version === "2.0" && raw.chunks !== undefined) {
-      return raw as GravelChunkState;
-    }
-    // Otherwise it's the old v2.0 format — migrate
     return {
-      version: "2.0",
-      attack: raw.attack || "nocap-nocaprule",
-      chunks: DEFAULT_CHUNKS,
-      currentChunk: 0,
-      batches: {},
-      lastUpdated: null,
+      version: raw.version || "3.0",
+      batches: raw.batches || {},
+      totalProcessed: raw.totalProcessed || Object.keys(raw.batches || {}).length,
+      totalPearls: raw.totalPearls || 0,
+      totalSand: raw.totalSand || 0,
+      lastUpdated: raw.lastUpdated || null,
     };
   }
   return {
-    version: "2.0",
-    attack: "nocap-nocaprule",
-    chunks: DEFAULT_CHUNKS,
-    currentChunk: 0,
+    version: "3.0",
     batches: {},
+    totalProcessed: 0,
+    totalPearls: 0,
+    totalSand: 0,
     lastUpdated: null,
   };
 }
 
-function saveState(state: GravelChunkState): void {
+function saveState(state: GravelState): void {
   state.lastUpdated = new Date().toISOString();
-  const tmpPath = GRAVEL_STATE_PATH + ".new";
+  state.totalProcessed = Object.keys(state.batches).length;
+  state.totalPearls = Object.values(state.batches).reduce((s, b) => s + b.pearlCount, 0);
+  state.totalSand = Object.values(state.batches).reduce((s, b) => s + b.sandCount, 0);
+  const tmpPath = GRAVEL_STATE_PATH + ".tmp";
   writeFileSync(tmpPath, JSON.stringify(state, null, 2));
-  // Atomic rename
-  const { renameSync } = require("node:fs");
   renameSync(tmpPath, GRAVEL_STATE_PATH);
 }
 
 // =============================================================================
-// Gravel Batch Discovery
+// Gravel Discovery & Chunking
 // =============================================================================
 
 function discoverGravelBatches(): string[] {
@@ -113,17 +117,25 @@ function discoverGravelBatches(): string[] {
     .map(f => f.replace(".txt", ""));
 }
 
-function chunkArray<T>(arr: T[], numChunks: number): T[][] {
+function getPendingBatches(): string[] {
+  const state = loadState();
+  return discoverGravelBatches().filter(b => !state.batches[b]);
+}
+
+function chunkArray<T>(arr: T[], chunkSize: number): T[][] {
   const result: T[][] = [];
-  const chunkSize = Math.ceil(arr.length / numChunks);
   for (let i = 0; i < arr.length; i += chunkSize) {
     result.push(arr.slice(i, i + chunkSize));
   }
   return result;
 }
 
+function chunkName(index: number): string {
+  return `chunk-${String(index).padStart(3, "0")}`;
+}
+
 // =============================================================================
-// SSH / Screen Helpers (from GravelProcessor patterns)
+// SSH / Screen Helpers
 // =============================================================================
 
 function sleepSync(ms: number): void {
@@ -133,12 +145,11 @@ function sleepSync(ms: number): void {
 function waitForConnection(config: BigRedConfig, maxWaitMs = 300000): boolean {
   const startTime = Date.now();
   let attempt = 0;
-
   while (Date.now() - startTime < maxWaitMs) {
     attempt++;
     try {
       sshCmd(config, "echo connected", 10000);
-      console.log(`  Reconnected after ${attempt} attempt(s).`);
+      if (attempt > 1) console.log(`  Reconnected after ${attempt} attempt(s).`);
       return true;
     } catch {
       const elapsed = Math.round((Date.now() - startTime) / 1000);
@@ -152,29 +163,20 @@ function waitForConnection(config: BigRedConfig, maxWaitMs = 300000): boolean {
 
 function isHashcatRunning(config: BigRedConfig): boolean {
   try {
-    const result = sshCmd(config, "pgrep -c hashcat 2>/dev/null || echo 0");
-    return parseInt(result) > 0;
-  } catch {
-    return false;
-  }
+    return parseInt(sshCmd(config, "pgrep -c hashcat 2>/dev/null || echo 0")) > 0;
+  } catch { return false; }
 }
 
-function isScreenAlive(config: BigRedConfig, screenName: string): boolean {
+function isScreenAlive(config: BigRedConfig, name: string): boolean {
   try {
-    const result = sshCmd(config, `screen -ls 2>/dev/null | grep -c '${screenName}' || echo 0`);
-    return parseInt(result) > 0;
-  } catch {
-    return false;
-  }
+    return parseInt(sshCmd(config, `screen -ls 2>/dev/null | grep -c '${name}' || echo 0`)) > 0;
+  } catch { return false; }
 }
 
 function isLogComplete(config: BigRedConfig, logFile: string): boolean {
   try {
-    const result = sshCmd(config, `grep -c -E '^Status\\.\\.+: (Exhausted|Cracked)' ${logFile} 2>/dev/null || echo 0`, 5000);
-    return parseInt(result) > 0;
-  } catch {
-    return false;
-  }
+    return parseInt(sshCmd(config, `grep -c -E '^Status\\.\\.+: (Exhausted|Cracked)' ${logFile} 2>/dev/null || echo 0`, 5000)) > 0;
+  } catch { return false; }
 }
 
 function formatDuration(seconds: number): string {
@@ -193,432 +195,481 @@ function formatSize(bytes: number): string {
 }
 
 // =============================================================================
-// Chunk Building
+// Ensure Attack Files on BIGRED
 // =============================================================================
 
-/**
- * Build a chunk file by streaming gravel batch files to disk.
- * Writes incrementally to avoid holding ~8GB in memory.
- */
-function buildChunkFile(
-  batchNames: string[],
-  chunkIndex: number,
-  tmpDir: string,
-): { chunkPath: string; totalHashes: number } {
-  const chunkName = `chunk-${String(chunkIndex).padStart(2, "0")}`;
-  const chunkPath = resolve(tmpDir, `${chunkName}.txt`);
+function ensureAttackFiles(config: BigRedConfig): boolean {
+  const files: Record<string, { local: string; remote: string }> = {
+    "nocap.txt":  { local: resolve(DATA_DIR, "nocap.txt"),  remote: "wordlists/nocap.txt" },
+    "nocap.rule": { local: resolve(DATA_DIR, "nocap.rule"), remote: "rules/nocap.rule" },
+  };
 
-  console.log(`\nBuilding ${chunkName} from ${batchNames.length} batches...`);
+  for (const [name, paths] of Object.entries(files)) {
+    const remotePath = `${config.workDir}/${paths.remote}`;
+    let remoteSize = 0;
+    try {
+      remoteSize = parseInt(sshCmd(config, `stat -c %s ${remotePath} 2>/dev/null || echo 0`));
+    } catch { /* missing */ }
 
-  // Truncate the file first
-  writeFileSync(chunkPath, "");
-
-  let totalHashes = 0;
-
-  for (let bi = 0; bi < batchNames.length; bi++) {
-    const batchName = batchNames[bi];
-    const gravelPath = resolve(GRAVEL_DIR, `${batchName}.txt`);
-    if (!existsSync(gravelPath)) {
-      console.error(`  WARNING: Missing gravel batch: ${gravelPath}`);
+    if (remoteSize > 0) {
+      console.log(`  ${name}: present (${formatSize(remoteSize)})`);
       continue;
     }
+
+    if (!existsSync(paths.local)) {
+      console.error(`  FAIL: ${name} missing on BIGRED and locally at ${paths.local}`);
+      return false;
+    }
+
+    console.log(`  ${name}: uploading...`);
+    const remoteDir = paths.remote.substring(0, paths.remote.lastIndexOf("/"));
+    sshCmd(config, `mkdir -p ${config.workDir}/${remoteDir}`, 10000);
+    scpUpload(config, paths.local, remotePath);
+    console.log(`  ${name}: uploaded (${formatSize(statSync(paths.local).size)})`);
+  }
+  return true;
+}
+
+// =============================================================================
+// Build Chunk File — Concatenate batch files into one hashlist
+// =============================================================================
+
+function buildChunkFile(batchNames: string[], chunkIdx: number): { chunkPath: string; totalHashes: number } {
+  if (!existsSync(TMP_DIR)) mkdirSync(TMP_DIR, { recursive: true });
+
+  const cn = chunkName(chunkIdx);
+  const chunkPath = resolve(TMP_DIR, `${cn}.txt`);
+
+  writeFileSync(chunkPath, ""); // truncate
+  let totalHashes = 0;
+
+  for (let i = 0; i < batchNames.length; i++) {
+    const gravelPath = resolve(GRAVEL_DIR, `${batchNames[i]}.txt`);
+    if (!existsSync(gravelPath)) {
+      console.error(`  WARNING: Missing ${gravelPath}, skipping`);
+      continue;
+    }
+
     const content = readFileSync(gravelPath, "utf-8");
     const hashes = content.trim().split(/\r?\n/).map(h => h.trim()).filter(h => h.length === 40);
     totalHashes += hashes.length;
 
-    // Append to chunk file — one batch at a time (~17MB each)
     if (hashes.length > 0) {
       appendFileSync(chunkPath, hashes.join("\n") + "\n");
-    }
-
-    if ((bi + 1) % 100 === 0) {
-      console.log(`  [${bi + 1}/${batchNames.length}] ${totalHashes.toLocaleString()} hashes so far...`);
     }
   }
 
   const fileSize = statSync(chunkPath).size;
-  console.log(`  ${chunkName}: ${totalHashes.toLocaleString()} hashes (${formatSize(fileSize)})`);
-
+  console.log(`  Built ${cn}: ${totalHashes.toLocaleString()} hashes (${formatSize(fileSize)}) from ${batchNames.length} batches`);
   return { chunkPath, totalHashes };
 }
 
 // =============================================================================
-// Hashcat Execution
+// Run Hashcat — Screen session with resume support
 // =============================================================================
 
-function runHashcatOnChunk(
-  config: BigRedConfig,
-  chunkIndex: number,
-): { potfileLines: number; durationSeconds: number } {
-  const chunkName = `chunk-${String(chunkIndex).padStart(2, "0")}`;
-  const screenName = `gcp-${chunkName}`;
-  const logFile = `${config.workDir}/hashcat-${chunkName}.log`;
-  const hashcatCmd = `hashcat -m ${HASH_TYPE_SHA1} hashlists/${chunkName}.txt wordlists/nocap.txt -r rules/nocap.rule --potfile-path potfiles/${chunkName}.pot -O -w 3 --status --status-timer 60`;
-
-  console.log(`\nRunning hashcat on ${chunkName}...`);
-  console.log(`  Command: ${hashcatCmd}`);
-
-  if (isHashcatRunning(config)) {
-    throw new Error("hashcat is already running on BIGRED — wait for it to finish");
-  }
+function runChunkAttack(config: BigRedConfig, chunkIdx: number): number {
+  const cn = chunkName(chunkIdx);
+  const screenName = `gcp-${cn}`;
+  const logFile = `${config.workDir}/hashcat-${cn}.log`;
+  const potPath = `${config.workDir}/potfiles/${cn}.pot`;
+  const hashcatCmd = `hashcat -m ${HASH_TYPE_SHA1} hashlists/${cn}.txt wordlists/nocap.txt -r rules/nocap.rule --potfile-path potfiles/${cn}.pot -O -w 3 --status --status-timer 60`;
 
   const startTime = Date.now();
 
-  // Clean up any previous session
-  try {
-    sshCmd(config, `screen -X -S ${screenName} quit 2>/dev/null; rm -f ${logFile}`, 10000);
-  } catch { /* ignore */ }
+  // Resume detection
+  const screenUp = isScreenAlive(config, screenName);
+  const hcRunning = isHashcatRunning(config);
 
-  // Launch in screen
-  const escapedCmd = hashcatCmd.replace(/'/g, "'\\''");
-  const screenCmd = `screen -dmS ${screenName} bash -c 'cd ${config.workDir} && ${escapedCmd} > ${logFile} 2>&1'`;
-  sshCmd(config, screenCmd, 15000);
+  if (screenUp) {
+    console.log(`  RESUMING: screen '${screenName}' still running`);
+  } else if (hcRunning) {
+    throw new Error("hashcat is already running on BIGRED (not this chunk). Wait or kill it.");
+  } else {
+    // Fresh launch
+    try { sshCmd(config, `screen -X -S ${screenName} quit 2>/dev/null; rm -f ${logFile}`, 10000); } catch { /* ignore */ }
 
-  console.log(`  Screen session: ${screenName}`);
-  sleepSync(3000);
+    const escapedCmd = hashcatCmd.replace(/'/g, "'\\''");
+    sshCmd(config, `screen -dmS ${screenName} bash -c 'cd ${config.workDir} && ${escapedCmd} > ${logFile} 2>&1'`, 15000);
+    console.log(`  Launched in screen: ${screenName}`);
+    sleepSync(3000);
 
-  // Verify started
-  if (!isHashcatRunning(config) && !isScreenAlive(config, screenName)) {
-    console.error("ERROR: hashcat failed to start. Checking log...");
-    try {
-      const log = sshCmd(config, `cat ${logFile} 2>/dev/null || echo '(no log)'`, 10000);
-      console.error(log);
-    } catch { /* ignore */ }
-    throw new Error("hashcat failed to start on BIGRED");
+    if (!isHashcatRunning(config) && !isScreenAlive(config, screenName)) {
+      try { console.error(sshCmd(config, `cat ${logFile} 2>/dev/null || echo '(no log)'`, 10000)); } catch { /* ignore */ }
+      throw new Error("hashcat failed to start");
+    }
   }
 
   // Poll for completion
   const POLL_INTERVAL = 30000;
-  const MAX_WAIT = 6 * 60 * 60 * 1000; // 6 hours
+  const MAX_WAIT = 6 * 60 * 60 * 1000;
   let notRunningCount = 0;
 
   while (Date.now() - startTime < MAX_WAIT) {
     sleepSync(POLL_INTERVAL);
 
     try {
-      const hcRunning = isHashcatRunning(config);
-      const screenUp = isScreenAlive(config, screenName);
+      const running = isHashcatRunning(config) || isScreenAlive(config, screenName);
       const logDone = isLogComplete(config, logFile);
       const elapsed = formatDuration((Date.now() - startTime) / 1000);
 
-      if (hcRunning || screenUp) {
+      if (running) {
         notRunningCount = 0;
-        let progressInfo = "";
+        let info = "";
         try {
           const progress = sshCmd(config, `grep '^Progress' ${logFile} 2>/dev/null | tail -1`, 5000);
-          if (progress.trim()) progressInfo = ` | ${progress.trim()}`;
+          if (progress.trim()) info = ` | ${progress.trim()}`;
         } catch { /* ignore */ }
 
         let potCount = 0;
-        try {
-          const result = sshCmd(config, `test -f ${config.workDir}/potfiles/${chunkName}.pot && wc -l < ${config.workDir}/potfiles/${chunkName}.pot || echo 0`);
-          potCount = parseInt(result) || 0;
-        } catch { /* ignore */ }
+        try { potCount = parseInt(sshCmd(config, `test -f ${potPath} && wc -l < ${potPath} || echo 0`)) || 0; } catch { /* ignore */ }
 
-        console.log(`  [${elapsed}] running — potfile: ${potCount.toLocaleString()}${progressInfo}`);
+        console.log(`  [${elapsed}] running — ${potCount.toLocaleString()} cracks${info}`);
       } else if (logDone) {
-        console.log(`  [${elapsed}] hashcat finished (log confirmed).`);
+        console.log(`  [${elapsed}] hashcat finished.`);
         break;
       } else {
         notRunningCount++;
         console.log(`  [${elapsed}] not detected (check ${notRunningCount}/2)`);
-        if (notRunningCount >= 2) {
-          console.log(`  hashcat appears stopped.`);
-          break;
-        }
+        if (notRunningCount >= 2) break;
       }
     } catch {
       const elapsed = formatDuration((Date.now() - startTime) / 1000);
       console.log(`  [${elapsed}] SSH lost — hashcat safe in screen. Reconnecting...`);
-      if (!waitForConnection(config, 300000)) {
-        console.error("  Failed to reconnect after 5 min.");
-        break;
-      }
+      if (!waitForConnection(config, 300000)) break;
     }
   }
 
-  // Get final potfile count
-  let potfileLines = 0;
-  try {
-    const result = sshCmd(config, `test -f ${config.workDir}/potfiles/${chunkName}.pot && wc -l < ${config.workDir}/potfiles/${chunkName}.pot || echo 0`);
-    potfileLines = parseInt(result) || 0;
-  } catch { /* ignore */ }
+  // Final potfile count
+  let potLines = 0;
+  try { potLines = parseInt(sshCmd(config, `test -f ${potPath} && wc -l < ${potPath} || echo 0`)) || 0; } catch { /* ignore */ }
 
-  const durationSeconds = (Date.now() - startTime) / 1000;
-  console.log(`  Completed: ${potfileLines.toLocaleString()} cracks in ${formatDuration(durationSeconds)}`);
+  const duration = (Date.now() - startTime) / 1000;
+  console.log(`  Done: ${potLines.toLocaleString()} cracks in ${formatDuration(duration)}`);
 
-  // Clean up screen
-  try {
-    sshCmd(config, `screen -X -S ${screenName} quit 2>/dev/null || true`, 5000);
-  } catch { /* ignore */ }
+  try { sshCmd(config, `screen -X -S ${screenName} quit 2>/dev/null || true`, 5000); } catch { /* ignore */ }
 
-  return { potfileLines, durationSeconds };
+  return duration;
 }
 
 // =============================================================================
-// Result Distribution — Stream potfile, distribute to per-batch PEARLS + SAND
+// Collect & Distribute — Download potfile, split to per-batch PEARLS + SAND
 // =============================================================================
 
-/**
- * Stream the potfile once per batch. For each batch:
- *   1. Load batch gravel hashes into a Set (~350K entries, ~28MB)
- *   2. Stream potfile line by line
- *   3. Collect pearls (matches) and derive sand (remainder)
- *
- * Memory: only one batch Set in memory at a time (~28MB).
- * Potfile is read once per batch (~433 times for 10 chunks).
- * OS filesystem cache handles repeated reads — after first disk read,
- * subsequent passes are served from RAM at memory bandwidth speed.
- */
-function streamPotfileForBatch(
-  potfilePath: string,
-  batchHashSet: Set<string>,
-): { pearls: { hash: string; plain: string }[] } {
-  const pearls: { hash: string; plain: string }[] = [];
-
-  // Read in 64MB chunks to avoid loading entire ~3.8GB potfile into memory
-  const CHUNK_SIZE = 64 * 1024 * 1024;
-  const fileSize = statSync(potfilePath).size;
-
-  const fileHandle = require("node:fs").openSync(potfilePath, "r");
-  const buf = Buffer.alloc(CHUNK_SIZE);
-  let leftover = "";
-  let bytesRead: number;
-  let offset = 0;
-
-  while (offset < fileSize) {
-    bytesRead = require("node:fs").readSync(fileHandle, buf, 0, CHUNK_SIZE, offset);
-    if (bytesRead === 0) break;
-    offset += bytesRead;
-
-    const chunk = leftover + buf.toString("utf-8", 0, bytesRead);
-    const lastNewline = chunk.lastIndexOf("\n");
-
-    let processable: string;
-    if (lastNewline === -1) {
-      leftover = chunk;
-      continue;
-    } else {
-      processable = chunk.slice(0, lastNewline);
-      leftover = chunk.slice(lastNewline + 1);
-    }
-
-    const lines = processable.split("\n");
-    for (const line of lines) {
-      if (line.length < 41) continue; // minimum: 40-char hash + ":"
-      const colonIdx = line.indexOf(":");
-      if (colonIdx !== 40) continue; // SHA-1 hash is exactly 40 chars
-      const hash = line.slice(0, 40).toLowerCase();
-
-      if (batchHashSet.has(hash)) {
-        const rawPlain = line.slice(41).replace(/\r$/, "");
-        pearls.push({ hash, plain: decodeHexPlain(rawPlain) });
-        batchHashSet.delete(hash); // Remove to avoid duplicates and speed up future lookups
-      }
-    }
-  }
-
-  // Process leftover
-  if (leftover.length > 41) {
-    const colonIdx = leftover.indexOf(":");
-    if (colonIdx === 40) {
-      const hash = leftover.slice(0, 40).toLowerCase();
-      if (batchHashSet.has(hash)) {
-        const rawPlain = leftover.slice(41).replace(/\r$/, "");
-        pearls.push({ hash, plain: decodeHexPlain(rawPlain) });
-        batchHashSet.delete(hash);
-      }
-    }
-  }
-
-  require("node:fs").closeSync(fileHandle);
-  return { pearls };
-}
-
-async function distributeResults(
+function collectChunkResults(
   config: BigRedConfig,
-  chunkIndex: number,
+  chunkIdx: number,
   batchNames: string[],
-  state: GravelChunkState,
-): Promise<{ totalPearls: number; totalSand: number }> {
-  const chunkName = `chunk-${String(chunkIndex).padStart(2, "0")}`;
+  durationSeconds: number,
+): { totalPearls: number; totalSand: number } {
+  const cn = chunkName(chunkIdx);
 
-  // Ensure output directories
   for (const dir of [PEARLS_DIR, SAND_DIR]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 
-  // Download potfile
-  const localPotPath = resolve(PEARLS_DIR, `${chunkName}.pot`);
-  const remotePotPath = `${config.workDir}/potfiles/${chunkName}.pot`;
+  // Download potfile to tmp
+  const localPotPath = resolve(TMP_DIR, `${cn}.pot`);
+  const remotePotPath = `${config.workDir}/potfiles/${cn}.pot`;
 
-  console.log(`\nDownloading potfile for ${chunkName}...`);
-  scpDownload(config, remotePotPath, localPotPath, 1200000); // 20 min timeout for large potfiles
+  console.log(`  Downloading potfile...`);
+  scpDownload(config, remotePotPath, localPotPath, 1200000);
 
   if (!existsSync(localPotPath)) {
-    console.error(`  ERROR: Downloaded potfile not found at ${localPotPath}`);
+    console.error(`  ERROR: Potfile not found after download`);
     return { totalPearls: 0, totalSand: 0 };
   }
 
-  const potSize = statSync(localPotPath).size;
-  console.log(`  Potfile: ${formatSize(potSize)}`);
+  console.log(`  Potfile: ${formatSize(statSync(localPotPath).size)}`);
 
-  // Distribute to each batch by streaming potfile per-batch.
-  // Each batch's Set is ~350K entries (~28MB). Potfile is streamed from
-  // OS cache after first disk read (~3.8GB → ~0.4s per cached pass).
+  // Load potfile into Map<hash, plaintext> for O(1) per-batch lookups.
+  // At 10 batches × 500K × 30% ≈ 1.5M entries × ~200 bytes ≈ 300MB — fits in RAM.
+  console.log(`  Loading potfile into memory...`);
+  const potMap = new Map<string, string>();
+  const potContent = readFileSync(localPotPath, "utf-8");
+  for (const line of potContent.split("\n")) {
+    if (line.length < 42) continue; // min: 40 hex + ":" + 1 char
+    const colonIdx = line.indexOf(":");
+    if (colonIdx !== 40) continue;
+    const hash = line.slice(0, 40).toLowerCase();
+    const rawPlain = line.slice(41).replace(/\r$/, "");
+    potMap.set(hash, decodeHexPlain(rawPlain));
+  }
+  console.log(`  Loaded ${potMap.size.toLocaleString()} cracked hashes`);
+
+  // Distribute to per-batch PEARLS + SAND
+  const state = loadState();
+  const pearlsJsonlPath = resolve(PEARLS_DIR, "hash_plaintext_pairs.jsonl");
   let totalPearls = 0;
   let totalSand = 0;
-  const pearlsJsonlPath = resolve(PEARLS_DIR, "hash_plaintext_pairs.jsonl");
-  let batchesProcessed = 0;
 
-  console.log(`  Distributing results to ${batchNames.length} batches...`);
+  for (let i = 0; i < batchNames.length; i++) {
+    const batchName = batchNames[i];
 
-  for (const batchName of batchNames) {
-    // Skip already-completed batches
-    if (state.batches[batchName]?.status === "completed") {
-      batchesProcessed++;
-      continue;
-    }
+    // Skip already-completed batches (resume safety)
+    if (state.batches[batchName]) continue;
 
     const gravelPath = resolve(GRAVEL_DIR, `${batchName}.txt`);
     if (!existsSync(gravelPath)) {
-      console.error(`  WARNING: Missing gravel batch: ${gravelPath}, skipping`);
+      console.error(`  WARNING: Missing ${gravelPath}, skipping`);
       continue;
     }
 
     const gravelContent = readFileSync(gravelPath, "utf-8");
-    const gravelLines = gravelContent.trim().split(/\r?\n/).map(h => h.trim()).filter(h => h.length === 40);
-    const gravelCount = gravelLines.length;
+    const gravelHashes = gravelContent.trim().split(/\r?\n/).map(h => h.trim()).filter(h => h.length === 40);
+    const hashCount = gravelHashes.length;
 
-    // Build Set for this batch (mutable — streamPotfileForBatch deletes matches)
-    const batchHashSet = new Set(gravelLines.map(h => h.toLowerCase()));
+    // Split: cracked → PEARLS, uncracked → SAND
+    const pearls: { hash: string; plain: string }[] = [];
+    const sandHashes: string[] = [];
 
-    // Stream potfile against this batch's Set
-    const { pearls } = streamPotfileForBatch(localPotPath, batchHashSet);
-
-    // Remaining hashes in Set = SAND (not cracked)
-    const sandHashes = [...batchHashSet];
-
-    // Verify invariant: PEARLS + SAND = GRAVEL
-    const checkSum = pearls.length + sandHashes.length;
-    if (checkSum !== gravelCount) {
-      console.error(`  INVARIANT VIOLATION: ${batchName}: PEARLS(${pearls.length}) + SAND(${sandHashes.length}) = ${checkSum} != GRAVEL(${gravelCount})`);
+    for (const h of gravelHashes) {
+      const lower = h.toLowerCase();
+      const plain = potMap.get(lower);
+      if (plain !== undefined) {
+        pearls.push({ hash: lower, plain });
+      } else {
+        sandHashes.push(h);
+      }
     }
 
-    // Append PEARLS to JSONL
+    // Invariant: PEARLS + SAND = GRAVEL
+    if (pearls.length + sandHashes.length !== hashCount) {
+      console.error(`  INVARIANT VIOLATION: ${batchName}: ${pearls.length}+${sandHashes.length} != ${hashCount}`);
+    }
+
+    // Write PEARLS (append to JSONL) — BEFORE state save (safe failure mode: duplicates, not loss)
     if (pearls.length > 0) {
-      const jsonlLines = pearls.map(p => JSON.stringify(p)).join("\n") + "\n";
-      appendFileSync(pearlsJsonlPath, jsonlLines);
+      appendFileSync(pearlsJsonlPath, pearls.map(p => JSON.stringify(p)).join("\n") + "\n");
     }
 
     // Write SAND (compressed)
     const sandPath = resolve(SAND_DIR, `${batchName}.txt.gz`);
-    const sandContent = sandHashes.join("\n") + "\n";
-    writeFileSync(sandPath, gzipSync(Buffer.from(sandContent)));
+    writeFileSync(sandPath, gzipSync(Buffer.from(sandHashes.join("\n") + "\n")));
 
-    // Update state
+    // Update state — AFTER writing outputs
+    const crackRate = hashCount > 0 ? (pearls.length / hashCount * 100).toFixed(2) : "0.00";
     state.batches[batchName] = {
       status: "completed",
+      hashCount,
       pearlCount: pearls.length,
       sandCount: sandHashes.length,
-      chunk: chunkIndex,
+      crackRate,
+      durationSeconds: 0, // chunk duration, not per-batch
+      completedAt: new Date().toISOString(),
+      chunk: chunkIdx,
     };
 
     totalPearls += pearls.length;
     totalSand += sandHashes.length;
-    batchesProcessed++;
 
-    // Progress every 50 batches
-    if (batchesProcessed % 50 === 0) {
-      const crackRate = gravelCount > 0 ? (pearls.length / gravelCount * 100).toFixed(1) : "0";
-      console.log(`  [${batchesProcessed}/${batchNames.length}] ${batchName}: ${pearls.length.toLocaleString()} pearls, ${sandHashes.length.toLocaleString()} sand (${crackRate}%)`);
-      // Save state periodically for resume safety
+    // Progress + periodic state save
+    if ((i + 1) % 5 === 0 || i === batchNames.length - 1) {
+      const rate = hashCount > 0 ? (pearls.length / hashCount * 100).toFixed(1) : "0";
+      console.log(`  [${i + 1}/${batchNames.length}] ${batchName}: ${pearls.length.toLocaleString()} pearls, ${sandHashes.length.toLocaleString()} sand (${rate}%)`);
       saveState(state);
     }
   }
 
-  // Final state save
+  // Final save
   saveState(state);
 
   // Clean up local potfile
-  try {
-    unlinkSync(localPotPath);
-  } catch { /* ignore */ }
+  try { unlinkSync(localPotPath); } catch { /* ignore */ }
 
   return { totalPearls, totalSand };
 }
 
 // =============================================================================
-// BIGRED Cleanup
+// Clean Up BIGRED
 // =============================================================================
 
-function cleanupBigred(config: BigRedConfig, chunkIndex: number): void {
-  const chunkName = `chunk-${String(chunkIndex).padStart(2, "0")}`;
-  console.log(`  Cleaning up BIGRED: ${chunkName}...`);
-
-  // Hard failure — leftover files accumulate ~5.5GB per chunk and will fill disk
+function cleanupBigred(config: BigRedConfig, chunkIdx: number): void {
+  const cn = chunkName(chunkIdx);
+  // Hard failure — leftover files fill disk
   sshCmd(config, [
-    `rm -f ${config.workDir}/hashlists/${chunkName}.txt`,
-    `rm -f ${config.workDir}/potfiles/${chunkName}.pot`,
-    `rm -f ${config.workDir}/hashcat-${chunkName}.log`,
+    `rm -f ${config.workDir}/hashlists/${cn}.txt`,
+    `rm -f ${config.workDir}/potfiles/${cn}.pot`,
+    `rm -f ${config.workDir}/hashcat-${cn}.log`,
   ].join(" && "), 120000);
-  console.log(`  Cleaned.`);
 }
 
 // =============================================================================
-// Preflight Checks
+// Process One Chunk — build → upload → attack → collect → cleanup
 // =============================================================================
 
-function preflight(config: BigRedConfig): boolean {
-  console.log("\n--- PRE-FLIGHT CHECKS ---");
+function processChunk(config: BigRedConfig, chunkIdx: number, batchNames: string[]): void {
+  const cn = chunkName(chunkIdx);
+  const first = batchNames[0];
+  const last = batchNames[batchNames.length - 1];
 
-  // 1. Check nocap.txt
-  try {
-    const size = sshCmd(config, `stat -c %s ${config.workDir}/wordlists/nocap.txt 2>/dev/null || echo 0`);
-    if (parseInt(size) === 0) {
-      console.error("  FAIL: nocap.txt not found on BIGRED");
-      console.error("  Fix: bun Tools/BigRedSync.ts");
-      return false;
+  console.log(`\n${"═".repeat(70)}`);
+  console.log(`CHUNK ${chunkIdx} — ${cn} — ${batchNames.length} batches (${first}..${last})`);
+  console.log("═".repeat(70));
+
+  // Filter out already-completed batches in this chunk
+  const state = loadState();
+  const pending = batchNames.filter(b => !state.batches[b]);
+  if (pending.length === 0) {
+    console.log(`  All ${batchNames.length} batches already completed. Skipping.`);
+    return;
+  }
+  if (pending.length < batchNames.length) {
+    console.log(`  ${batchNames.length - pending.length} already done, processing ${pending.length} remaining`);
+  }
+
+  // 1. Build chunk file
+  console.log(`\n  Step 1: Build chunk hashlist`);
+  const { chunkPath, totalHashes } = buildChunkFile(pending, chunkIdx);
+
+  if (totalHashes === 0) {
+    console.error(`  ERROR: Zero hashes in chunk. Skipping.`);
+    try { unlinkSync(chunkPath); } catch { /* ignore */ }
+    return;
+  }
+
+  // 2. Upload to BIGRED
+  console.log(`\n  Step 2: Upload to BIGRED`);
+  const remoteHashlist = `${config.workDir}/hashlists/${cn}.txt`;
+  scpUpload(config, chunkPath, remoteHashlist, 1200000);
+  console.log(`  Uploaded.`);
+  try { unlinkSync(chunkPath); } catch { /* ignore */ }
+
+  // 3. Run hashcat
+  console.log(`\n  Step 3: Run hashcat`);
+  const durationSeconds = runChunkAttack(config, chunkIdx);
+
+  // 4. Collect results
+  console.log(`\n  Step 4: Collect & distribute results`);
+  const { totalPearls, totalSand } = collectChunkResults(config, chunkIdx, pending, durationSeconds);
+
+  // 5. Clean up BIGRED
+  console.log(`\n  Step 5: Cleanup`);
+  cleanupBigred(config, chunkIdx);
+
+  const rate = (totalPearls + totalSand) > 0
+    ? (totalPearls / (totalPearls + totalSand) * 100).toFixed(2)
+    : "0";
+  console.log(`\n  ${cn} complete: ${totalPearls.toLocaleString()} pearls, ${totalSand.toLocaleString()} sand (${rate}%)`);
+}
+
+// =============================================================================
+// Main Run — Process all remaining gravel
+// =============================================================================
+
+function run(config: BigRedConfig, batchesPerChunk: number): void {
+  const pending = getPendingBatches();
+  if (pending.length === 0) {
+    console.log("\nAll gravel batches already processed.");
+    showStatus();
+    return;
+  }
+
+  const chunks = chunkArray(pending, batchesPerChunk);
+
+  console.log(`\nProcessing ${pending.length.toLocaleString()} batches in ${chunks.length} chunks (${batchesPerChunk} batches/chunk)`);
+  console.log(`Attack: nocap.txt × nocap.rule`);
+  console.log(`Estimated time: ~${formatDuration(chunks.length * 126)}`);
+
+  // Ensure attack files once
+  console.log(`\nChecking attack files...`);
+  if (!ensureAttackFiles(config)) {
+    throw new Error("Attack files missing — run bun Tools/BigRedSync.ts first");
+  }
+
+  const overallStart = Date.now();
+  let completed = 0;
+  let consecutiveFailures = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      processChunk(config, i + 1, chunks[i]);
+      completed++;
+      consecutiveFailures = 0;
+
+      // Progress
+      const elapsed = formatDuration((Date.now() - overallStart) / 1000);
+      const remaining = chunks.length - (i + 1);
+      const avgPerChunk = (Date.now() - overallStart) / 1000 / (i + 1);
+      const eta = formatDuration(remaining * avgPerChunk);
+      console.log(`\n--- ${i + 1}/${chunks.length} chunks done (${elapsed} elapsed, ~${eta} remaining) ---`);
+    } catch (e) {
+      console.error(`\nERROR on chunk ${i + 1}: ${(e as Error).message}`);
+      consecutiveFailures++;
+      if (consecutiveFailures >= 3) {
+        console.error("3 consecutive chunk failures — stopping.");
+        break;
+      }
+      console.log("Waiting 30s before next chunk...");
+      sleepSync(30000);
     }
-    console.log(`  nocap.txt: ${formatSize(parseInt(size))}`);
-  } catch {
-    console.error("  FAIL: Cannot check nocap.txt");
-    return false;
   }
 
-  // 2. Check nocap.rule
-  try {
-    const size = sshCmd(config, `stat -c %s ${config.workDir}/rules/nocap.rule 2>/dev/null || echo 0`);
-    if (parseInt(size) === 0) {
-      console.error("  FAIL: nocap.rule not found on BIGRED");
-      console.error("  Fix: bun Tools/BigRedSync.ts");
-      return false;
+  // Summary
+  const totalElapsed = formatDuration((Date.now() - overallStart) / 1000);
+  const state = loadState();
+  const rate = state.totalPearls + state.totalSand > 0
+    ? (state.totalPearls / (state.totalPearls + state.totalSand) * 100).toFixed(2)
+    : "0";
+
+  console.log(`\n${"═".repeat(70)}`);
+  console.log(`ALL DONE — ${completed} chunks in ${totalElapsed}`);
+  console.log("═".repeat(70));
+  console.log(`PEARLS: ${state.totalPearls.toLocaleString()}`);
+  console.log(`SAND:   ${state.totalSand.toLocaleString()}`);
+  console.log(`Rate:   ${rate}%`);
+  console.log(`\nSAND ready for Stage 2: bun Tools/BigRedRunner.ts --next`);
+}
+
+// =============================================================================
+// Dry Run — Purely read-only: no SSH, no state writes, no uploads
+// =============================================================================
+
+function dryRun(batchesPerChunk: number): void {
+  const pending = getPendingBatches();
+  const allBatches = discoverGravelBatches();
+  const chunks = chunkArray(pending, batchesPerChunk);
+
+  console.log("\n=== DRY RUN: Chunking Plan ===");
+  console.log("This is read-only. No files uploaded, no state written, no SSH.\n");
+
+  console.log(`Total gravel batches: ${allBatches.length.toLocaleString()}`);
+  console.log(`Already completed:    ${(allBatches.length - pending.length).toLocaleString()}`);
+  console.log(`Pending:              ${pending.length.toLocaleString()}`);
+  console.log(`Batches per chunk:    ${batchesPerChunk}`);
+  console.log(`Chunks:               ${chunks.length}`);
+  console.log(`Attack:               nocap.txt × nocap.rule`);
+
+  // Check attack files exist locally
+  const nocapPath = resolve(DATA_DIR, "nocap.txt");
+  const rulePath = resolve(DATA_DIR, "nocap.rule");
+  console.log(`\nAttack files (local):`);
+  console.log(`  nocap.txt:  ${existsSync(nocapPath) ? formatSize(statSync(nocapPath).size) : "NOT FOUND"}`);
+  console.log(`  nocap.rule: ${existsSync(rulePath) ? formatSize(statSync(rulePath).size) : "NOT FOUND"}`);
+
+  // Sample first batch for hash count estimate
+  let sampleCount = 0;
+  if (pending.length > 0) {
+    const samplePath = resolve(GRAVEL_DIR, `${pending[0]}.txt`);
+    if (existsSync(samplePath)) {
+      sampleCount = readFileSync(samplePath, "utf-8").trim().split(/\r?\n/).map(h => h.trim()).filter(h => h.length === 40).length;
     }
-    console.log(`  nocap.rule: ${formatSize(parseInt(size))}`);
-  } catch {
-    console.error("  FAIL: Cannot check nocap.rule");
-    return false;
   }
 
-  // 3. hashcat not running
-  if (isHashcatRunning(config)) {
-    console.error("  FAIL: hashcat is already running on BIGRED");
-    return false;
+  console.log(`\nChunk plan:`);
+  let totalEst = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const first = chunk[0];
+    const last = chunk[chunk.length - 1];
+    const estHashes = sampleCount * chunk.length;
+    totalEst += estHashes;
+    console.log(`  ${chunkName(i + 1)}: ${chunk.length} batches (${first}..${last}), ~${estHashes.toLocaleString()} hashes (~${formatSize(estHashes * 41)})`);
   }
-  console.log(`  hashcat: Not running (ready)`);
 
-  // 4. Disk space
-  try {
-    const df = sshCmd(config, `df -h ${config.workDir} | tail -1 | awk '{print $4}'`);
-    console.log(`  Disk free: ${df}`);
-  } catch { /* ignore */ }
-
-  // 5. Gravel directory
-  const batches = discoverGravelBatches();
-  console.log(`  Gravel batches: ${batches.length.toLocaleString()}`);
-
-  console.log("--- PRE-FLIGHT PASSED ---\n");
-  return true;
+  console.log(`\nTotal estimated hashes: ${totalEst.toLocaleString()} (${formatSize(totalEst * 41)})`);
+  console.log(`Estimated GPU time: ~${formatDuration(chunks.length * 88)} (88s/chunk avg at 5M hashes)`);
+  console.log(`Estimated total time: ~${formatDuration(chunks.length * 126)} (including upload/collect overhead)`);
 }
 
 // =============================================================================
@@ -628,248 +679,117 @@ function preflight(config: BigRedConfig): boolean {
 function showStatus(): void {
   const state = loadState();
   const allBatches = discoverGravelBatches();
-  const completedBatches = Object.values(state.batches).filter(b => b.status === "completed");
-  const pendingCount = allBatches.length - completedBatches.length;
-
-  const totalPearls = completedBatches.reduce((sum, b) => sum + b.pearlCount, 0);
-  const totalSand = completedBatches.reduce((sum, b) => sum + b.sandCount, 0);
-  const totalHashes = totalPearls + totalSand;
-  const overallRate = totalHashes > 0 ? (totalPearls / totalHashes * 100).toFixed(2) : "0";
+  const completedCount = Object.keys(state.batches).length;
+  const pendingCount = allBatches.length - completedCount;
 
   console.log("\n=== GravelChunkProcessor Status ===\n");
-  console.log(`Attack:         ${state.attack}`);
-  console.log(`Chunks:         ${state.chunks}`);
-  console.log(`Current chunk:  ${state.currentChunk} / ${state.chunks}`);
-  console.log(`\nBatches:`);
-  console.log(`  Total:     ${allBatches.length.toLocaleString()}`);
-  console.log(`  Completed: ${completedBatches.length.toLocaleString()}`);
-  console.log(`  Pending:   ${pendingCount.toLocaleString()}`);
-  console.log(`\nResults:`);
-  console.log(`  PEARLS:     ${totalPearls.toLocaleString()}`);
-  console.log(`  SAND:       ${totalSand.toLocaleString()}`);
-  console.log(`  Crack rate: ${overallRate}%`);
+  console.log(`Gravel batches:  ${allBatches.length.toLocaleString()}`);
+  console.log(`  Completed:     ${completedCount.toLocaleString()}`);
+  console.log(`  Pending:       ${pendingCount.toLocaleString()}`);
+  console.log(`  PEARLS:        ${state.totalPearls.toLocaleString()}`);
+  console.log(`  SAND:          ${state.totalSand.toLocaleString()}`);
+
+  if (completedCount > 0) {
+    const rate = (state.totalPearls / (state.totalPearls + state.totalSand) * 100).toFixed(2);
+    console.log(`  Crack rate:    ${rate}%`);
+  }
 
   if (state.lastUpdated) {
-    console.log(`\nLast updated: ${state.lastUpdated}`);
+    console.log(`  Last updated:  ${state.lastUpdated}`);
   }
 
-  // Per-chunk summary
-  if (completedBatches.length > 0) {
-    const chunkStats = new Map<number, { pearls: number; sand: number; count: number }>();
-    for (const b of completedBatches) {
-      const existing = chunkStats.get(b.chunk) || { pearls: 0, sand: 0, count: 0 };
-      existing.pearls += b.pearlCount;
-      existing.sand += b.sandCount;
-      existing.count++;
-      chunkStats.set(b.chunk, existing);
-    }
+  // Per-chunk breakdown
+  const chunkStats = new Map<number, { pearls: number; sand: number; count: number }>();
+  for (const b of Object.values(state.batches)) {
+    if (b.chunk === undefined) continue;
+    const s = chunkStats.get(b.chunk) || { pearls: 0, sand: 0, count: 0 };
+    s.pearls += b.pearlCount;
+    s.sand += b.sandCount;
+    s.count++;
+    chunkStats.set(b.chunk, s);
+  }
 
+  if (chunkStats.size > 0) {
     console.log(`\nPer-chunk breakdown:`);
-    for (const [chunk, stats] of [...chunkStats.entries()].sort((a, b) => a[0] - b[0])) {
-      const chunkTotal = stats.pearls + stats.sand;
-      const rate = chunkTotal > 0 ? (stats.pearls / chunkTotal * 100).toFixed(1) : "0";
-      console.log(`  chunk-${String(chunk).padStart(2, "0")}: ${stats.count} batches, ${stats.pearls.toLocaleString()} pearls (${rate}%)`);
+    for (const [idx, s] of [...chunkStats.entries()].sort((a, b) => a[0] - b[0])) {
+      const total = s.pearls + s.sand;
+      const rate = total > 0 ? (s.pearls / total * 100).toFixed(1) : "0";
+      console.log(`  ${chunkName(idx)}: ${s.count} batches, ${s.pearls.toLocaleString()} pearls (${rate}%)`);
     }
+  }
+
+  if (pendingCount > 0) {
+    console.log(`\nResume: bun Tools/GravelChunkProcessor.ts`);
+  } else {
+    console.log(`\nAll batches processed. SAND ready for Stage 2.`);
   }
 }
 
 // =============================================================================
-// Dry Run
+// Collect Chunk — Fallback for failed collection
 // =============================================================================
 
-function dryRun(numChunks: number): void {
+function collectChunkFallback(config: BigRedConfig, chunkIdx: number, batchesPerChunk: number): void {
+  const pending = getPendingBatches();
   const allBatches = discoverGravelBatches();
+
+  // We need to reconstruct which batches were in this chunk.
+  // Chunks are deterministic: same ordering, same size.
+  // But pending batches change as batches complete. We need the ORIGINAL chunk assignment.
+  // Look at state to find which batches have this chunk index.
   const state = loadState();
+  let batchNames = Object.entries(state.batches)
+    .filter(([_, b]) => b.chunk === chunkIdx)
+    .map(([name]) => name)
+    .sort();
 
-  // Filter out already-completed batches
-  const pendingBatches = allBatches.filter(b => state.batches[b]?.status !== "completed");
-  const chunks = chunkArray(pendingBatches, numChunks);
-
-  console.log("\n=== DRY RUN: Chunking Plan ===\n");
-  console.log(`Total gravel batches: ${allBatches.length.toLocaleString()}`);
-  console.log(`Already completed:    ${(allBatches.length - pendingBatches.length).toLocaleString()}`);
-  console.log(`Pending:              ${pendingBatches.length.toLocaleString()}`);
-  console.log(`Chunks:               ${chunks.length}`);
-  console.log(`Attack:               nocap.txt + nocap.rule`);
-  console.log();
-
-  let totalHashes = 0;
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const first = chunk[0];
-    const last = chunk[chunk.length - 1];
-
-    // Estimate hashes (count from first batch)
-    let sampleCount = 0;
-    const samplePath = resolve(GRAVEL_DIR, `${first}.txt`);
-    if (existsSync(samplePath)) {
-      const content = readFileSync(samplePath, "utf-8");
-      sampleCount = content.trim().split(/\r?\n/).map(h => h.trim()).filter(h => h.length === 40).length;
+  // Also include pending batches that WOULD be in this chunk
+  const allPending = allBatches.filter(b => !state.batches[b]);
+  const pendingChunks = chunkArray(allPending, batchesPerChunk);
+  if (chunkIdx - 1 < pendingChunks.length) {
+    for (const b of pendingChunks[chunkIdx - 1]) {
+      if (!batchNames.includes(b)) batchNames.push(b);
     }
-
-    const estHashes = sampleCount * chunk.length;
-    const estSizeMB = (estHashes * 41) / (1024 * 1024); // 40 hex chars + newline
-    totalHashes += estHashes;
-
-    console.log(`  chunk-${String(i + 1).padStart(2, "0")}: ${chunk.length} batches (${first}..${last}), ~${estHashes.toLocaleString()} hashes (~${estSizeMB.toFixed(0)}MB)`);
+    batchNames.sort();
   }
 
-  console.log(`\nTotal estimated hashes: ${totalHashes.toLocaleString()}`);
-  console.log(`Estimated total file size: ${formatSize(totalHashes * 41)}`);
-  console.log(`\nTime estimate unknown — depends on NAS speed, SCP throughput, and hashcat dict+rules speed.`);
-  console.log(`First chunk will establish a baseline.\n`);
-}
-
-// =============================================================================
-// Main Run Loop
-// =============================================================================
-
-async function run(config: BigRedConfig, numChunks: number): Promise<void> {
-  const allBatches = discoverGravelBatches();
-  let state = loadState();
-
-  // Filter out already-completed batches
-  const pendingBatches = allBatches.filter(b => state.batches[b]?.status !== "completed");
-
-  if (pendingBatches.length === 0) {
-    console.log("All gravel batches already processed!");
-    showStatus();
+  if (batchNames.length === 0) {
+    console.error(`ERROR: No batches found for chunk ${chunkIdx}`);
     return;
   }
 
-  // Update state with chunk count
-  state.chunks = numChunks;
-  saveState(state);
-
-  const chunks = chunkArray(pendingBatches, numChunks);
-
-  console.log(`\nProcessing ${pendingBatches.length.toLocaleString()} batches in ${chunks.length} chunks`);
-  console.log(`Attack: nocap.txt + nocap.rule`);
-
-  // Use a temp dir for chunk files
-  const tmpDir = resolve(DATA_DIR, "tmp");
-  if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
-
-  const overallStartTime = Date.now();
-  let grandTotalPearls = 0;
-  let grandTotalSand = 0;
-
-  // Determine starting chunk (resume from currentChunk)
-  const startChunk = state.currentChunk > 0 ? state.currentChunk - 1 : 0;
-
-  for (let i = startChunk; i < chunks.length; i++) {
-    const chunkBatches = chunks[i];
-    const chunkIndex = i + 1;
-    const chunkStartTime = Date.now();
-
-    console.log(`\n${"═".repeat(70)}`);
-    console.log(`CHUNK ${chunkIndex} / ${chunks.length} — ${chunkBatches.length} batches (${chunkBatches[0]}..${chunkBatches[chunkBatches.length - 1]})`);
-    console.log("═".repeat(70));
-
-    // Filter out any batches in this chunk that are already completed
-    const pendingInChunk = chunkBatches.filter(b => state.batches[b]?.status !== "completed");
-    if (pendingInChunk.length === 0) {
-      console.log(`  All ${chunkBatches.length} batches in this chunk already completed. Skipping.`);
-      state.currentChunk = chunkIndex + 1;
-      saveState(state);
-      continue;
-    }
-
-    // Step 1: Build chunk file
-    const { chunkPath, totalHashes } = buildChunkFile(
-      pendingInChunk, chunkIndex, tmpDir,
-    );
-
-    // Step 2: Upload to BIGRED
-    const chunkName = `chunk-${String(chunkIndex).padStart(2, "0")}`;
-    const remoteHashlistPath = `${config.workDir}/hashlists/${chunkName}.txt`;
-    console.log(`\nUploading ${chunkName}.txt to BIGRED...`);
-    scpUpload(config, chunkPath, remoteHashlistPath, 1200000); // 20 min timeout
-    console.log(`  Uploaded.`);
-
-    // Delete local temp chunk file
-    try { unlinkSync(chunkPath); } catch { /* ignore */ }
-
-    // Step 3: Run hashcat
-    state.currentChunk = chunkIndex;
-    saveState(state);
-
-    const { potfileLines, durationSeconds } = runHashcatOnChunk(config, chunkIndex);
-
-    if (potfileLines === 0) {
-      console.log(`  WARNING: Zero cracks. Check BIGRED logs.`);
-    }
-
-    // Step 4: Download potfile + distribute results
-    const { totalPearls, totalSand } = await distributeResults(
-      config, chunkIndex, pendingInChunk, state,
-    );
-
-    grandTotalPearls += totalPearls;
-    grandTotalSand += totalSand;
-
-    // Step 5: Clean up BIGRED
-    cleanupBigred(config, chunkIndex);
-
-    // Chunk summary
-    const chunkDuration = (Date.now() - chunkStartTime) / 1000;
-    const chunkRate = (totalPearls + totalSand) > 0 ? (totalPearls / (totalPearls + totalSand) * 100).toFixed(2) : "0";
-    console.log(`\n  Chunk ${chunkIndex} complete: ${totalPearls.toLocaleString()} pearls, ${totalSand.toLocaleString()} sand (${chunkRate}%) in ${formatDuration(chunkDuration)}`);
-
-    // Update current chunk pointer
-    state.currentChunk = chunkIndex + 1;
-    saveState(state);
-  }
-
-  // Clean up tmp dir
-  try {
-    const { rmdirSync } = require("node:fs");
-    rmdirSync(tmpDir, { recursive: true });
-  } catch { /* ignore */ }
-
-  // Grand summary
-  const overallDuration = (Date.now() - overallStartTime) / 1000;
-  const overallRate = (grandTotalPearls + grandTotalSand) > 0
-    ? (grandTotalPearls / (grandTotalPearls + grandTotalSand) * 100).toFixed(2)
-    : "0";
-
-  console.log(`\n${"═".repeat(70)}`);
-  console.log(`ALL CHUNKS COMPLETE`);
-  console.log("═".repeat(70));
-  console.log(`Total time:   ${formatDuration(overallDuration)}`);
-  console.log(`Total PEARLS: ${grandTotalPearls.toLocaleString()}`);
-  console.log(`Total SAND:   ${grandTotalSand.toLocaleString()}`);
-  console.log(`Crack rate:   ${overallRate}%`);
-  console.log(`\nSAND ready for Stage 2: bun Tools/BigRedRunner.ts --next`);
+  console.log(`\nRe-collecting chunk ${chunkIdx} (${batchNames.length} batches)`);
+  const { totalPearls, totalSand } = collectChunkResults(config, chunkIdx, batchNames, 0);
+  console.log(`  Collected: ${totalPearls.toLocaleString()} pearls, ${totalSand.toLocaleString()} sand`);
 }
 
 // =============================================================================
-// CLI Entry Point
+// CLI
 // =============================================================================
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
 
-  let runFlag = false;
-  let statusFlag = false;
   let dryRunFlag = false;
-  let numChunks = DEFAULT_CHUNKS;
+  let statusFlag = false;
+  let collectChunk: number | undefined;
+  let batchesPerChunk = DEFAULT_BATCHES_PER_CHUNK;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case "--run":
-        runFlag = true;
+      case "--dry-run":
+        dryRunFlag = true;
         break;
       case "--status":
         statusFlag = true;
         break;
-      case "--dry-run":
-        dryRunFlag = true;
+      case "--collect-chunk":
+        collectChunk = parseInt(args[++i]);
         break;
-      case "--chunks":
-        numChunks = parseInt(args[++i]);
-        if (isNaN(numChunks) || numChunks < 1) {
-          console.error("ERROR: --chunks must be a positive integer");
+      case "--batches-per-chunk":
+        batchesPerChunk = parseInt(args[++i]);
+        if (isNaN(batchesPerChunk) || batchesPerChunk < 1) {
+          console.error("ERROR: --batches-per-chunk must be a positive integer");
           process.exit(1);
         }
         break;
@@ -878,20 +798,22 @@ if (import.meta.main) {
         console.log(`
 GravelChunkProcessor - Chunked Stage 1: ALL GRAVEL → PEARLS + SAND
 
-Processes all 4,328 gravel batches by grouping into chunks, running
-nocap.txt + nocap.rule on each chunk, then distributing results to
-per-batch PEARLS (JSONL) and SAND (gzipped).
+Processes all gravel batches in VRAM-optimal chunks (default: 10 batches = 5M hashes).
+Runs nocap.txt × nocap.rule on each chunk, distributes results to per-batch PEARLS + SAND.
 
 Usage:
-  bun Tools/GravelChunkProcessor.ts --run                Process all gravel (40 chunks)
-  bun Tools/GravelChunkProcessor.ts --run --chunks 50    Use 50 chunks instead of 40
-  bun Tools/GravelChunkProcessor.ts --status             Show progress
-  bun Tools/GravelChunkProcessor.ts --dry-run            Preview chunking plan
+  bun Tools/GravelChunkProcessor.ts                           Process all remaining gravel
+  bun Tools/GravelChunkProcessor.ts --dry-run                 Preview plan (read-only, no SSH)
+  bun Tools/GravelChunkProcessor.ts --status                  Show progress
+  bun Tools/GravelChunkProcessor.ts --collect-chunk 1         Re-collect chunk 1 (fallback)
+  bun Tools/GravelChunkProcessor.ts --batches-per-chunk 20    Override chunk size
 
-Attack: nocap.txt × nocap.rule (48,428 rules)
-Expected crack rate: ~30%
-Expected time: unknown until first chunk completes (chunk 1 benchmarked ~1.5 hrs)
+Why 10 batches per chunk?
+  RTX 4060 Ti bitmap table overflows above 5M SHA-1 hashes.
+  At 10M hashes, speed drops to 34%. At 54M, it's 2.2%.
+  10 batches (5M) stays fast while saving ~10x vs per-batch processing.
 
+Expected: ~30% crack rate, ~15 hours for all 4,328 batches.
 Pipeline: GRAVEL → [GravelChunkProcessor] → PEARLS + SAND → [BigRedRunner Stage 2] → DIAMONDS + GLASS
 `);
         process.exit(0);
@@ -904,43 +826,30 @@ Pipeline: GRAVEL → [GravelChunkProcessor] → PEARLS + SAND → [BigRedRunner 
   }
 
   if (dryRunFlag) {
-    dryRun(numChunks);
+    dryRun(batchesPerChunk);
     process.exit(0);
   }
 
-  if (!runFlag) {
-    console.error("ERROR: Specify --run, --status, or --dry-run (use --help for usage)");
-    process.exit(1);
-  }
-
-  // === Main run ===
+  // Modes requiring SSH
   try {
     const config = loadConfig();
     console.log(`BIGRED: ${config.user}@${config.host}`);
-    console.log(`Stage: 1 (GRAVEL → PEARLS + SAND) — Chunked Mode`);
 
-    // Test connectivity
-    try {
-      sshCmd(config, "echo connected", 10000);
-    } catch {
-      console.error("ERROR: Cannot connect to BIGRED. Check network and SSH key.");
+    try { sshCmd(config, "echo connected", 10000); } catch {
+      console.error("ERROR: Cannot connect to BIGRED.");
       process.exit(1);
     }
 
-    // Ensure remote directories exist
-    sshCmd(config, `mkdir -p ${config.workDir}/{wordlists,rules,hashlists,potfiles,results}`);
+    sshCmd(config, `mkdir -p ${config.workDir}/{wordlists,rules,hashlists,potfiles}`, 10000);
 
-    // Preflight
-    if (!preflight(config)) {
-      process.exit(1);
+    if (collectChunk !== undefined) {
+      collectChunkFallback(config, collectChunk, batchesPerChunk);
+    } else {
+      console.log(`Stage 1 (GRAVEL → PEARLS + SAND) — Chunked Mode`);
+      run(config, batchesPerChunk);
     }
-
-    run(config, numChunks).catch(e => {
-      console.error(`\nFATAL: ${(e as Error).message}`);
-      process.exit(1);
-    });
   } catch (e) {
-    console.error(`Error: ${(e as Error).message}`);
+    console.error(`\nError: ${(e as Error).message}`);
     process.exit(1);
   }
 }
