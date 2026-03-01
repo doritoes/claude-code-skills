@@ -2,15 +2,16 @@
 /**
  * GravelChunkProcessor.ts - Chunked Stage 1: ALL GRAVEL → PEARLS + SAND on BIGRED
  *
- * Processes all gravel batches by grouping into VRAM-optimal chunks (10 batches
- * = ~5M hashes), running one hashcat attack per chunk (nocap.txt × nocap.rule),
+ * Processes all gravel batches by grouping into optimal chunks (14 batches
+ * = ~7M hashes), running one hashcat attack per chunk (nocap.txt × nocap.rule),
  * then distributing results back to per-batch PEARLS and SAND.
  *
- * Why 10 batches per chunk?
- *   RTX 4060 Ti hash-lookup speed degrades catastrophically above 5M hashes
- *   (bitmap table overflow). At 10M hashes, speed drops to 34% of baseline.
- *   10 batches (5M) stays in the flat zone (~85%+) while amortizing hashcat
- *   startup cost across 10 batches → ~10× faster than per-batch processing.
+ * Why 14 batches per chunk?
+ *   RTX 4060 Ti hash-lookup speed degrades above 5M hashes for mask attacks,
+ *   but dict+rules (nocap.txt × nocap.rule) runs at ~4.3 GH/s — well below
+ *   the lookup ceiling until ~8M hashes. 14 batches (7M) stays in the flat
+ *   zone with zero speed loss while amortizing hashcat startup across more
+ *   batches → ~14× faster than per-batch processing.
  *
  * Usage:
  *   bun Tools/GravelChunkProcessor.ts                           Process all remaining gravel
@@ -45,7 +46,7 @@ import { loadConfig, sshCmd, scpUpload, scpDownload, type BigRedConfig } from ".
 
 const GRAVEL_STATE_PATH = resolve(DATA_DIR, "gravel-state.json");
 const TMP_DIR = resolve(DATA_DIR, "tmp");
-const DEFAULT_BATCHES_PER_CHUNK = 10; // 10 × 500K = 5M hashes: RTX 4060 Ti sweet spot
+const DEFAULT_BATCHES_PER_CHUNK = 14; // 14 × 500K = 7M hashes: optimal for dict+rules on RTX 4060 Ti
 
 // =============================================================================
 // State Management — Compatible with GravelProcessor.ts
@@ -569,7 +570,7 @@ function run(config: BigRedConfig, batchesPerChunk: number): void {
 
   console.log(`\nProcessing ${pending.length.toLocaleString()} batches in ${chunks.length} chunks (${batchesPerChunk} batches/chunk)`);
   console.log(`Attack: nocap.txt × nocap.rule`);
-  console.log(`Estimated time: ~${formatDuration(chunks.length * 126)}`);
+  console.log(`Estimated time: ~${formatDuration(chunks.length * 228)}`);
 
   // Ensure attack files once
   console.log(`\nChecking attack files...`);
@@ -668,8 +669,8 @@ function dryRun(batchesPerChunk: number): void {
   }
 
   console.log(`\nTotal estimated hashes: ${totalEst.toLocaleString()} (${formatSize(totalEst * 41)})`);
-  console.log(`Estimated GPU time: ~${formatDuration(chunks.length * 88)} (88s/chunk avg at 5M hashes)`);
-  console.log(`Estimated total time: ~${formatDuration(chunks.length * 126)} (including upload/collect overhead)`);
+  console.log(`Estimated GPU time: ~${formatDuration(chunks.length * 192)} (3.2 min/chunk at ~4.3 GH/s dict+rules)`);
+  console.log(`Estimated total time: ~${formatDuration(chunks.length * 228)} (including upload/collect overhead)`);
 }
 
 // =============================================================================
@@ -718,11 +719,112 @@ function showStatus(): void {
     }
   }
 
+  // Live BIGRED status — graceful failure if unreachable
+  showBigredStatus(completedCount, pendingCount);
+
   if (pendingCount > 0) {
     console.log(`\nResume: bun Tools/GravelChunkProcessor.ts`);
   } else {
     console.log(`\nAll batches processed. SAND ready for Stage 2.`);
   }
+}
+
+function showBigredStatus(completedCount: number, pendingCount: number): void {
+  let config: BigRedConfig;
+  try {
+    config = loadConfig();
+  } catch {
+    console.log(`\nBIGRED: config not found`);
+    return;
+  }
+
+  console.log(`\n--- BIGRED Live Status ---`);
+
+  // Check connectivity
+  try {
+    sshCmd(config, "echo ok", 10000);
+  } catch {
+    console.log(`  Status: UNREACHABLE`);
+    return;
+  }
+
+  console.log(`  Status: CONNECTED (${config.user}@${config.host})`);
+
+  // Check for GCP screen sessions
+  let screens = "";
+  try {
+    screens = sshCmd(config, "screen -ls 2>/dev/null | grep 'gcp-chunk' || echo ''", 5000).trim();
+  } catch { /* ignore */ }
+
+  const hasScreen = screens.length > 0 && !screens.startsWith("No Sockets");
+
+  // Check if hashcat is running
+  const hcRunning = isHashcatRunning(config);
+
+  if (!hasScreen && !hcRunning) {
+    console.log(`  hashcat: IDLE (no active chunks)`);
+
+    // Show last completed chunk for context
+    if (completedCount > 0 && pendingCount > 0) {
+      const nextChunkIdx = Math.floor(completedCount / DEFAULT_BATCHES_PER_CHUNK) + 1;
+      console.log(`  Next chunk: ${chunkName(nextChunkIdx)} (${pendingCount} batches remaining)`);
+    }
+    return;
+  }
+
+  // Active session found — get details
+  if (hasScreen) {
+    // Extract chunk name from screen session (e.g., "gcp-chunk-042")
+    const match = screens.match(/gcp-(chunk-\d+)/);
+    const activeChunk = match ? match[1] : "unknown";
+    console.log(`  Screen: ${match ? `gcp-${activeChunk}` : screens.split("\t")[1]?.trim() || screens}`);
+
+    const cn = activeChunk;
+    const logFile = `${config.workDir}/hashcat-${cn}.log`;
+    const potPath = `${config.workDir}/potfiles/${cn}.pot`;
+
+    // Potfile cracks
+    let potCount = 0;
+    try {
+      potCount = parseInt(sshCmd(config, `test -f ${potPath} && wc -l < ${potPath} || echo 0`, 5000)) || 0;
+    } catch { /* ignore */ }
+    console.log(`  Cracks: ${potCount.toLocaleString()}`);
+
+    // Progress from log
+    try {
+      const progressLine = sshCmd(config, `grep '^Progress' ${logFile} 2>/dev/null | tail -1`, 5000).trim();
+      if (progressLine) console.log(`  ${progressLine}`);
+    } catch { /* ignore */ }
+
+    // Speed from log
+    try {
+      const speedLine = sshCmd(config, `grep '^Speed' ${logFile} 2>/dev/null | tail -1`, 5000).trim();
+      if (speedLine) console.log(`  ${speedLine}`);
+    } catch { /* ignore */ }
+
+    // ETA from log
+    try {
+      const etaLine = sshCmd(config, `grep '^Time.Estimated' ${logFile} 2>/dev/null | tail -1`, 5000).trim();
+      if (etaLine) console.log(`  ${etaLine}`);
+    } catch { /* ignore */ }
+
+    // Hash target info
+    try {
+      const hashLine = sshCmd(config, `grep '^Hash.Target' ${logFile} 2>/dev/null | tail -1`, 5000).trim();
+      if (hashLine) console.log(`  ${hashLine}`);
+    } catch { /* ignore */ }
+  } else if (hcRunning) {
+    console.log(`  hashcat: RUNNING (no GCP screen detected — may be manual run)`);
+  }
+
+  // GPU stats (temp + utilization)
+  try {
+    const gpuInfo = sshCmd(config, "nvidia-smi --query-gpu=temperature.gpu,utilization.gpu --format=csv,noheader,nounits 2>/dev/null || echo ''", 5000).trim();
+    if (gpuInfo && gpuInfo !== "") {
+      const [temp, util] = gpuInfo.split(",").map(s => s.trim());
+      console.log(`  GPU: ${util}% utilization, ${temp}°C`);
+    }
+  } catch { /* ignore */ }
 }
 
 // =============================================================================
@@ -798,7 +900,7 @@ if (import.meta.main) {
         console.log(`
 GravelChunkProcessor - Chunked Stage 1: ALL GRAVEL → PEARLS + SAND
 
-Processes all gravel batches in VRAM-optimal chunks (default: 10 batches = 5M hashes).
+Processes all gravel batches in VRAM-optimal chunks (default: 14 batches = 7M hashes).
 Runs nocap.txt × nocap.rule on each chunk, distributes results to per-batch PEARLS + SAND.
 
 Usage:
@@ -808,12 +910,12 @@ Usage:
   bun Tools/GravelChunkProcessor.ts --collect-chunk 1         Re-collect chunk 1 (fallback)
   bun Tools/GravelChunkProcessor.ts --batches-per-chunk 20    Override chunk size
 
-Why 10 batches per chunk?
-  RTX 4060 Ti bitmap table overflows above 5M SHA-1 hashes.
-  At 10M hashes, speed drops to 34%. At 54M, it's 2.2%.
-  10 batches (5M) stays fast while saving ~10x vs per-batch processing.
+Why 14 batches per chunk?
+  Dict+rules (nocap.txt × nocap.rule) runs at ~4.3 GH/s on RTX 4060 Ti.
+  Hash-lookup stays above 4.3 GH/s up to ~8M hashes, so 7M (14 batches)
+  has zero speed penalty. More batches per chunk = fewer hashcat startups.
 
-Expected: ~30% crack rate, ~15 hours for all 4,328 batches.
+Expected: ~30% crack rate, ~20 hours for all 4,328 batches.
 Pipeline: GRAVEL → [GravelChunkProcessor] → PEARLS + SAND → [BigRedRunner Stage 2] → DIAMONDS + GLASS
 `);
         process.exit(0);
