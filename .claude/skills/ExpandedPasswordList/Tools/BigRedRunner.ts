@@ -13,7 +13,7 @@
  *   bun Tools/BigRedRunner.ts --batch 8 --dry-run      Preview commands without executing
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-27 — v7.7 attack order (35 attacks, +reverse hybrids -a 7, +combinators -a 1)
+ * @updated 2026-03-02 — v7.9 attack order (35 attacks, removed brute-1/brute-2)
  * @license MIT
  */
 
@@ -53,8 +53,7 @@ const FILE_MAP: Record<string, string> = {
  * but we only need the attackCmd string for translation.
  */
 const ATTACK_CMDS: Record<string, string> = {
-  "brute-1":                       "#HL# -a 3 ?a",
-  "brute-2":                       "#HL# -a 3 ?a?a",
+  // brute-1, brute-2: REMOVED v7.9 — 0 cracks, can't survive Stage 1
   "brute-3":                       "#HL# -a 3 ?a?a?a",
   "brute-4":                       "#HL# -a 3 ?a?a?a?a",
   "brute-5":                       "#HL# -a 3 ?a?a?a?a?a",
@@ -342,7 +341,7 @@ function runAttack(
 
   // Verify hashcat actually started (check both process AND screen)
   if (!isHashcatRunning(config) && !isScreenAlive(config, screenName)) {
-    // Fast attacks (brute-1 through brute-5, small masks) can complete in <3 seconds.
+    // Fast attacks (brute-3 through brute-5, small masks) can complete in <3 seconds.
     // Check if the log shows a completed run before declaring failure.
     if (isLogComplete(config, logFile)) {
       // hashcat already finished — this is success, not failure
@@ -596,8 +595,9 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
   console.log(`  Saved: ${localPotPath}`);
 
   // Parse potfile: format is hash:plain (one per line)
+  // Do NOT .trim() — trailing spaces in passwords are real data
   const potContent = readFileSync(localPotPath, "utf-8");
-  const lines = potContent.trim().split("\n").filter(l => l.includes(":"));
+  const lines = potContent.split("\n").filter(l => l.includes(":"));
 
   const parsedPairs: { hash: string; plain: string }[] = [];
   const passwords: string[] = [];
@@ -607,7 +607,7 @@ async function collectResults(config: BigRedConfig, batchName: string): Promise<
     if (colonIdx < 0) continue;
 
     const hash = line.slice(0, colonIdx).trim();
-    const plain = decodeHexPlain(line.slice(colonIdx + 1));
+    const plain = decodeHexPlain(line.slice(colonIdx + 1).replace(/\r$/, ""));
 
     // Validate SHA-1 hash format
     if (/^[a-fA-F0-9]{40}$/.test(hash)) {
@@ -801,8 +801,9 @@ function preflight(config: BigRedConfig, batchName: string, attacks: string[], b
       if (cmd.includes(filename)) {
         const remotePath = `${config.workDir}/${FILE_MAP[filename]}`;
         try {
-          const size = sshCmd(config, `stat -c %s ${remotePath} 2>/dev/null || echo 0`);
-          if (parseInt(size) === 0) {
+          // Use test -e to check existence — 0-byte files are valid (empty feedback bootstrap)
+          const exists = sshCmd(config, `test -e ${remotePath} && echo 1 || echo 0`);
+          if (parseInt(exists) === 0) {
             missingFiles.add(filename);
           }
         } catch {

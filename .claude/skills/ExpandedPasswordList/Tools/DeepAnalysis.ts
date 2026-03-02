@@ -11,6 +11,7 @@
  *   bun Tools/DeepAnalysis.ts --roots       Root source attribution
  *   bun Tools/DeepAnalysis.ts --long        9+ char deep dive
  *   bun Tools/DeepAnalysis.ts --feedback    Feedback loop health metrics
+ *   bun Tools/DeepAnalysis.ts --beta        Per-root crack attribution for BETA.txt
  *   bun Tools/DeepAnalysis.ts --full        All sections
  *
  * READ-ONLY: Never modifies any data files.
@@ -777,6 +778,238 @@ async function analyzeFeedback(): Promise<void> {
 }
 
 // =============================================================================
+// Section 6: BETA.txt Root Attribution
+// =============================================================================
+
+const DISCOVERED_ROOTS_PATH = resolve(FEEDBACK_DIR, "discovered-roots.txt");
+const MIN_ROOT_LENGTH = 4;
+
+async function analyzeBetaRoots(batchNum?: number): Promise<void> {
+  console.log("\n══════════════════════════════════════════════════════════════");
+  console.log("  SECTION 6: BETA.txt ROOT ATTRIBUTION" + (batchNum != null ? ` (batch-${String(batchNum).padStart(4, "0")} only)` : ""));
+  console.log("══════════════════════════════════════════════════════════════\n");
+
+  // Determine diamond source: per-batch password file or combined JSONL
+  let diamondSource: string;
+  let isBatchFile = false;
+  if (batchNum != null) {
+    const batchFile = resolve(DIAMONDS_DIR, `passwords-batch-${String(batchNum).padStart(4, "0")}.txt`);
+    if (!existsSync(batchFile)) {
+      console.log("  ERROR: Batch password file not found at " + batchFile);
+      return;
+    }
+    diamondSource = batchFile;
+    isBatchFile = true;
+  } else {
+    if (!existsSync(DIAMONDS_JSONL)) {
+      console.log("  ERROR: Diamonds JSONL not found at " + DIAMONDS_JSONL);
+      return;
+    }
+    diamondSource = DIAMONDS_JSONL;
+  }
+
+  if (!existsSync(BETA_PATH)) {
+    console.log("  ERROR: BETA.txt not found at " + BETA_PATH);
+    return;
+  }
+
+  // 1. Load BETA.txt into Set (lowercased)
+  console.log("  Loading BETA.txt...");
+  const betaSet = await loadWordSet(BETA_PATH);
+  console.log(`    BETA.txt: ${formatNum(betaSet.size)} roots`);
+
+  // 2. Build source map: for each BETA root, where did it come from?
+  console.log("  Building source map...");
+  const discoveredSet = new Set<string>();
+  if (existsSync(DISCOVERED_ROOTS_PATH)) {
+    const rl = createInterface({ input: createReadStream(DISCOVERED_ROOTS_PATH), crlfDelay: Infinity });
+    for await (const line of rl) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) discoveredSet.add(trimmed.toLowerCase());
+    }
+    console.log(`    discovered-roots.txt: ${formatNum(discoveredSet.size)} roots`);
+  }
+
+  // Load cohort files → Map<word, cohortName>
+  const cohortMembership = new Map<string, string>();
+  if (existsSync(COHORTS_DIR)) {
+    const cohortFiles = readdirSync(COHORTS_DIR).filter(f => f.endsWith(".txt"));
+    for (const file of cohortFiles) {
+      const name = file.replace(".txt", "");
+      const filePath = resolve(COHORTS_DIR, file);
+      const words = await loadWordSet(filePath);
+      for (const word of words) {
+        if (!cohortMembership.has(word)) {
+          cohortMembership.set(word, name);
+        }
+      }
+      console.log(`    cohort/${name}: ${formatNum(words.size)} words`);
+    }
+  }
+
+  // Build rootSource for every BETA root
+  const rootSource = new Map<string, string>();
+  for (const root of betaSet) {
+    if (discoveredSet.has(root)) {
+      rootSource.set(root, "discovered");
+    } else if (cohortMembership.has(root)) {
+      rootSource.set(root, `cohort:${cohortMembership.get(root)!}`);
+    } else {
+      rootSource.set(root, "unknown");
+    }
+  }
+
+  // 3. Stream diamonds, attribute each to a BETA root via longest-prefix match
+  console.log(`  Streaming diamonds from ${isBatchFile ? "batch file" : "combined JSONL"}...`);
+  const rootCracks = new Map<string, number>();
+  let totalDiamonds = 0;
+  let totalAttributed = 0;
+
+  // Stream passwords from either JSONL or plain-text batch file
+  async function* streamPasswords(): AsyncGenerator<string> {
+    if (isBatchFile) {
+      // Plain text: one password per line — strip \r only, preserve spaces
+      const rl = createInterface({ input: createReadStream(diamondSource), crlfDelay: Infinity });
+      for await (const line of rl) {
+        const clean = line.replace(/\r$/, "");
+        if (clean.length > 0) yield clean;
+      }
+    } else {
+      yield* streamDiamondPasswords(diamondSource);
+    }
+  }
+
+  for await (const pw of streamPasswords()) {
+    totalDiamonds++;
+    const lower = pw.toLowerCase();
+
+    // Greedy longest-prefix match against BETA-only Set
+    for (let len = lower.length; len >= MIN_ROOT_LENGTH; len--) {
+      const candidate = lower.slice(0, len);
+      if (betaSet.has(candidate)) {
+        rootCracks.set(candidate, (rootCracks.get(candidate) ?? 0) + 1);
+        totalAttributed++;
+        break;
+      }
+    }
+  }
+
+  console.log(`    Diamonds streamed: ${formatNum(totalDiamonds)}`);
+  console.log(`    Attributed to BETA roots: ${formatNum(totalAttributed)}`);
+
+  // 4. Aggregate and report
+
+  // Coverage summary
+  let rootsWithCracks = 0;
+  let rootsWithZero = 0;
+  for (const root of betaSet) {
+    if ((rootCracks.get(root) ?? 0) > 0) rootsWithCracks++;
+    else rootsWithZero++;
+  }
+
+  console.log(`\n  COVERAGE SUMMARY`);
+  console.log(`  Total BETA.txt roots:   ${formatNum(betaSet.size)}`);
+  console.log(`  Roots with ≥1 crack:    ${formatNum(rootsWithCracks)} (${pct(rootsWithCracks, betaSet.size)})`);
+  console.log(`  Roots with 0 cracks:    ${formatNum(rootsWithZero)} (${pct(rootsWithZero, betaSet.size)})`);
+  console.log(`  Total attributions:     ${formatNum(totalAttributed)}`);
+
+  // Top 50 roots by crack count
+  const sortedRoots = Array.from(betaSet)
+    .map(root => ({ root, cracks: rootCracks.get(root) ?? 0, source: rootSource.get(root) ?? "unknown" }))
+    .filter(r => r.cracks > 0)
+    .sort((a, b) => b.cracks - a.cracks);
+
+  console.log(`\n  TOP 50 ROOTS BY CRACK COUNT`);
+  console.log(
+    "  " + pad("Root", 24) + pad("Source", 28) + pad("Cracks", 10, "right") + pad("Cum%", 8, "right")
+  );
+  console.log("  " + "─".repeat(70));
+
+  let cumCracks = 0;
+  for (const entry of sortedRoots.slice(0, 50)) {
+    cumCracks += entry.cracks;
+    const displayRoot = entry.root.length > 22 ? entry.root.slice(0, 19) + "..." : entry.root;
+    const displaySource = entry.source.length > 26 ? entry.source.slice(0, 23) + "..." : entry.source;
+    console.log(
+      "  " + pad(displayRoot, 24) +
+      pad(displaySource, 28) +
+      pad(formatNum(entry.cracks), 10, "right") +
+      pad(pct(cumCracks, totalAttributed), 8, "right")
+    );
+  }
+
+  // Cohort ROI
+  const cohortStats = new Map<string, { roots: number; cracking: number; dead: number; totalCracks: number }>();
+  for (const root of betaSet) {
+    const source = rootSource.get(root) ?? "unknown";
+    if (!cohortStats.has(source)) {
+      cohortStats.set(source, { roots: 0, cracking: 0, dead: 0, totalCracks: 0 });
+    }
+    const stats = cohortStats.get(source)!;
+    stats.roots++;
+    const cracks = rootCracks.get(root) ?? 0;
+    stats.totalCracks += cracks;
+    if (cracks > 0) stats.cracking++;
+    else stats.dead++;
+  }
+
+  console.log(`\n  COHORT ROI`);
+  console.log(
+    "  " + pad("Source", 28) + pad("Roots", 8, "right") + pad("Cracking", 10, "right") +
+    pad("Dead", 8, "right") + pad("Avg Cr/Root", 12, "right")
+  );
+  console.log("  " + "─".repeat(66));
+
+  const sortedCohorts = Array.from(cohortStats.entries())
+    .sort(([, a], [, b]) => {
+      const avgA = a.roots > 0 ? a.totalCracks / a.roots : 0;
+      const avgB = b.roots > 0 ? b.totalCracks / b.roots : 0;
+      return avgB - avgA;
+    });
+
+  for (const [source, stats] of sortedCohorts) {
+    const avg = stats.roots > 0 ? (stats.totalCracks / stats.roots).toFixed(2) : "0.00";
+    const displaySource = source.length > 26 ? source.slice(0, 23) + "..." : source;
+    console.log(
+      "  " + pad(displaySource, 28) +
+      pad(formatNum(stats.roots), 8, "right") +
+      pad(formatNum(stats.cracking), 10, "right") +
+      pad(formatNum(stats.dead), 8, "right") +
+      pad(avg, 12, "right")
+    );
+  }
+
+  // Concentration analysis
+  if (sortedRoots.length > 0) {
+    const top1pctIdx = Math.max(1, Math.ceil(betaSet.size * 0.01));
+    const top10pctIdx = Math.max(1, Math.ceil(betaSet.size * 0.10));
+    const bottom50pctStart = Math.floor(betaSet.size * 0.50);
+
+    let top1cracks = 0;
+    let top10cracks = 0;
+    for (let i = 0; i < sortedRoots.length; i++) {
+      if (i < top1pctIdx) top1cracks += sortedRoots[i].cracks;
+      if (i < top10pctIdx) top10cracks += sortedRoots[i].cracks;
+    }
+
+    // Bottom 50%: all roots sorted by cracks descending, take the bottom half
+    // This includes all zero-crack roots + the lowest-cracking roots
+    const allRootsSorted = Array.from(betaSet)
+      .map(root => rootCracks.get(root) ?? 0)
+      .sort((a, b) => b - a);
+    let bottom50cracks = 0;
+    for (let i = bottom50pctStart; i < allRootsSorted.length; i++) {
+      bottom50cracks += allRootsSorted[i];
+    }
+
+    console.log(`\n  CONCENTRATION`);
+    console.log(`  Top 1% of roots (${formatNum(top1pctIdx)}) produce ${pct(top1cracks, totalAttributed)} of attributions`);
+    console.log(`  Top 10% of roots (${formatNum(top10pctIdx)}) produce ${pct(top10cracks, totalAttributed)} of attributions`);
+    console.log(`  Bottom 50% of roots (${formatNum(betaSet.size - bottom50pctStart)}) produce ${pct(bottom50cracks, totalAttributed)} of attributions`);
+  }
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -788,8 +1021,20 @@ async function main(): Promise<void> {
   const runRoots = args.includes("--roots") || args.includes("--full");
   const runLong = args.includes("--long") || args.includes("--full");
   const runFeedback = args.includes("--feedback") || args.includes("--full");
+  const runBeta = args.includes("--beta") || args.includes("--full");
 
-  if (!runLength && !runSuffixes && !runRoots && !runLong && !runFeedback) {
+  // Parse --batch N (used with --beta to filter to a single batch)
+  let betaBatchNum: number | undefined;
+  const batchIdx = args.indexOf("--batch");
+  if (batchIdx !== -1 && batchIdx + 1 < args.length) {
+    betaBatchNum = parseInt(args[batchIdx + 1], 10);
+    if (isNaN(betaBatchNum)) {
+      console.error("  ERROR: --batch requires a numeric batch number");
+      process.exit(1);
+    }
+  }
+
+  if (!runLength && !runSuffixes && !runRoots && !runLong && !runFeedback && !runBeta) {
     console.log("DeepAnalysis — Pipeline Feedback Loop & Long Password Analysis\n");
     console.log("Usage:");
     console.log("  bun Tools/DeepAnalysis.ts --length      Length distribution (pearls vs diamonds)");
@@ -797,6 +1042,7 @@ async function main(): Promise<void> {
     console.log("  bun Tools/DeepAnalysis.ts --roots       Root source attribution");
     console.log("  bun Tools/DeepAnalysis.ts --long        9+ char deep dive");
     console.log("  bun Tools/DeepAnalysis.ts --feedback    Feedback loop health metrics");
+    console.log("  bun Tools/DeepAnalysis.ts --beta        Per-root crack attribution for BETA.txt");
     console.log("  bun Tools/DeepAnalysis.ts --full        All sections");
     process.exit(0);
   }
@@ -811,6 +1057,7 @@ async function main(): Promise<void> {
   if (runRoots) await analyzeRoots();
   if (runLong) await analyzeLong();
   if (runFeedback) await analyzeFeedback();
+  if (runBeta) await analyzeBetaRoots(betaBatchNum);
 
   console.log("\n══════════════════════════════════════════════════════════════");
   console.log("  ANALYSIS COMPLETE");

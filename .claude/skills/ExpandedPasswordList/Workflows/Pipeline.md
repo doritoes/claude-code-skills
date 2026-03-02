@@ -29,7 +29,7 @@ hibp-batched/ (raw HIBP data)
   pearls/           sand/ (survivors)
                        |
                        v
-                   [BigRedRunner] ... Stage 2: 35 attacks on BIGRED (v7.7)
+                   [BigRedRunner] ... Stage 2: 35 attacks on BIGRED (v7.9)
                        |                |
                        v                v
                    diamonds/         glass/ (uncrackable)
@@ -180,7 +180,7 @@ bun Tools/BigRedSync.ts --hashlist batch-NNNN
 ### Run the Batch
 
 ```bash
-# Run all attacks sequentially (v7.7: 35 attacks)
+# Run all attacks sequentially (v7.9: 35 attacks)
 bun Tools/BigRedRunner.ts --batch N
 
 # Monitor while running
@@ -322,7 +322,7 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (35 attacks, v7.7 — 2026-02-27)
+## Current Attack List (35 attacks, v7.9 — 2026-02-27)
 
 Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 
@@ -339,19 +339,19 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | 2 | nocapplus-unobtainium | nocap-plus.txt + UNOBTAINIUM.rule | 450 cr/batch |
 | 2 | hybrid-beta-5digit | BETA.txt + ?d^5 | 118 cr/batch, <1s |
 | 2 | hybrid-beta-6digit | BETA.txt + ?d^6 | 359 cr/batch, ~7s |
-| 2 | reverse-nocapplus-3digit | **-a 7** ?d^3 + nocap-plus (prefix) | **596 cr, 14s (2,554 cr/min) (v7.7)** |
-| 2 | reverse-nocapplus-4digit | **-a 7** ?d^4 + nocap-plus (prefix) | **2,759 cr, 28s (5,912 cr/min) (v7.7)** |
-| 2 | reverse-nocapplus-1special | **-a 7** ?s + nocap-plus (prefix) | 44 cr, 13s (203 cr/min) (v7.7) |
-| 2 | combo-beta-beta | **-a 1** BETA × BETA (word+word) | 130 cr, <1s (7,800 cr/min) (v7.7) |
-| 2 | combo-beta-beta-cap | **-a 1** -j c BETA × BETA (Cap+word) | 45 cr, <1s (2,700 cr/min) (v7.7) |
+| 2 | reverse-nocapplus-3digit | **-a 7** ?d^3 + nocap-plus (prefix) | **596 cr, 14s (2,554 cr/min) (v7.9)** |
+| 2 | reverse-nocapplus-4digit | **-a 7** ?d^4 + nocap-plus (prefix) | **2,759 cr, 28s (5,912 cr/min) (v7.9)** |
+| 2 | reverse-nocapplus-1special | **-a 7** ?s + nocap-plus (prefix) | 44 cr, 13s (203 cr/min) (v7.9) |
+| 2 | combo-beta-beta | **-a 1** BETA × BETA (word+word) | 130 cr, <1s (7,800 cr/min) (v7.9) |
+| 2 | combo-beta-beta-cap | **-a 1** -j c BETA × BETA (Cap+word) | 45 cr, <1s (2,700 cr/min) (v7.9) |
 | 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 3,077 cr/batch (5,042 cr/min) |
 | 3 | brute-5 | Exhaustive 5 chars | 976 cr/batch |
 | 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 640 cr/batch |
 | 3 | mask-Ullllllldd | Cap + 7 lower + 2 digits (10-char) | 1,075 cr/batch, ~32 min |
-| 3 | combo-beta-nocapplus-cap | **-a 1** -j c BETA × nocap-plus | **1,350 cr, 2.2m (614 cr/min) (v7.7)** |
+| 3 | combo-beta-nocapplus-cap | **-a 1** -j c BETA × nocap-plus | **1,350 cr, 2.2m (614 cr/min) (v7.9)** |
 | 3a | hybrid-nocapplus-5digit | nocap-plus + ?d^5 | 2,970 cr/batch, ~3.8 min (780 cr/min) |
 | 3a | hybrid-nocapplus-3digit-1special | nocap-plus + ?d?d?d?s | 1,549 cr, 2.2 min (704 cr/min) (v7.6) |
-| 3a | combo-beta-nocapplus | **-a 1** BETA × nocap-plus | **1,093 cr, 2.4m (455 cr/min) (v7.7)** |
+| 3a | combo-beta-nocapplus | **-a 1** BETA × nocap-plus | **1,093 cr, 2.4m (455 cr/min) (v7.9)** |
 | 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | 7,311 cr/batch, ~25 min (286 cr/min) |
 | 3a | mask-l9 | ?l^9 — pure lowercase 9-char | ~10 min, 1,699 cr/batch (165 cr/min) |
 | 3a | hybrid-nocapplus-4digit-1special | nocap-plus + ?d?d?d?d?s | 1,324 cr, 19.3 min (68 cr/min) (v7.6) |
@@ -359,9 +359,9 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 | 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 522 cr/batch |
 | 4 | hybrid-nocapplus-special-digits | nocap-plus + special + 3 digits (?s?d?d?d) | 372 cr/batch |
 | 4 | hybrid-nocapplus-digit-1special | nocap-plus + ?d?s | 76 cr/batch, <1s |
-| 4 | reverse-nocapplus-special-3digit | **-a 7** ?s?d^3 + nocap-plus | 34 cr, 64s (32 cr/min) (v7.7) |
+| 4 | reverse-nocapplus-special-3digit | **-a 7** ?s?d^3 + nocap-plus | 34 cr, 64s (32 cr/min) (v7.9) |
 
-**Added in v7.7:** 4 reverse hybrids (-a 7, prefix+word) + 4 combinators (-a 1, word+word). Filled two structural blind spots — all prior attacks were -a 0/3/6 only. Star: reverse-nocapplus-4digit (5,912 cr/min). Total: ~7 min added per batch.
+**Added in v7.9:** 4 reverse hybrids (-a 7, prefix+word) + 4 combinators (-a 1, word+word). Filled two structural blind spots — all prior attacks were -a 0/3/6 only. Star: reverse-nocapplus-4digit (5,912 cr/min). Total: ~7 min added per batch.
 **Added in v7.6:** hybrid-nocapplus-3digit-1special, 4digit-1special. Removed: digit-2special (0 cr), digit-3special (3.2 cr/min).
 **Added in v7.4:** mask-d9/d10/d11/d12 — Tier 0 pure digit masks (<2 min combined).
 **Removed in v7.3:** mask-lllllldd, mask-lllldddd (0 cracks post-v7.0, subsumed by mask-l8/ld8).

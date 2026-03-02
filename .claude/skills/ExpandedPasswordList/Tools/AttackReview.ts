@@ -14,7 +14,7 @@
  * READ-ONLY: Never modifies sand-state.json, DEFAULT_ATTACK_ORDER, or any files.
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-27 — v7.7 tiers (35 attacks, +reverse hybrids -a 7, +combinators -a 1)
+ * @updated 2026-03-02 — v7.9 tiers (35 attacks, removed brute-1/brute-2)
  * @license MIT
  */
 
@@ -30,7 +30,7 @@ import { DATA_DIR, DIAMONDS_DIR, FEEDBACK_DIR } from "./config";
 // =============================================================================
 
 const TIER_MAP: Record<string, number> = {
-  "brute-1": 0, "brute-2": 0, "brute-3": 0, "brute-4": 0,
+  "brute-3": 0, "brute-4": 0,
   "mask-d9": 0, "mask-d10": 0, "mask-d11": 0, "mask-d12": 0,
   "brute-6": 1, "brute-7": 1,
   "mask-l8": 1.5, "mask-ld8": 1.5,
@@ -258,8 +258,9 @@ async function loadPasswords(filePath: string): Promise<string[]> {
   const passwords: string[] = [];
   const rl = createInterface({ input: createReadStream(filePath, "utf-8"), crlfDelay: Infinity });
   for await (const line of rl) {
-    const trimmed = line.trim();
-    if (trimmed) passwords.push(trimmed);
+    // Strip \r only — passwords may have intentional leading/trailing spaces
+    const clean = line.replace(/\r$/, "");
+    if (clean.length > 0) passwords.push(clean);
   }
   return passwords;
 }

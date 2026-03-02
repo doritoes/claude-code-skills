@@ -6,7 +6,7 @@
  * Pattern adapted from StateManager.ts.
  *
  * @author PAI (Personal AI Infrastructure)
- * @updated 2026-02-27 — v7.6 attack order (27 attacks, targeted digit+special suffix from 12+/3-class analysis)
+ * @updated 2026-03-02 — v7.9 attack order (35 attacks, removed brute-1/brute-2, Gen2 clean start)
  * @license MIT
  */
 
@@ -91,9 +91,9 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.7 (2026-02-27)
-  // Applies to: batch-0026+ | 35 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77.9K), UNOBTAINIUM.rule (266)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.9 (2026-03-02)
+  // Applies to: Gen2 batch-0001+ | 35 attacks
+  // Assets: nocap-plus.txt (13.8M), nocap.rule (48K), BETA.txt (empty bootstrap), UNOBTAINIUM.rule (empty bootstrap)
   // Based on: Gen2 batches 0001-0025 + blind spot experiments (batch-0001)
   // v7.7: ADD reverse hybrids (-a 7) and combinators (-a 1) — 8 new attacks, ~7 min added
   //       Blind spots: ALL prior hybrids were -a 6 (word+suffix). No prefix or word+word attacks.
@@ -173,8 +173,8 @@ export const DEFAULT_ATTACK_ORDER = [
   // ✗ hybrid-roots-4any        - 0 cracks across 3 batches (0012-0014). top-roots.txt too niche. REMOVED v7.0.
   // ✗ nocapplus-nocaprule      - 1.6 cracks/batch across 14 batches. Redundant with other combos. REMOVED v7.0.
   // ✗ hybrid-nocapplus-3digit  - 0.7 cracks/batch. Subsumed by hybrid-nocapplus-3any (?a^3 > ?d^3). REMOVED v7.0.
-  // ✗ brute-1                  - 0 cracks across 4 Gen2 batches. 1-char passwords can't survive Stage 1.
-  // ✗ brute-2                  - 0 cracks across 4 Gen2 batches. 2-char passwords can't survive Stage 1.
+  // ✗ brute-1                  - 0 cracks across 4 Gen2 batches. 1-2 char passwords can't survive Stage 1 (nocap.txt × nocap.rule). REMOVED v7.9.
+  // ✗ brute-2                  - 0 cracks across 4 Gen2 batches. REMOVED v7.9.
   // ✗ mask-dddddddd            - Redundant (covered by brute-7)
   // ✗ newwords-rizzyou-*       - GenZ words ineffective on SAND (<0.2%)
   // ✗ newwords-nocap-genz      - Superseded by nocapplus-nocaprule
