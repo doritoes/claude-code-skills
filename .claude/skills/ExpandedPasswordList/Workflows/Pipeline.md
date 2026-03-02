@@ -1,6 +1,6 @@
 # Gen2 Pipeline — End-to-End Workflow
 
-**Last Updated:** 2026-02-27
+**Last Updated:** 2026-03-02
 **Platform:** BIGRED (local RTX 4060 Ti, 192.168.99.204)
 
 ---
@@ -62,7 +62,7 @@ hibp-batched/ (raw HIBP data)
 | `BatchRunner.ts` | **Stage 2 orchestrator** (sync → attacks → collect → feedback → rebuild) | `--batch N`, `--through M`, `--next`, `--count N`, `--resume`, `--status` |
 | `BigRedSync.ts` | Sync wordlists/rules/hashlists to BIGRED | `--hashlist batch-NNNN` |
 | `BigRedRunner.ts` | Stage 2 cracking (sand → diamonds + glass) | `--batch N`, `--collect`, `--status`, `--attack NAME`, `--dry-run` |
-| `DiamondFeedback.ts` | Analyze diamonds, classify cohorts, generate feedback | `--batch batch-NNNN`, `--full`, `--analyze <file>` |
+| `DiamondFeedback.ts` | Analyze diamonds, classify cohorts, generate feedback (noise-filtered) | `--batch batch-NNNN`, `--full`, `--analyze <file>`, `--dry-run` |
 | `AttackReview.ts` | Attack ROI analysis + recommendations | `--batch batch-NNNN`, `--overlap`, `--json` |
 | `SandStateManager.ts` | State inspection/validation | `--stats`, `--validate`, `--json` |
 | `config.ts` | Shared paths (DATA_DIR, DIAMONDS_DIR, etc.) | — |
@@ -170,17 +170,13 @@ bun Tools/BatchRunner.ts --batch 1 --through 10 --confirm
 
 Use these when you need fine-grained control or debugging.
 
-### Pre-Submission (one command)
-
-```bash
-# Syncs all attack files (md5 compare, uploads only changes) + uploads hashlist
-bun Tools/BigRedSync.ts --hashlist batch-NNNN
-```
-
 ### Run the Batch
+
+BigRedRunner auto-syncs all attack files + hashlist during preflight (md5 compare, uploads only changes). No separate sync step needed.
 
 ```bash
 # Run all attacks sequentially (v7.9: 35 attacks)
+# Preflight auto-syncs wordlists, rules, and hashlist to BIGRED
 bun Tools/BigRedRunner.ts --batch N
 
 # Monitor while running
@@ -220,7 +216,7 @@ bun Tools/DiamondFeedback.ts --batch batch-NNNN
 # Add --full for HIBP validation, cohort growth, and cohort-report.md
 
 # Step 3: Rebuild nocap-plus.txt (cohort files may have changed)
-"C:/Program Files/Python312/python.exe" scripts/rebuild-nocap-plus.py
+cat data/nocap.txt data/cohorts/*.txt | sort -u > data/nocap-plus.txt
 
 # Step 4: Review attack effectiveness
 bun Tools/AttackReview.ts
@@ -313,12 +309,11 @@ bun Tools/AttackReview.ts --json
 ## Phase 6: Prep for Next Batch
 
 ```bash
-# 1. Sync attack files + upload hashlist (one command)
-bun Tools/BigRedSync.ts --hashlist batch-NNNN
-
-# 2. Submit next batch
+# BigRedRunner auto-syncs attack files + hashlist during preflight
 bun Tools/BigRedRunner.ts --batch N
 ```
+
+**Note:** BigRedSync can still be used standalone for manual sync/inspection: `bun Tools/BigRedSync.ts --hashlist batch-NNNN`
 
 ---
 
@@ -379,13 +374,14 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`:
 |------|----------|-------------|
 | `nocap.txt` | `data/nocap.txt` | rockyou + rizzyou baseline (13.8M words) |
 | `nocap-plus.txt` | `data/nocap-plus.txt` | nocap + all cohort files (14.4M words) |
-| `nocap.rule` | `data/nocap.rule` | 48K rules (OneRuleToRuleThemStill equivalent) |
-| `BETA.txt` | `data/feedback/BETA.txt` | Discovered roots from diamonds (~77K words) |
-| `unobtainium.rule` | `data/feedback/unobtainium.rule` | Learned rules from diamond patterns (234 rules) |
-| `top-roots.txt` | `data/feedback/top-roots.txt` | Curated top 1K roots for long-password discovery |
+| `nocap.rule` | `data/nocap.rule` | 48,428 rules (OneRuleToRuleThemStill + 14 bussin.rule). Rebuild: `bun scripts/build-nocap-rule.ts` |
+| `bussin.rule` | `data/feedback/bussin.rule` | 14 rules NOT in OneRule (source for nocap.rule build) |
+| `BETA.txt` | `data/feedback/BETA.txt` | Discovered roots from diamonds (rebuilds each batch via DiamondFeedback) |
+| `unobtainium.rule` | `data/feedback/unobtainium.rule` | 253 rules: auto-generated + deep analysis + manual v7.2 |
 | `sand-state.json` | `data/sand-state.json` | Stage 2 state (batches, attack results, feedback metrics) |
 | `gravel-state.json` | `data/gravel-state.json` | Stage 1 state |
-| Cohort files | `data/cohorts/*.txt` | 12 language/cultural wordlists (52.8K+ words) |
+| Cohort files | `data/cohorts/*.txt` | 12 language/cultural wordlists (78K words) |
+| `build-nocap-rule.ts` | `scripts/build-nocap-rule.ts` | Builds nocap.rule from OneRule + bussin at performance-correct positions |
 
 ---
 

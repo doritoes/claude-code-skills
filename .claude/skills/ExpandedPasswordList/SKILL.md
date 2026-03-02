@@ -29,7 +29,7 @@ Research pipeline to study password cracking effectiveness and improve tools.
 - **Stage 1 COMPLETE** (2026-02-20): All 4,328 GRAVEL batches processed
   - 644,544,278 PEARLS (29.99% crack rate) via nocap.txt + nocap.rule
   - 1,504,909,773 SAND remaining for Stage 2
-- **Stage 2**: 12 Gen1 batches completed (266,637 diamonds, ~6.5% per batch), Gen2 pending
+- **Stage 2**: 22 Gen1 batches completed, Gen2 in progress (noise-filtered DiamondFeedback)
 - **HIBP Top 1000 Coverage**: nocap.txt + nocap.rule cracks **950/1000 (95.0%)** of the most frequently breached passwords
   - 50 uncracked hashes saved to `data/hibp-top1000-uncracked.txt` for future analysis
 - Every batch teaches us something. Every crack is a data point.
@@ -125,8 +125,8 @@ bun Tools/PipelineMonitor.ts --quick
 ## Nomenclature
 
 ```
-ROCKS       →  Full HIBP Pwned Passwords (~1B SHA-1 hashes)
-GRAVEL      →  ROCKS minus rockyou.txt matches (~985M hashes)
+ROCKS       →  Full HIBP Pwned Passwords (~2.17B SHA-1 hashes)
+GRAVEL      →  ROCKS minus rockyou.txt matches (~2.15B hashes)
                 │
                 ├──► PEARLS   →  Stage 1 cracked (nocap+nocaprule, ~30%)
                 │

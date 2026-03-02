@@ -4,10 +4,10 @@
 
 | Name | Definition | Size Estimate |
 |------|------------|---------------|
-| **ROCKS** | Full HIBP Pwned Passwords | ~1B SHA-1 hashes |
-| **GRAVEL** | ROCKS minus rockyou.txt matches | ~985M hashes |
-| **PEARLS** | Cracked passwords (Stage 1: dict+rules, ~30%) | ~644M passwords |
-| **SAND** | GRAVEL minus PEARLS (uncracked after Stage 1) | ~835M hashes |
+| **ROCKS** | Full HIBP Pwned Passwords | ~2.17B SHA-1 hashes |
+| **GRAVEL** | ROCKS minus rockyou.txt matches | ~2.15B hashes |
+| **PEARLS** | Cracked passwords (Stage 1: dict+rules, 29.99%) | ~644M passwords |
+| **SAND** | GRAVEL minus PEARLS (uncracked after Stage 1) | ~1.5B hashes |
 | **DIAMONDS** | Cracked passwords from SAND (Stage 2+: escalating attacks) | ~100M passwords |
 | **GLASS** | SAND minus DIAMONDS (uncrackable via rules) | ~735M hashes |
 | **UNOBTAINIUM** | Enhanced rule derived from PEARLS+DIAMONDS analysis | Improved rule file |
@@ -15,13 +15,13 @@
 ### Material Flow
 
 ```
-ROCKS (1B) ──filter──► GRAVEL (985M)
+ROCKS (2.17B) ──filter──► GRAVEL (2.15B)
                            │
                            ▼ Stage 1: dict+rules (~30%)
                            │
               ┌────────────┴────────────┐
               ▼                         ▼
-         PEARLS (644M)             SAND (1.5B)
+         PEARLS (644M)             SAND (1.505B)
               │                         │
               │                         ▼ Stage 2+: Escalating attacks
               │                         │    (best64, dive, hybrid, mask,
@@ -199,39 +199,33 @@ bun Tools/BatchSplitter.ts   # Creates pearls/ and sand/ directories
                     │                               ▼
                     │              ┌─────────────────────────────────┐
                     │              │      STAGE 2+ ESCALATING        │
-                    │              │     (all attacks on SAND)       │
+                    │              │  35 attacks, 5 tiers (v7.9)     │
                     │              └─────────────────────────────────┘
                     │                               │
                     │         ┌─────────────────────┤
                     │         ▼                     ▼
                     │  ┌─────────────┐    ┌─────────────────┐
-                    │  │ Quick Wins  │    │  Rule Stacking  │
-                    │  │ best64,dive │    │  combinator     │
+                    │  │ Brute Force │    │  Dict + Rules   │
+                    │  │ 3-8 chars   │    │  feedback, UNO  │
                     │  └─────────────┘    └─────────────────┘
                     │         │                     │
                     │         ▼                     ▼
                     │  ┌─────────────┐    ┌─────────────────┐
-                    │  │   Hybrid    │    │     Mask        │
-                    │  │  dict+mask  │    │   patterns      │
-                    │  └─────────────┘    └─────────────────┘
-                    │         │                     │
-                    │         ▼                     ▼
-                    │  ┌─────────────┐    ┌─────────────────┐
-                    │  │   PRINCE    │    │    Markov       │
-                    │  │  word-combo │    │   statistical   │
+                    │  │ Mask Patt.  │    │ Hybrid -a 6/7   │
+                    │  │ l8,ld8,d9+  │    │ dict+mask, rev  │
                     │  └─────────────┘    └─────────────────┘
                     │         │                     │
                     │         ▼                     ▼
                     │  ┌─────────────────────────────────────┐
-                    │  │          BRUTE FORCE               │
-                    │  │     1-8+ chars incremental         │
+                    │  │       Combinator (-a 1)            │
+                    │  │   word+word, cap+word combos       │
                     │  └─────────────────────────────────────┘
                     │                     │
                     │     ┌───────────────┴───────────────┐
                     │     ▼                               ▼
                     │  ┌─────────────┐         ┌─────────────────────┐
                     │  │  DIAMONDS   │         │       GLASS         │
-                    │  │  Stage 2+   │         │  Uncrackable via    │
+                    │  │ Stage 2+    │         │  Uncrackable via    │
                     │  │  cracked    │         │  rules - requires   │
                     │  │  passwords  │         │  HIBP cleartext or  │
                     │  │             │         │  rainbow tables     │
@@ -250,30 +244,27 @@ bun Tools/BatchSplitter.ts   # Creates pearls/ and sand/ directories
 
 ## Escalating Attack Stages (Stage 2+)
 
-After Stage 1 (rockyou+OneRule), SAND contains hard passwords that require escalating attacks:
+After Stage 1 (rockyou+OneRule), SAND contains hard passwords that require escalating attacks.
+35 attacks across 5 tiers (v7.9), orchestrated by `BigRedRunner.ts`. See `Workflows/Pipeline.md` for the full attack list.
 
-| Stage | Attack | Description | Expected Yield |
-|-------|--------|-------------|----------------|
-| 2a | best64.rule | 64 most common transformations | ~2-5% |
-| 2b | dive.rule | Deep character substitutions | ~1-3% |
-| 2c | d3ad0ne.rule | L33t speak patterns | ~1-2% |
-| 3a | Hybrid dict+mask | rockyou + ?d?d?d?d | ~1-3% |
-| 3b | Hybrid mask+dict | ?d?d?d?d + rockyou | ~0.5-1% |
-| 4a | Combinator | word+word combinations | ~0.5-1% |
-| 4b | PRINCE | Multi-word combinations | ~0.5-1% |
-| 5 | Mask patterns | Common patterns (?u?l?l?l?l?d?d) | ~0.1-0.5% |
-| 6 | Markov | Statistical character prediction | ~0.1-0.5% |
-| 7 | Brute force | 1-8 char incremental | Very slow |
+| Tier | Attack Types | Examples | Typical Yield |
+|------|-------------|----------|---------------|
+| 0 | Exhaustive short + digit masks | brute-3/4, mask-d9/d10/d11/d12 | ~150 + ~5K cracks, <2 min |
+| 1 | Exhaustive 6-8 char | brute-6/7, mask-l8/ld8 | ~42K cracks, ~115 min |
+| 2 | Feedback + reverse hybrid + combinator | BETA×nocap.rule, -a 7 prefix, -a 1 word+word | ~5K cracks, ~2 min |
+| 3 | Dict+mask hybrids + masks | nocap-plus+digits, Ullllllldd, combinator | ~12K cracks, ~65 min |
+| 3a | Long-password discovery | nocap-plus+5digit, 3any, mask-l9, BETA+4any | ~15K cracks, ~55 min |
+| 4 | Low-yield hybrids | Ullllldd, special+digits | ~1K cracks, ~2 min |
 
-**Attack Priority:** Higher expected yield first, constrained by GPU time.
+**Attack modes used:** -a 0 (dict+rules), -a 3 (mask), -a 6 (hybrid dict+mask), -a 7 (reverse hybrid mask+dict), -a 1 (combinator)
 
-**Tool: SandCracker.ts**
+**Tool: BigRedRunner.ts**
 ```bash
-bun Tools/SandCracker.ts --stage 2a   # Run best64 on all SAND batches
-bun Tools/SandCracker.ts --stage 2b   # Run dive on remaining SAND
+bun Tools/BigRedRunner.ts --batch N          # Run all 35 attacks (auto-syncs files)
+bun Tools/BigRedRunner.ts --batch N --collect # Collect diamonds + glass
 ```
 
-Each stage produces DIAMONDS (cracked) and remaining SAND. After all stages, remaining SAND becomes GLASS.
+Each batch produces DIAMONDS (cracked) and GLASS (survivors). ~4 hrs per batch on RTX 4060 Ti.
 
 ## Memory Efficiency Strategy
 

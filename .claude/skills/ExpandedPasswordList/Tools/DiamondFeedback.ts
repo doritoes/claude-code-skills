@@ -34,7 +34,7 @@ const DIAMONDS_DIR = resolve(DATA_DIR, "diamonds");
 const FEEDBACK_DIR = resolve(DATA_DIR, "feedback");
 
 // Thresholds
-const MIN_ROOT_LENGTH = 3;
+const MIN_ROOT_LENGTH = 4;
 const MIN_ROOT_FREQUENCY = 2;
 const MIN_PATTERN_FREQUENCY = 5;
 const MIN_SUFFIX_FREQUENCY = 3;
@@ -337,6 +337,27 @@ function entropyPerChar(s: string): number {
 }
 
 /**
+ * Count the maximum run of consecutive consonants in a string.
+ * Vowels: a, e, i, o, u, y. Everything else (a-z) is a consonant.
+ * Non-alpha characters reset the run.
+ * Examples: "bdjkuf" → 4 (bdjk), "bourro" → 2 (rr), "christopher" → 3 (chr)
+ */
+function maxConsecutiveConsonants(s: string): number {
+  const vowels = new Set(["a", "e", "i", "o", "u", "y"]);
+  let maxRun = 0;
+  let currentRun = 0;
+  for (const ch of s.toLowerCase()) {
+    if (ch >= "a" && ch <= "z" && !vowels.has(ch)) {
+      currentRun++;
+      if (currentRun > maxRun) maxRun = currentRun;
+    } else {
+      currentRun = 0;
+    }
+  }
+  return maxRun;
+}
+
+/**
  * Classify a password as structured (word-based) vs random.
  * Returns the full classification including root, suffix, prefix, entropy.
  *
@@ -378,8 +399,9 @@ function classifyPassword(password: string): StructuredPassword {
   const vowelRatio = (root.match(/[aeiouy]/gi) || []).length / root.length;
   const rootEntropy = entropyPerChar(root);
 
-  const isLongRoot = root.length >= 5;
-  const isShortButWordLike = root.length >= 3 && root.length <= 4 && vowelRatio >= 0.25 && rootEntropy < 2.5;
+  const consonantRun = maxConsecutiveConsonants(root);
+  const isLongRoot = root.length >= 5 && vowelRatio >= 0.20 && consonantRun <= 3 && rootEntropy < 3.5;
+  const isShortButWordLike = root.length === 4 && vowelRatio >= 0.25 && rootEntropy < 2.5;
   const isStructured = hasLetterRoot && hasVowels && (isLongRoot || isShortButWordLike);
 
   return { original: password, root, suffix, prefix, isStructured, entropy };
@@ -482,9 +504,9 @@ function patternToRule(pattern: string, count: number): string | null {
   if (pattern === "suffix:123") return "$1 $2 $3";
   if (pattern === "suffix:123-seq") return "$1 $2 $3";
   if (pattern === "suffix:year-recent") return null;
-  if (pattern === "case:capitalize") return "c";
-  if (pattern === "case:upper") return "u";
-  if (pattern === "case:lower") return "l";
+  if (pattern === "case:capitalize") return null; // Too basic for UNOBTAINIUM — already in nocap.rule
+  if (pattern === "case:upper") return null;
+  if (pattern === "case:lower") return null;
   if (pattern === "leet:a") return "sa@";
   if (pattern === "leet:e") return "se3";
   if (pattern === "leet:i") return "si1";
@@ -604,27 +626,29 @@ async function analyzeFile(filePath: string): Promise<AnalysisResult> {
       result.randomCount++;
     }
 
-    // Detect transformation patterns (on all passwords)
-    const patterns = detectPatterns(password);
-    for (const p of patterns) {
-      result.patterns.set(p, (result.patterns.get(p) || 0) + 1);
-    }
+    // Detect transformation patterns (structured passwords only — brute-force noise pollutes rule generation)
+    if (classified.isStructured) {
+      const patterns = detectPatterns(password);
+      for (const p of patterns) {
+        result.patterns.set(p, (result.patterns.get(p) || 0) + 1);
+      }
 
-    // Track actual suffixes (from all passwords, not just structured)
-    const digitSuffix = password.match(/(\d+)$/);
-    if (digitSuffix) {
-      result.suffixes.set(digitSuffix[1], (result.suffixes.get(digitSuffix[1]) || 0) + 1);
-    }
+      // Track actual suffixes (structured only)
+      const digitSuffix = password.match(/(\d+)$/);
+      if (digitSuffix) {
+        result.suffixes.set(digitSuffix[1], (result.suffixes.get(digitSuffix[1]) || 0) + 1);
+      }
 
-    const specialSuffix = password.match(/([!@#$%^&*()]+)$/);
-    if (specialSuffix) {
-      result.suffixes.set(specialSuffix[1], (result.suffixes.get(specialSuffix[1]) || 0) + 1);
-    }
+      const specialSuffix = password.match(/([!@#$%^&*()]+)$/);
+      if (specialSuffix) {
+        result.suffixes.set(specialSuffix[1], (result.suffixes.get(specialSuffix[1]) || 0) + 1);
+      }
 
-    // Track prefixes
-    const digitPrefix = password.match(/^(\d+)/);
-    if (digitPrefix) {
-      result.prefixes.set(digitPrefix[1], (result.prefixes.get(digitPrefix[1]) || 0) + 1);
+      // Track prefixes
+      const digitPrefix = password.match(/^(\d+)/);
+      if (digitPrefix) {
+        result.prefixes.set(digitPrefix[1], (result.prefixes.get(digitPrefix[1]) || 0) + 1);
+      }
     }
   }
 
@@ -768,7 +792,7 @@ async function findNewRoots(
   // Build candidate set from root keys (small, ~14K entries)
   const candidates = new Set<string>();
   for (const [root] of roots) {
-    if (root.length < 3) continue;
+    if (root.length < MIN_ROOT_LENGTH) continue;
     if (/^(qwer|asdf|zxcv|abcd|pass|word|test|admin|user|login|1234)/.test(root)) continue;
     candidates.add(root);
   }
@@ -1423,7 +1447,6 @@ async function generateFeedback(options: {
   candidateRules.add("c $1 $2 $3");
   candidateRules.add("c $!");
   candidateRules.add("l $1 $2 $3");
-  candidateRules.add("u");
   candidateRules.add("sa@ se3 si1 so0");
 
   // Filter out rules already in baseline

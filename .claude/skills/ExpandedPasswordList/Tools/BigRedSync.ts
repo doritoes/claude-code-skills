@@ -145,11 +145,6 @@ function getFileManifest(workDir: string): SyncFile[] {
       remotePath: `${workDir}/wordlists/BETA.txt`,
       description: "BETA.txt (feedback roots)",
     },
-    {
-      localPath: resolve(FEEDBACK_DIR, "top-roots.txt"),
-      remotePath: `${workDir}/wordlists/top-roots.txt`,
-      description: "top-roots.txt (curated top 1K roots for long-password discovery)",
-    },
     // Rules
     {
       localPath: resolve(DATA_DIR, "nocap.rule"),
@@ -369,4 +364,4 @@ Configuration: .env (BIGRED_HOST, BIGRED_USER, BIGRED_SSH_KEY, BIGRED_WORK_DIR)
   }
 }
 
-export { loadConfig, sshCmd, scpUpload, scpDownload, type BigRedConfig };
+export { loadConfig, sshCmd, scpUpload, scpDownload, getFileManifest, syncFile, syncHashlist, type BigRedConfig, type SyncFile };

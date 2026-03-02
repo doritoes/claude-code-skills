@@ -23,7 +23,7 @@ import { gunzipSync } from "node:zlib";
 import { execSync } from "node:child_process";
 import { SandStateManager, DEFAULT_ATTACK_ORDER, type AttackResultEntry } from "./SandStateManager";
 import { DATA_DIR, SAND_DIR, DIAMONDS_DIR, GLASS_DIR, HASH_TYPE_SHA1, decodeHexPlain } from "./config";
-import { loadConfig, sshCmd, scpDownload, type BigRedConfig } from "./BigRedSync";
+import { loadConfig, sshCmd, scpDownload, getFileManifest, syncFile, syncHashlist, type BigRedConfig } from "./BigRedSync";
 
 // =============================================================================
 // Constants
@@ -40,12 +40,9 @@ const FILE_MAP: Record<string, string> = {
   "nocap.txt":        "wordlists/nocap.txt",
   "nocap-plus.txt":   "wordlists/nocap-plus.txt",
   "BETA.txt":         "wordlists/BETA.txt",
-  "rizzyou.txt":      "wordlists/rizzyou.txt",
   "nocap.rule":       "rules/nocap.rule",
   "UNOBTAINUM.rule":  "rules/UNOBTAINIUM.rule",
-  "bussin.rule":      "rules/bussin.rule",
   "OneRuleToRuleThemStill.rule": "rules/OneRuleToRuleThemStill.rule",
-  "top-roots.txt":    "wordlists/top-roots.txt",
 };
 
 /**
@@ -748,7 +745,7 @@ function loadSandBatch(batchName: string): string[] | null {
 // Pre-flight Checks
 // =============================================================================
 
-function preflight(config: BigRedConfig, batchName: string, attacks: string[], batchState?: import("./SandStateManager").BatchState): boolean {
+async function preflight(config: BigRedConfig, batchName: string, attacks: string[], batchState?: import("./SandStateManager").BatchState): Promise<boolean> {
   console.log("\n--- PRE-FLIGHT CHECKS ---");
 
   // 0. Clean stale worker state for fresh batches
@@ -774,54 +771,49 @@ function preflight(config: BigRedConfig, batchName: string, attacks: string[], b
     }
   } catch { /* non-fatal */ }
 
-  // 1. Check hashlist exists on BIGRED
-  const hashlistPath = `${config.workDir}/hashlists/${batchName}.txt`;
+  // 1. Sync attack files (md5 compare, upload changes)
+  console.log(`  Syncing attack files...`);
+  const manifest = getFileManifest(config.workDir);
+  let syncErrors = 0;
+  let uploaded = 0;
+  for (const file of manifest) {
+    try {
+      const changed = await syncFile(config, file, false);
+      if (changed) uploaded++;
+    } catch (e) {
+      console.error(`  SYNC FAIL: ${file.description} — ${(e as Error).message}`);
+      syncErrors++;
+    }
+  }
+  if (syncErrors > 0) {
+    console.error(`FAIL: ${syncErrors} file(s) failed to sync.`);
+    return false;
+  }
+  if (uploaded > 0) {
+    console.log(`  ${uploaded} file(s) synced to BIGRED.`);
+  } else {
+    console.log(`  All attack files up to date.`);
+  }
+
+  // 2. Sync hashlist
   try {
-    const size = sshCmd(config, `stat -c %s ${hashlistPath} 2>/dev/null || echo 0`);
-    if (parseInt(size) === 0) {
-      console.error(`FAIL: Hashlist not found on BIGRED: ${hashlistPath}`);
-      console.error(`  Fix: bun Tools/BigRedSync.ts --hashlist ${batchName}`);
-      return false;
-    }
-    const lines = sshCmd(config, `wc -l < ${hashlistPath}`);
-    console.log(`  Hashlist: ${parseInt(lines).toLocaleString()} hashes (${formatSize(parseInt(size))})`);
-  } catch (e) {
-    console.error(`FAIL: Cannot check hashlist: ${(e as Error).message}`);
-    return false;
-  }
-
-  // 2. Check required files exist for each attack
-  const missingFiles = new Set<string>();
-  for (const attack of attacks) {
-    const cmd = ATTACK_CMDS[attack];
-    if (!cmd) continue;
-
-    // Find filenames in the command
-    for (const filename of Object.keys(FILE_MAP)) {
-      if (cmd.includes(filename)) {
-        const remotePath = `${config.workDir}/${FILE_MAP[filename]}`;
-        try {
-          // Use test -e to check existence — 0-byte files are valid (empty feedback bootstrap)
-          const exists = sshCmd(config, `test -e ${remotePath} && echo 1 || echo 0`);
-          if (parseInt(exists) === 0) {
-            missingFiles.add(filename);
-          }
-        } catch {
-          missingFiles.add(filename);
-        }
+    const synced = await syncHashlist(config, batchName);
+    if (!synced) {
+      // syncHashlist returns false if file not found locally
+      const hashlistPath = `${config.workDir}/hashlists/${batchName}.txt`;
+      const size = sshCmd(config, `stat -c %s ${hashlistPath} 2>/dev/null || echo 0`);
+      if (parseInt(size) === 0) {
+        console.error(`FAIL: Hashlist not found locally or on BIGRED: ${batchName}`);
+        return false;
       }
+      // Already on BIGRED from a previous run
+      const lines = sshCmd(config, `wc -l < ${hashlistPath}`);
+      console.log(`  Hashlist: ${parseInt(lines).toLocaleString()} hashes (already on BIGRED)`);
     }
-  }
-
-  if (missingFiles.size > 0) {
-    console.error(`FAIL: Missing files on BIGRED:`);
-    for (const f of missingFiles) {
-      console.error(`  - ${f}`);
-    }
-    console.error(`  Fix: bun Tools/BigRedSync.ts --force`);
+  } catch (e) {
+    console.error(`FAIL: Hashlist sync error: ${(e as Error).message}`);
     return false;
   }
-  console.log(`  Attack files: All present`);
 
   // 3. Check no hashcat already running
   if (isHashcatRunning(config)) {
@@ -960,7 +952,7 @@ Attack order: ${DEFAULT_ATTACK_ORDER.join(" → ")}
 
     // Pre-flight (pass batchState so preflight can detect fresh vs resume)
     if (!dryRun) {
-      if (!preflight(config, batchName, attacksToRun, batchState ?? undefined)) {
+      if (!await preflight(config, batchName, attacksToRun, batchState ?? undefined)) {
         process.exit(1);
       }
     }
