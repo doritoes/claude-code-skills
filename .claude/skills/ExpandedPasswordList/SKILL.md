@@ -29,7 +29,7 @@ Research pipeline to study password cracking effectiveness and improve tools.
 - **Stage 1 COMPLETE** (2026-02-20): All 4,328 GRAVEL batches processed
   - 644,544,278 PEARLS (29.99% crack rate) via nocap.txt + nocap.rule
   - 1,504,909,773 SAND remaining for Stage 2
-- **Stage 2**: 22 Gen1 batches completed, Gen2 in progress (noise-filtered DiamondFeedback)
+- **Stage 2**: 22 Gen1 + 5 Gen2 batches completed (v8.0: 35 attacks sorted by cr/min, 285 UNOBTAINIUM rules)
 - **HIBP Top 1000 Coverage**: nocap.txt + nocap.rule cracks **950/1000 (95.0%)** of the most frequently breached passwords
   - 50 uncracked hashes saved to `data/hibp-top1000-uncracked.txt` for future analysis
 - Every batch teaches us something. Every crack is a data point.
@@ -837,49 +837,42 @@ _SAND hashes are hash-sorted (alphabetical) — batches are roughly equivalent d
 
 Ranked by total cracks across all batches where each attack was attempted:
 
-| Rank | Attack | Attempts | Total Cracks | Avg Rate | Contribution | Tier |
-|------|--------|----------|-------------|----------|--------------|------|
-| 1 | **brute-7** | 10 | **67,062** | 1.92% | **37.5%** | T1 |
-| 2 | **brute-6** | 9 | **64,454** | 2.05% | **31.1%** | T1 |
-| 3 | **hybrid-nocapplus-4digit** | 9 | **28,508** | 0.91% | **13.5%** | T3 |
-| 4 | mask-lllllldd | 9 | 10,562 | 0.34% | 4.9% | T3 |
-| 5 | brute-5 | 9 | 8,831 | 0.28% | 4.3% | T3 |
-| 6 | mask-Ullllllld | 9 | 5,096 | 0.16% | 2.9% | T3 |
-| 7 | mask-Ullllldd | 9 | 4,699 | 0.15% | 2.4% | T4 |
-| 8 | hybrid-nocapplus-special-digits | 9 | 3,407 | 0.11% | 1.8% | T4 |
-| 9 | **feedback-beta-nocaprule** | 9 | **2,447** | **0.08%** | **1.1%** | T2 |
-| 10 | brute-4 | 9 | 783 | 0.02% | 0.4% | T0 |
-| 11 | nocapplus-nocaprule | 9 | 733 | 0.02% | 0.3% | T2 |
-| 12 | mask-lllldddd | 1 | 676 | 0.19% | 0.3% | T4 |
-| 13 | nocapplus-unobtainium | 9 | 103 | <0.01% | <0.1% | T2 |
-| 14 | brute-3 | 9 | 101 | <0.01% | <0.1% | T0 |
-| 15 | hybrid-nocapplus-3digit | 1 | 1 | <0.01% | <0.1% | T4 |
+| Rank | Attack | Cracks (5 batches) | Rate | cr/min | Tier |
+|------|--------|-------------------|------|--------|------|
+| 1 | **mask-l8** | **65,376** | 3.76% | 21,623 | T1a |
+| 2 | **mask-ld8** | **64,093** | 3.68% | 2,660 | T1a |
+| 3 | **brute-7** | **43,585** | 2.51% | 81.1 | T1 |
+| 4 | **brute-6** | **35,906** | 2.06% | 4,303 | T1 |
+| 5 | **hybrid-nocapplus-3any** | **33,264** | 1.91% | 280.9 | T3a |
+| 6 | mask-d10 | 14,331 | 0.82% | 4,712 | T0 |
+| 7 | mask-d11 | 11,581 | 0.67% | 3,771 | T0 |
+| 8 | hybrid-nocapplus-4digit | 9,596 | 0.55% | 3,170 | T3 |
+| 9 | mask-l9 | 8,446 | 0.49% | 196.2 | T3a |
+| 10 | hybrid-nocapplus-5digit | 8,340 | 0.48% | 514.8 | T3a |
+| 11 | hybrid-nocapplus-3digit-1special | 7,758 | 0.45% | 1,374 | T3a |
+| 12 | hybrid-nocapplus-4digit-1special | 5,992 | 0.34% | 128.1 | T3a |
+| 13 | mask-Ullllllldd | 5,408 | 0.31% | 33.2 | T3 |
+| 14 | brute-5 | 4,812 | 0.28% | 1,591 | T3 |
+| 15 | reverse-nocapplus-4digit | 4,514 | 0.26% | 1,106 | T2 |
 
-_Tier 1 (brute-6+7) = **68.6%** of all cracks. Tier 3 (hybrid+mask+brute-5) = **25.6%**._
-_Feedback attacks (T2) = **1.5%** combined (3,283 cracks from 27 attack runs)._
-_Every crack teaches us something — feedback contributes roots and rules even at low volume._
+_Tier 1+1a (brute-6/7 + mask-l8/ld8) = **60.0%** of all cracks._
+_Feedback attacks (T2) = **3.0%** combined (10,519 cracks, IMPROVING trend: 0→3,521)._
+_Cohort ROI: Portuguese 6.01, Slavic 3.45, Culture 2.26, Arabic 1.96 cracks/root._
 
-### Single-Batch Timing Reference (RTX 4060 Ti, batch-0008)
+### Per-Batch Reference (RTX 4060 Ti, Gen2 5-batch avg, v8.0)
 
-| Attack | Mode | Keyspace | Time | Speed | Cracks | ROI |
-|--------|------|----------|------|-------|--------|-----|
-| brute-3 + brute-4 | mask | trivial | instant | * | 123 | 0.6% |
-| brute-6 | mask | 735B | **1.2 min** | 10.2 GH/s | 7,139 | 33.2% |
-| brute-7 | mask | 69.8T | **54.7 min** | 10.9 GH/s | 6,880 | 32.0% |
-| feedback-beta-nocaprule | dict+rules | 537M | 6s | * | 133 | 0.6% |
-| nocapplus-nocaprule | dict+rules | 698B | **1.5 min** | 7.8 GH/s | 279 | 1.3% |
-| nocapplus-unobtainium | dict+rules | 360M | 4s | * | 5 | 0.0% |
-| hybrid-nocapplus-4digit | hybrid | 144B | **23s** | 8.1 GH/s | 3,249 | 15.1% |
-| mask-lllllldd | mask | 30.9B | 7s | 9.8 GH/s | 1,158 | 5.4% |
-| brute-5 | mask | 7.7B | 4s | * | 983 | 4.6% |
-| mask-Ullllllld | mask | 2.1T | **3.3 min** | 10.8 GH/s | 667 | 3.1% |
-| mask-Ullllldd | mask | 1.19B | 7s | 9.9 GH/s | 517 | 2.4% |
-| hybrid-nocapplus-special-digits | hybrid | 4.6B | **60s** | 8.7 GH/s | 393 | 1.8% |
-| **TOTAL** | | | **~63 min** | | **21,526** | **6.16%** |
+| Tier | Attacks | Time | Cracks | Share |
+|------|---------|------|--------|-------|
+| T0 | brute-3/4, mask-d9/10/11/12 | ~2 min | 6,280 | 9.0% |
+| T1 | brute-6, brute-7 | ~109 min | 15,898 | 22.8% |
+| T1a | mask-l8, mask-ld8 | ~5 min | 25,894 | 37.1% |
+| T2 | feedback + reverse + combinator | ~5 min | 2,104 | 3.0% |
+| T3 | hybrid-4digit, brute-5, masks, combo | ~39 min | 5,297 | 7.6% |
+| T3a | long-password discovery | ~59 min | 13,335 | 19.1% |
+| T4 | low-yield hybrids | ~4 min | 983 | 1.4% |
+| **TOTAL** | **35 attacks** | **~226 min** | **69,791** | **20.0%** |
 
-_* Speed unreliable for small keyspaces (<1B) — GPU startup overhead dominates._
-_ROI = percentage of total cracks from that attack._
-_Total batch time ~63 min (dominated by brute-7 at 54.7 min)._ All times EST.
+_brute-7 dominates time (107 min, 47.5% of batch). mask-l8 is most efficient (21,623 cr/min)._
 
 ### Post-Batch Workflow (BIGRED)
 
@@ -903,7 +896,7 @@ bun Tools/DiamondFeedback.ts --batch batch-0008
 
 **Feedback loop status (Gen1: 12 batches, Gen2: pending fresh data):**
 - 77K+ words in BETA.txt (cohorts + discovered + HIBP-promoted)
-- 234 rules in UNOBTAINIUM.rule (20 auto-generated + 230 deep-analysis from 309K Gen2 diamonds)
+- 285 rules in UNOBTAINIUM.rule (auto-generated + deep-analysis + manual v7.2 + v8.0 suffix gaps from 349K Gen2 diamonds)
 - Feedback attacks contributed 1.5% of Gen1 cracks (3,283 total) — compounds over time
 
 **A/B testing plan:**
@@ -918,7 +911,7 @@ To measure true feedback value, periodically run a batch WITHOUT feedback attack
 
 **What to watch for in coming batches:**
 - Does feedback-beta-nocaprule crack rate increase as BETA.txt grows?
-- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (234 rules now, regenerated 2026-02-24)
+- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (285 rules now, last updated 2026-03-03)
 - Do mask-lllldddd and hybrid-nocapplus-3digit justify their slot after more data?
 
 ### Configuration
@@ -975,7 +968,7 @@ cmd /c mklink /D "<PAI_DIR>\.claude\skills\ExpandedPasswordList\data" "\\<NAS_IP
 - SAND batches: `data/sand/batch-*.txt` (uncracked from Stage 1)
 - DIAMONDS: `data/diamonds/hash_plaintext_pairs.jsonl` (JSONL, append-only) + `data/diamonds/passwords-batch-NNNN.txt`
 - GLASS: `data/glass/batch-*.txt` (uncrackable hashes)
-- UNOBTAINIUM: `data/feedback/unobtainium.rule` (234 rules — 20 auto + 230 deep-analysis)
+- UNOBTAINIUM: `data/feedback/unobtainium.rule` (285 rules — auto + deep-analysis + v7.2 manual + v8.0 suffix gaps)
 - BETA: `data/feedback/BETA.txt` (77K+ words)
 
 ## Generational Password Analysis

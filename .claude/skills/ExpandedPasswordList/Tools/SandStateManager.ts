@@ -91,10 +91,11 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v7.9 (2026-03-02)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v8.0 (2026-03-03)
   // Applies to: Gen2 batch-0001+ | 35 attacks
-  // Assets: nocap-plus.txt (13.8M), nocap.rule (48K), BETA.txt (empty bootstrap), UNOBTAINIUM.rule (empty bootstrap)
-  // Based on: Gen2 batches 0001-0025 + blind spot experiments (batch-0001)
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (77K), UNOBTAINIUM.rule (284 rules)
+  // Based on: Gen2 batches 0001-0005 + blind spot experiments (batch-0001)
+  // v8.0: REORDER all tiers by cr/min (AttackReview --overlap). ADD 31 suffix rules to UNOBTAINIUM.rule.
   // v7.7: ADD reverse hybrids (-a 7) and combinators (-a 1) — 8 new attacks, ~7 min added
   //       Blind spots: ALL prior hybrids were -a 6 (word+suffix). No prefix or word+word attacks.
   //       reverse-nocapplus-4digit: 2,759 cr in 28s (5,912 cr/min) — new #1 hybrid
@@ -110,13 +111,13 @@ export const DEFAULT_ATTACK_ORDER = [
   // v7.1: ADD mask-l8/ld8/l9, DROP hybrid-roots-4any/nocapplus-nocaprule/hybrid-nocapplus-3digit
   // ══════════════════════════════════════════════════════════════════════
   //
-  // TIER 0: INSTANT (trivial keyspace, <2 min total)
-  "brute-4",     // 133 cracks/batch avg — ~0.1 min
-  "brute-3",     // 17 cracks/batch avg — ~0.2 min
-  "mask-d9",     // ?d^9, 10^9 — <1 sec. PINs, 9-digit numbers. 181 cracks (batch-0001 exp). (v7.4)
-  "mask-d10",    // ?d^10, 10^10 — ~1 sec. Phone numbers. 1,796 cracks (batch-0001 exp). (v7.4)
-  "mask-d11",    // ?d^11, 10^11 — ~9 sec. International numbers. (v7.4)
-  "mask-d12",    // ?d^12, 10^12 — ~92 sec. Full international format. (v7.4)
+  // TIER 0: INSTANT (trivial keyspace, <2 min total) — sorted by cr/min (v8.0)
+  "brute-4",     // 133 cracks/batch avg — ~0.1 min (670.8 cr/min)
+  "mask-d10",    // ?d^10, 10^10 — ~1 sec. Phone numbers. (4,711 cr/min) (v7.4)
+  "mask-d11",    // ?d^11, 10^11 — ~9 sec. International numbers. (3,771 cr/min) (v7.4)
+  "mask-d9",     // ?d^9, 10^9 — <1 sec. PINs, 9-digit numbers. (415.6 cr/min) (v7.4)
+  "mask-d12",    // ?d^12, 10^12 — ~92 sec. Full international format. (314.3 cr/min) (v7.4)
+  "brute-3",     // 17 cracks/batch avg — ~0.2 min (94.7 cr/min)
   //
   // TIER 1: HIGH ROI — 52.6% of cracks, dominates batch time
   "brute-6",     // 7,154 cracks/batch avg — ~1.7 min (3,778 cr/min)
@@ -128,27 +129,27 @@ export const DEFAULT_ATTACK_ORDER = [
   "mask-l8",     // ?l^8, 26^8 = 209B — 19 seconds. Strips pure lowercase 8-char from pipeline.
   "mask-ld8",    // -1 ?l?d ?1^8, 36^8 = 2.8T — ~4.3 min. Lowercase+digit 8-char.
   //
-  // TIER 2: FEEDBACK ATTACKS
-  "feedback-beta-nocaprule",       // 394 cracks/batch — BETA.txt × nocap.rule
-  "nocapplus-unobtainium",         // 51 cracks/batch — nocap-plus.txt × UNOBTAINIUM.rule
-  "hybrid-beta-5digit",            // BETA × ?d^5 — <1 sec (v7.2)
-  "hybrid-beta-6digit",            // BETA × ?d^6 — ~7 sec (v7.2)
-  "reverse-nocapplus-3digit",      // -a 7 ?d^3+nocap-plus — 14s, 596 cr (2,554 cr/min) (v7.7)
-  "reverse-nocapplus-4digit",      // -a 7 ?d^4+nocap-plus — 28s, 2,759 cr (5,912 cr/min) (v7.7)
-  "reverse-nocapplus-1special",    // -a 7 ?s+nocap-plus — 13s, 44 cr (203 cr/min) (v7.7)
-  "combo-beta-beta",               // -a 1 BETA×BETA — <1s, 130 cr (7,800 cr/min) (v7.7)
-  "combo-beta-beta-cap",           // -a 1 -j c BETA×BETA — <1s, 45 cr (2,700 cr/min) (v7.7)
+  // TIER 2: FEEDBACK ATTACKS — sorted by cr/min (v8.0 reorder)
+  "nocapplus-unobtainium",         // nocap-plus.txt × UNOBTAINIUM.rule (739.7 cr/min)
+  "feedback-beta-nocaprule",       // BETA.txt × nocap.rule (322.9 cr/min)
+  "hybrid-beta-6digit",            // BETA × ?d^6 — ~7 sec (348.3 cr/min) (v7.2)
+  "hybrid-beta-5digit",            // BETA × ?d^5 — <1 sec (118.6 cr/min) (v7.2)
+  "reverse-nocapplus-4digit",      // -a 7 ?d^4+nocap-plus — 28s (5,912 cr/min → 1,106 cr/min) (v7.7)
+  "reverse-nocapplus-3digit",      // -a 7 ?d^3+nocap-plus — 14s (412.4 cr/min) (v7.7)
+  "combo-beta-beta",               // -a 1 BETA×BETA — <1s (178.2 cr/min) (v7.7)
+  "combo-beta-beta-cap",           // -a 1 -j c BETA×BETA — <1s (82.4 cr/min) (v7.7)
+  "reverse-nocapplus-1special",    // -a 7 ?s+nocap-plus — 13s (26.1 cr/min) (v7.7)
   //
-  // TIER 3: PROVEN MEDIUM ROI
+  // TIER 3: PROVEN MEDIUM ROI — reordered v8.0 (combo-beta-nocapplus-cap before mask-Ullllllldd)
   "hybrid-nocapplus-4digit",  // 3,168 cracks/batch — top hybrid (5,204 cr/min)
   "brute-5",                  // 976 cracks/batch — 5-char exhaustive
   "mask-Ullllllld",           // 640 cracks/batch — Capital + 7 lower + 1 digit
-  "mask-Ullllllldd",          // ?u?l^7?d^2, 10-char, 26^8×100=20.9T — ~32 min (v7.2)
-  "combo-beta-nocapplus-cap",      // -a 1 -j c BETA×nocap-plus — 2.2m, 1,350 cr (614 cr/min) (v7.7)
+  "combo-beta-nocapplus-cap",      // -a 1 -j c BETA×nocap-plus — 2.2m (391.3 cr/min) (v7.7)
+  "mask-Ullllllldd",          // ?u?l^7?d^2, 10-char, 26^8×100=20.9T — ~32 min (33.2 cr/min) (v7.2)
   //
-  // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix + 9-char masks (ordered by cr/min)
-  "hybrid-nocapplus-5digit",       // nocap-plus × ?d^5 — ~3 min, 3,625 cr/batch (1,110 cr/min) (v7.2)
-  "hybrid-nocapplus-3digit-1special", // nocap-plus × ?d?d?d?s — 2.2 min, 1,549 cr (704 cr/min). word+3d+1s (v7.6)
+  // TIER 3a: LONG-PASSWORD DISCOVERY — ?a suffix + 9-char masks (reordered v8.0)
+  "hybrid-nocapplus-3digit-1special", // nocap-plus × ?d?d?d?s — 2.2 min (1,373.6 cr/min). word+3d+1s (v7.6)
+  "hybrid-nocapplus-5digit",       // nocap-plus × ?d^5 — ~3 min (514.8 cr/min) (v7.2)
   "combo-beta-nocapplus",              // -a 1 BETA×nocap-plus — 2.4m, 1,093 cr (455 cr/min) (v7.7)
   "hybrid-nocapplus-3any",         // nocap-plus × ?a^3 — ~25 min, 7,311 cr/batch (286 cr/min) ★ TOP DISCOVERY
   "mask-l9",                       // ?l^9, 26^9=5.4T — ~10 min, pure lowercase 9-char (165 cr/min)
