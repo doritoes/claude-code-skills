@@ -1554,9 +1554,9 @@
         "windows",
         "server"
       ],
-      "notes": "In-memory data store.",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "3.1.0"
+      "notes": "In-memory data store. Windows port (3.x) discontinued; use Docker/WSL for current versions.",
+      "lastChecked": "2026-02-28",
+      "latestVersion": "7.4.2"
     },
     {
       "id": "nginx",
@@ -2918,7 +2918,8 @@
         "server"
       ],
       "notes": "Enterprise CMS. Has KEV entries. Used for web content management.",
-      "lastChecked": "2026-02-03",
+      "lastChecked": "2026-02-28",
+      "versionPattern": "^6\\.",
       "latestVersion": "6.5 SP22"
     },
     {

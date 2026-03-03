@@ -580,7 +580,20 @@
       "Bash(\"C:/Program Files/Python312/python.exe\" Tools/rockyou_benchmark.py)",
       "Bash(\"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe\":*)",
       "WebFetch(domain:deepwiki.com)",
-      "WebFetch(domain:silo.tips)"
+      "WebFetch(domain:silo.tips)",
+      "WebFetch(domain:www.levelblue.com)",
+      "WebFetch(domain:www.guidepointsecurity.com)",
+      "WebFetch(domain:www.lmgsecurity.com)",
+      "WebFetch(domain:labs.ioactive.com)",
+      "WebFetch(domain:in.security)",
+      "WebFetch(domain:specopssoft.com)",
+      "WebFetch(domain:www.prosec-networks.com)",
+      "WebFetch(domain:www.securitynewspaper.com)",
+      "WebFetch(domain:wandli.github.io)",
+      "WebFetch(domain:horizon3.ai)",
+      "WebFetch(domain:raxis.com)",
+      "Bash(\"C:/Program Files/Python312/python.exe\" -c \"import json,sys; d=json.load\\(sys.stdin\\); b=d[''batches''].get\\(''batch-0001'',{}\\); print\\(f\"\"status={b.get\\(''status''\\)}  cracked={b.get\\(''cracked''\\)}  attacks={len\\(b.get\\(''attacksCompleted'',[]\\)\\)}\"\"\\)\")",
+      "WebFetch(domain:www.securitymagazine.com)"
     ]
   }
 }
