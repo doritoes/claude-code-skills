@@ -53,7 +53,7 @@ const TIER_MAP: Record<string, number> = {
   // Removed from production (kept for historical display)
   "mask-lllllldd": -1, "mask-lllldddd": -1,  // v7.3: subsumed by mask-l8/ld8
   "hybrid-roots-4any": -1, "nocapplus-nocaprule": -1, "hybrid-nocapplus-3digit": -1,
-  "brute-8": 99,
+  "brute-8": 99, "mask-lud8": 99,
   "mask-ld9": 98, "mask-l10": 98, "mask-Ulllllldd": 98,
 };
 
@@ -95,6 +95,9 @@ const ATTACK_REGEX: Record<string, RegExp> = {
   "mask-ld9": /^[a-z0-9]{9}$/,
   "mask-l10": /^[a-z]{10}$/,
   "mask-Ulllllldd": /^[A-Z][a-z]{6}[0-9]{2}$/,
+  // Brute8Planner attacks (Stage 2 post-pipeline, integrated via sand-state)
+  "mask-lud8": /^[a-zA-Z0-9]{8}$/,
+  "brute-8": /^.{8}$/,
 };
 
 /**
