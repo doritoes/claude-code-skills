@@ -29,7 +29,7 @@ Research pipeline to study password cracking effectiveness and improve tools.
 - **Stage 1 COMPLETE** (2026-02-20): All 4,328 GRAVEL batches processed
   - 644,544,278 PEARLS (29.99% crack rate) via nocap.txt + nocap.rule
   - 1,504,909,773 SAND remaining for Stage 2
-- **Stage 2**: 22 Gen1 + 5 Gen2 batches completed (v8.0: 35 attacks sorted by cr/min, 285 UNOBTAINIUM rules)
+- **Stage 2**: 22 Gen1 + 12 Gen2 batches completed (v8.1: 35 attacks sorted by cr/min, 285 UNOBTAINIUM rules)
 - **HIBP Top 1000 Coverage**: nocap.txt + nocap.rule cracks **950/1000 (95.0%)** of the most frequently breached passwords
   - 50 uncracked hashes saved to `data/hibp-top1000-uncracked.txt` for future analysis
 - Every batch teaches us something. Every crack is a data point.
@@ -859,7 +859,7 @@ _Tier 1+1a (brute-6/7 + mask-l8/ld8) = **60.0%** of all cracks._
 _Feedback attacks (T2) = **3.0%** combined (10,519 cracks, IMPROVING trend: 0→3,521)._
 _Cohort ROI: Portuguese 6.01, Slavic 3.45, Culture 2.26, Arabic 1.96 cracks/root._
 
-### Per-Batch Reference (RTX 4060 Ti, Gen2 5-batch avg, v8.0)
+### Per-Batch Reference (RTX 4060 Ti, Gen2 12-batch avg, v8.1)
 
 | Tier | Attacks | Time | Cracks | Share |
 |------|---------|------|--------|-------|
@@ -896,7 +896,7 @@ bun Tools/DiamondFeedback.ts --batch batch-0008
 
 **Feedback loop status (Gen1: 12 batches, Gen2: pending fresh data):**
 - 77K+ words in BETA.txt (cohorts + discovered + HIBP-promoted)
-- 285 rules in UNOBTAINIUM.rule (auto-generated + deep-analysis + manual v7.2 + v8.0 suffix gaps from 349K Gen2 diamonds)
+- 285 rules in UNOBTAINIUM.rule (auto-generated + deep-analysis + manual v7.2 + v8.0/v8.1 suffix gaps from 560K Gen2 diamonds)
 - Feedback attacks contributed 1.5% of Gen1 cracks (3,283 total) — compounds over time
 
 **A/B testing plan:**
@@ -911,7 +911,7 @@ To measure true feedback value, periodically run a batch WITHOUT feedback attack
 
 **What to watch for in coming batches:**
 - Does feedback-beta-nocaprule crack rate increase as BETA.txt grows?
-- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (285 rules now, last updated 2026-03-03)
+- Does nocapplus-unobtainium improve as UNOBTAINIUM.rule gains more rules? (285 rules now, last updated 2026-03-04)
 - Do mask-lllldddd and hybrid-nocapplus-3digit justify their slot after more data?
 
 ### Configuration
@@ -968,7 +968,7 @@ cmd /c mklink /D "<PAI_DIR>\.claude\skills\ExpandedPasswordList\data" "\\<NAS_IP
 - SAND batches: `data/sand/batch-*.txt` (uncracked from Stage 1)
 - DIAMONDS: `data/diamonds/hash_plaintext_pairs.jsonl` (JSONL, append-only) + `data/diamonds/passwords-batch-NNNN.txt`
 - GLASS: `data/glass/batch-*.txt` (uncrackable hashes)
-- UNOBTAINIUM: `data/feedback/unobtainium.rule` (285 rules — auto + deep-analysis + v7.2 manual + v8.0 suffix gaps)
+- UNOBTAINIUM: `data/feedback/unobtainium.rule` (285 rules — auto + deep-analysis + v7.2 manual + v8.0/v8.1 suffix gaps)
 - BETA: `data/feedback/BETA.txt` (77K+ words)
 
 ## Generational Password Analysis

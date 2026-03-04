@@ -199,7 +199,7 @@ bun Tools/BatchSplitter.ts   # Creates pearls/ and sand/ directories
                     │                               ▼
                     │              ┌─────────────────────────────────┐
                     │              │      STAGE 2+ ESCALATING        │
-                    │              │  35 attacks, 5 tiers (v8.0)     │
+                    │              │  35 attacks, 5 tiers (v8.1)     │
                     │              └─────────────────────────────────┘
                     │                               │
                     │         ┌─────────────────────┤
@@ -245,7 +245,7 @@ bun Tools/BatchSplitter.ts   # Creates pearls/ and sand/ directories
 ## Escalating Attack Stages (Stage 2+)
 
 After Stage 1 (rockyou+OneRule), SAND contains hard passwords that require escalating attacks.
-35 attacks across 5 tiers (v8.0), sorted by cr/min within tiers, orchestrated by `BigRedRunner.ts`. See `Workflows/Pipeline.md` for the full attack list.
+35 attacks across 5 tiers (v8.1), sorted by cr/min within tiers, orchestrated by `BigRedRunner.ts`. See `Workflows/Pipeline.md` for the full attack list.
 
 | Tier | Attack Types | Examples | Typical Yield |
 |------|-------------|----------|---------------|

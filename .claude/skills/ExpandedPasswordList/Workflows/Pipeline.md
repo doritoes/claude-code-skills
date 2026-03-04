@@ -246,7 +246,7 @@ bun ../../scratchpad/deep-rule-analysis.ts > ../../scratchpad/deep-analysis-outp
 # under the "# Deep analysis" marker (DiamondFeedback preserves this section)
 ```
 
-**Last run:** 2026-03-03 (full), 349K diamonds (5 Gen2 batches). 31 suffix gap rules added to UNOBTAINIUM.rule (v8.0).
+**Last run:** 2026-03-04 (full), 560K diamonds (12 Gen2 batches). 31 suffix gap rules added to UNOBTAINIUM.rule (v8.0). Only 1 MISSING rule found in v8.1 analysis ($6 $@, added).
 
 ---
 
@@ -317,48 +317,49 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (35 attacks, v8.0 — 2026-03-03)
+## Current Attack List (35 attacks, v8.1 — 2026-03-04)
 
-Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min within tiers (v8.0 reorder):
+Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min within tiers (12-batch data):
 
-| Tier | Attack | Description | ROI (5-batch avg) |
+| Tier | Attack | Description | ROI (12-batch avg) |
 |------|--------|-------------|-------------------|
-| 0 | brute-4 | Exhaustive 4 chars | 133 cr/batch, 670.8 cr/min |
-| 0 | mask-d10 | Pure digits 10 chars (phone numbers) | 2,866 cr/batch, 4,711 cr/min |
-| 0 | mask-d11 | Pure digits 11 chars (international) | 2,316 cr/batch, 3,771 cr/min |
-| 0 | mask-d9 | Pure digits 9 chars (PINs) | 255 cr/batch, 415.6 cr/min |
-| 0 | mask-d12 | Pure digits 12 chars | 691 cr/batch, 314.3 cr/min |
-| 0 | brute-3 | Exhaustive 3 chars | 19 cr/batch, 94.7 cr/min |
-| 1 | brute-6 | Exhaustive 6 chars | 7,181 cr/batch, 4,303 cr/min |
-| 1 | brute-7 | Exhaustive 7 chars | 8,717 cr/batch, 81.1 cr/min |
-| 1a | mask-l8 | ?l^8 — pure lowercase 8-char | 13,075 cr/batch, 21,623 cr/min |
-| 1a | mask-ld8 | -1 ?l?d ?1^8 — lowercase+digit 8-char | 12,819 cr/batch, 2,660 cr/min |
-| 2 | nocapplus-unobtainium | nocap-plus.txt × UNOBTAINIUM.rule (285 rules) | 358 cr/batch, 739.7 cr/min |
-| 2 | feedback-beta-nocaprule | BETA.txt × nocap.rule | 196 cr/batch, 322.9 cr/min |
-| 2 | hybrid-beta-6digit | BETA.txt + ?d^6 | 211 cr/batch, 348.3 cr/min |
-| 2 | hybrid-beta-5digit | BETA.txt + ?d^5 | 72 cr/batch, 118.6 cr/min |
-| 2 | reverse-nocapplus-4digit | -a 7 ?d^4 + nocap-plus (prefix) | 903 cr/batch, 1,106 cr/min |
-| 2 | reverse-nocapplus-3digit | -a 7 ?d^3 + nocap-plus (prefix) | 250 cr/batch, 412.4 cr/min |
-| 2 | combo-beta-beta | -a 1 BETA × BETA (word+word) | 68 cr/batch, 178.2 cr/min |
-| 2 | combo-beta-beta-cap | -a 1 -j c BETA × BETA (Cap+word) | 31 cr/batch, 82.4 cr/min |
-| 2 | reverse-nocapplus-1special | -a 7 ?s + nocap-plus (prefix) | 16 cr/batch, 26.1 cr/min |
-| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 1,919 cr/batch, 3,170 cr/min |
-| 3 | brute-5 | Exhaustive 5 chars | 962 cr/batch, 1,591 cr/min |
-| 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 649 cr/batch, 172.2 cr/min |
-| 3 | combo-beta-nocapplus-cap | -a 1 -j c BETA × nocap-plus | 685 cr/batch, 391.3 cr/min |
-| 3 | mask-Ullllllldd | Cap + 7 lower + 2 digits (10-char) | 1,082 cr/batch, 33.2 cr/min |
-| 3a | hybrid-nocapplus-3digit-1special | nocap-plus + ?d?d?d?s | 1,552 cr/batch, 1,373.6 cr/min |
-| 3a | hybrid-nocapplus-5digit | nocap-plus + ?d^5 | 1,668 cr/batch, 514.8 cr/min |
-| 3a | combo-beta-nocapplus | -a 1 BETA × nocap-plus | 351 cr/batch, 455 cr/min |
-| 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | 6,653 cr/batch, 280.9 cr/min |
-| 3a | mask-l9 | ?l^9 — pure lowercase 9-char | 1,689 cr/batch, 196.2 cr/min |
-| 3a | hybrid-nocapplus-4digit-1special | nocap-plus + ?d?d?d?d?s | 1,198 cr/batch, 128.1 cr/min |
-| 3a | hybrid-beta-4any | BETA.txt + ?a^4 | 224 cr/batch, 19.9 cr/min |
-| 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 525 cr/batch, 867.8 cr/min |
-| 4 | hybrid-nocapplus-special-digits | nocap-plus + ?s?d?d?d | 366 cr/batch, 323.5 cr/min |
-| 4 | hybrid-nocapplus-digit-1special | nocap-plus + ?d?s | 63 cr/batch, 104.6 cr/min |
-| 4 | reverse-nocapplus-special-3digit | -a 7 ?s?d^3 + nocap-plus | 29 cr/batch, 17.2 cr/min |
+| 0 | mask-d10 | Pure digits 10 chars (phone numbers) | 2,880 cr/batch, 4,706 cr/min |
+| 0 | brute-4 | Exhaustive 4 chars | 132 cr/batch, 961 cr/min |
+| 0 | mask-d11 | Pure digits 11 chars (international) | 2,306 cr/batch, 3,763 cr/min |
+| 0 | mask-d9 | Pure digits 9 chars (PINs) | 256 cr/batch, 418 cr/min |
+| 0 | mask-d12 | Pure digits 12 chars | 694 cr/batch, 315 cr/min |
+| 0 | brute-3 | Exhaustive 3 chars | 17 cr/batch, 124 cr/min |
+| 1 | brute-6 | Exhaustive 6 chars | 7,144 cr/batch, 4,278 cr/min |
+| 1 | brute-7 | Exhaustive 7 chars | 8,661 cr/batch, 81 cr/min |
+| 1a | mask-l8 | ?l^8 — pure lowercase 8-char | 13,035 cr/batch, 21,506 cr/min |
+| 1a | mask-ld8 | -1 ?l?d ?1^8 — lowercase+digit 8-char | 12,824 cr/batch, 2,653 cr/min |
+| 2 | nocapplus-unobtainium | nocap-plus.txt × UNOBTAINIUM.rule (285 rules) | 547 cr/batch, 982 cr/min |
+| 2 | feedback-beta-nocaprule | BETA.txt × nocap.rule | 269 cr/batch, 443 cr/min |
+| 2 | hybrid-beta-6digit | BETA.txt + ?d^6 | 302 cr/batch, 497 cr/min |
+| 2 | reverse-nocapplus-4digit | -a 7 ?d^4 + nocap-plus (prefix) | 855 cr/batch, 1,093 cr/min |
+| 2 | hybrid-beta-5digit | BETA.txt + ?d^5 | 111 cr/batch, 182 cr/min |
+| 2 | reverse-nocapplus-3digit | -a 7 ?d^3 + nocap-plus (prefix) | 213 cr/batch, 351 cr/min |
+| 2 | combo-beta-beta | -a 1 BETA × BETA (word+word) | 97 cr/batch, 188 cr/min |
+| 2 | combo-beta-beta-cap | -a 1 -j c BETA × BETA (Cap+word) | 44 cr/batch, 85 cr/min |
+| 2 | reverse-nocapplus-1special | -a 7 ?s + nocap-plus (prefix) | 13 cr/batch, 21 cr/min |
+| 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 1,844 cr/batch, 3,033 cr/min |
+| 3 | brute-5 | Exhaustive 5 chars | 969 cr/batch, 1,594 cr/min |
+| 3 | combo-beta-nocapplus-cap | -a 1 -j c BETA × nocap-plus | 994 cr/batch, 429 cr/min |
+| 3 | mask-Ullllllld | Cap + 7 lower + 1 digit | 642 cr/batch, 170 cr/min |
+| 3 | mask-Ullllllldd | Cap + 7 lower + 2 digits (10-char) | 1,075 cr/batch, 33 cr/min |
+| 3a | hybrid-nocapplus-3digit-1special | nocap-plus + ?d?d?d?s | 1,498 cr/batch, 1,322 cr/min |
+| 3a | hybrid-nocapplus-5digit | nocap-plus + ?d^5 | 1,623 cr/batch, 499 cr/min |
+| 3a | combo-beta-nocapplus | -a 1 BETA × nocap-plus | 511 cr/batch, 221 cr/min |
+| 3a | hybrid-nocapplus-3any | nocap-plus + ?a^3 | 6,557 cr/batch, 278 cr/min |
+| 3a | mask-l9 | ?l^9 — pure lowercase 9-char | 1,685 cr/batch, 195 cr/min |
+| 3a | hybrid-nocapplus-4digit-1special | nocap-plus + ?d?d?d?d?s | 1,193 cr/batch, 128 cr/min |
+| 3a | hybrid-beta-4any | BETA.txt + ?a^4 | 328 cr/batch, 22 cr/min |
+| 4 | mask-Ullllldd | Cap + 5 lower + 2 digits | 518 cr/batch, 851 cr/min |
+| 4 | hybrid-nocapplus-special-digits | nocap-plus + ?s?d?d?d | 337 cr/batch, 296 cr/min |
+| 4 | hybrid-nocapplus-digit-1special | nocap-plus + ?d?s | 55 cr/batch, 91 cr/min |
+| 4 | reverse-nocapplus-special-3digit | -a 7 ?s?d^3 + nocap-plus | 27 cr/batch, 16 cr/min |
 
+**v8.1 (2026-03-04):** REORDER 3 swaps (12-batch cr/min). Cohort expansion (+475 Portuguese, +540 Slavic).
 **v8.0 (2026-03-03):** REORDER all tiers by cr/min (AttackReview --overlap). ADD 31 suffix rules to UNOBTAINIUM.rule (285 total).
 **v7.9 (2026-03-02):** 4 reverse hybrids (-a 7) + 4 combinators (-a 1). Removed brute-1/2 (0 cracks in Gen2).
 **v7.6:** hybrid-nocapplus-3digit-1special, 4digit-1special. Removed: digit-2special (0 cr), digit-3special (3.2 cr/min).
@@ -380,10 +381,10 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min with
 | `nocap.rule` | `data/nocap.rule` | 48,428 rules (OneRuleToRuleThemStill + 14 bussin.rule). Rebuild: `bun scripts/build-nocap-rule.ts` |
 | `bussin.rule` | `data/feedback/bussin.rule` | 14 rules NOT in OneRule (source for nocap.rule build) |
 | `BETA.txt` | `data/feedback/BETA.txt` | Discovered roots from diamonds (rebuilds each batch via DiamondFeedback) |
-| `unobtainium.rule` | `data/feedback/unobtainium.rule` | 285 rules: auto-generated + deep analysis + manual v7.2 + v8.0 suffix gaps |
+| `unobtainium.rule` | `data/feedback/unobtainium.rule` | 285 rules: auto-generated + deep analysis + manual v7.2 + v8.0/v8.1 suffix gaps |
 | `sand-state.json` | `data/sand-state.json` | Stage 2 state (batches, attack results, feedback metrics) |
 | `gravel-state.json` | `data/gravel-state.json` | Stage 1 state |
-| Cohort files | `data/cohorts/*.txt` | 12 language/cultural wordlists (78K words) |
+| Cohort files | `data/cohorts/*.txt` | 12 language/cultural wordlists (79K words) |
 | `build-nocap-rule.ts` | `scripts/build-nocap-rule.ts` | Builds nocap.rule from OneRule + bussin at performance-correct positions |
 
 ---
