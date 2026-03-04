@@ -414,3 +414,37 @@ Always run `bun Tools/BigRedSync.ts --status` before submitting. Verify all word
 
 ### sand-state.json corruption
 Backup at `sand-state.json.bak`. Use `bun Tools/SandStateManager.ts --validate` to check integrity.
+
+---
+
+## Post-Pipeline Deferred Attacks
+
+Attacks too expensive for per-batch execution. Run as single passes on combined GLASS after pipeline completes.
+
+### brute-8
+`?a?a?a?a?a?a?a?a` (95^8). ~169 hours (7 days). Combine ALL GLASS → single pass.
+
+### 9+ Char Mask Candidates (deep analysis 2026-03-04, 560K diamonds)
+
+69.2% of 9+ char diamonds (141,599) have weak/no attack coverage:
+
+| Candidate | Mask | Keyspace | Est. Time | Target Gap |
+|-----------|------|----------|-----------|------------|
+| mask-ld9 | `-1 ?l?d ?1?1?1?1?1?1?1?1?1` | 36^9 = 101T | ~2.6 hrs | 9-char lowercase+digit (9.6% of 9+ gap) |
+| mask-l10 | `?l?l?l?l?l?l?l?l?l?l` | 26^10 = 141T | ~3.6 hrs | 10-char pure lowercase (10.6% of 9+ gap) |
+
+**Gap breakdown (9+ chars, 204,706 diamonds):**
+- pure-digits (49,346, 24.1%) — covered by mask-d9/d10/d11/d12
+- complex-with-special (35,768, 17.5%) — mostly hybrid coverage, hard to mask
+- pure-lowercase (21,773, 10.6%) — mask-l8/l9 cover 8-9 only
+- pure-alnum (19,612, 9.6%) — mask-ld8 covers 8 only
+- mixed-case+digits (6,197, 3.0%) — no dedicated attack
+- mixed-case-alpha (1,020, 0.5%) — no dedicated attack
+
+**Decision:** Add to per-batch attack order only if batch duration budget allows (~6 hrs combined). Otherwise run as post-pipeline passes on combined GLASS.
+
+### Phrase + Leet Substitution Experiment (planned)
+
+Phrase cohorts (markov 52.9K, spanish 7.5K, french 5.8K) show 0.09-0.15 cr/root with current suffix/append rules. Hypothesis: phrases paired with leet substitution rules (`sa@ se3 si1 so0`, `$a4 $e3 $i1 $o0`) may unlock cracks invisible to current attacks (e.g., `iloveyou` → `1l0v3y0u`). Current low ROI could be rule mismatch, not bad roots.
+
+**Test design:** Single-batch experiment — phrase cohort × leet-focused ruleset — measure cr/min. Compare against same phrases × current nocap.rule to isolate leet contribution. Data-driven: if cr/min justifies, add leet rules to UNOBTAINIUM.rule or create dedicated phrase+leet attack.
