@@ -465,32 +465,221 @@ function runGroup(groupId: number, mode: AttackMode): void {
 
 // ── Status ─────────────────────────────────────────────────────
 
-function checkStatus(groupId: number): void {
-  const config = loadConfig();
-  const groupName = `group-${groupId}`;
+/** Find the active group (running or most recent non-completed). */
+function findActiveGroup(): { groupId: number; mode: AttackMode } | null {
   const state = loadState();
-  const gs = getGroupState(state, groupId);
+  // Check for running groups first
+  for (const [key, gs] of Object.entries(state.groups)) {
+    if (gs.thin === "running") return { groupId: parseInt(key), mode: "thin" };
+    if (gs.brute8 === "running") return { groupId: parseInt(key), mode: "brute8" };
+  }
+  // Fall back to first group with pending work
+  if (!existsSync(PLAN_FILE)) return null;
+  const plan: Brute8Plan = JSON.parse(readFileSync(PLAN_FILE, "utf-8"));
+  for (const g of plan.thin.groups) {
+    const gs = state.groups[String(g.id)];
+    if (!gs || gs.thin !== "completed") return { groupId: g.id, mode: "thin" };
+  }
+  for (const g of plan.brute8.groups) {
+    const gs = state.groups[String(g.id)];
+    if (!gs || gs.brute8 !== "completed") return { groupId: g.id, mode: "brute8" };
+  }
+  return null;
+}
 
-  // Check both screen names
-  const thinAlive = parseInt(sshCmd(config, `screen -ls 2>/dev/null | grep -c 'hc-thin-g${groupId}' || echo 0`, 10_000));
-  const bruteAlive = parseInt(sshCmd(config, `screen -ls 2>/dev/null | grep -c 'hc-brute8-g${groupId}' || echo 0`, 10_000));
-  const running = parseInt(sshCmd(config, `pgrep -c hashcat 2>/dev/null || echo 0`, 10_000));
+/** Parse hashcat progress from log: returns { pct, speed, eta } or null. */
+function parseProgress(config: BigRedConfig, logFile: string): { pct: string; speed: string; eta: string; recovered: string } | null {
+  try {
+    // Grab last status block — grep for key fields, take last occurrence of each
+    const raw = sshCmd(config, `grep -E 'Progress|Speed\\.#1|Time\\.Estimated|^Recovered' ${logFile} 2>/dev/null | tail -8`, 15_000);
+    const lines = raw.split("\n");
 
-  console.log(`\nGroup ${groupId} Status:`);
-  console.log(`  Thin:    ${gs.thin.padEnd(10)} ${thinAlive > 0 ? "(screen alive)" : ""}`);
-  console.log(`  Brute-8: ${gs.brute8.padEnd(10)} ${bruteAlive > 0 ? "(screen alive)" : ""}`);
-  console.log(`  hashcat: ${running > 0 ? "RUNNING" : "idle"}`);
+    let pct = "", speed = "", eta = "", recovered = "";
+    for (const line of lines) {
+      const l = line.trim();
+      if (l.startsWith("Progress")) {
+        const m = l.match(/\((\d+\.\d+)%\)/);
+        if (m) pct = m[1] + "%";
+      }
+      if (l.startsWith("Speed.#1")) {
+        const m = l.match(/:\s*(.+?)\s*@/);
+        if (m) speed = m[1].trim();
+      }
+      if (l.startsWith("Time.Estimated")) {
+        const m = l.match(/\((.+?)\)/);
+        if (m) eta = m[1];
+      }
+      if (l.startsWith("Recovered") && !l.startsWith("Recovered/")) {
+        const m = l.match(/(\d+\/\d+)\s*\((\d+\.\d+)%\)/);
+        if (m) recovered = `${m[1]} (${m[2]}%)`;
+      }
+    }
+    if (pct || speed || eta || recovered) return { pct, speed, eta, recovered };
+  } catch {}
+  return null;
+}
 
-  const potCount = sshCmd(config, `wc -l < ${config.workDir}/potfiles/${groupName}.pot 2>/dev/null || echo 0`, 10_000);
-  console.log(`  Cracked: ${fmt(parseInt(potCount.trim()))} (collected: ${gs.collectedLines})`);
+function fmtElapsed(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
 
-  // Show most recent log
-  const activeMode = thinAlive > 0 ? "thin" : "brute8";
+async function checkStatus(targetGroupId?: number): Promise<void> {
+  const config = loadConfig();
+  const POLL_INTERVAL = 30_000;
+
+  // Auto-detect group if not specified
+  let groupId: number;
+  let activeMode: AttackMode;
+  if (targetGroupId) {
+    groupId = targetGroupId;
+    const state = loadState();
+    const gs = getGroupState(state, groupId);
+    activeMode = gs.thin === "running" || gs.thin === "pending" ? "thin" : "brute8";
+  } else {
+    const active = findActiveGroup();
+    if (!active) {
+      console.log("No active or pending groups found. Run --plan and --run first.");
+      process.exit(0);
+    }
+    groupId = active.groupId;
+    activeMode = active.mode;
+  }
+
+  const groupName = `group-${groupId}`;
   const logFile = `${config.workDir}/hashcat-${activeMode}-g${groupId}.log`;
-  console.log(`\n  Log (${activeMode}, last 15 lines):`);
-  const logTail = sshCmd(config, `tail -15 ${logFile} 2>/dev/null || echo '(no log)'`, 15_000);
-  for (const line of logTail.split("\n")) {
-    console.log(`    ${line}`);
+  const plan: Brute8Plan | null = existsSync(PLAN_FILE) ? JSON.parse(readFileSync(PLAN_FILE, "utf-8")) : null;
+  const phase = plan?.[activeMode];
+  const group = phase?.groups.find((g: any) => g.id === groupId);
+  const startTime = Date.now();
+
+  let prevPotCount = 0;
+  let prevPollTime = 0;
+  let crackRate = 0; // cracks per minute, smoothed
+
+  // Render one status screen
+  function render(potCount: number, isRunning: boolean, progress: ReturnType<typeof parseProgress>, error?: string): string {
+    const now = Date.now();
+    const elapsed = fmtElapsed((now - startTime) / 1000);
+
+    // Calculate crack rate from potfile delta
+    if (prevPollTime > 0 && potCount > prevPotCount) {
+      const deltaCracks = potCount - prevPotCount;
+      const deltaMin = (now - prevPollTime) / 60_000;
+      if (deltaMin > 0) crackRate = deltaCracks / deltaMin;
+    }
+    prevPotCount = potCount;
+    prevPollTime = now;
+    const state = loadState();
+    const gs = getGroupState(state, groupId);
+    const line = "═".repeat(60);
+    const batchRange = group ? `${group.batches[0]} → ${group.batches[group.batches.length - 1]}` : "unknown";
+    const hashes = group ? fmt(group.totalHashes) : "?";
+
+    const rows: string[] = [];
+    rows.push(`\x1b[2J\x1b[H`); // clear screen + cursor home
+    rows.push(line);
+    rows.push(` BRUTE8 STATUS — Group ${groupId} (${ATTACKS[activeMode].name})`);
+    rows.push(line);
+    rows.push(``);
+    rows.push(`  Batches:    ${batchRange} (${group?.batches.length ?? "?"})`);
+    rows.push(`  Hashes:     ${hashes}`);
+    rows.push(`  Phase:      ${activeMode === "thin" ? "Phase 1: THIN (62^8)" : "Phase 2: BRUTE-8 (95^8)"}`);
+    rows.push(`  State:      thin=${gs.thin}  brute8=${gs.brute8}`);
+    rows.push(``);
+    rows.push(`  ── Progress ──────────────────────────────────────`);
+
+    if (progress?.pct) {
+      rows.push(`  Completion: ${progress.pct}`);
+    }
+    if (progress?.speed) {
+      rows.push(`  Speed:      ${progress.speed}`);
+    }
+    if (progress?.eta) {
+      rows.push(`  ETA:        ${progress.eta}`);
+    }
+    if (progress?.recovered) {
+      rows.push(`  Recovered:  ${progress.recovered}`);
+    }
+    rows.push(`  Potfile:    ${fmt(potCount)} cracks`);
+    if (crackRate > 0) {
+      rows.push(`  Crack rate: ${fmt(Math.round(crackRate))}/min (${fmt(Math.round(crackRate * 60))}/hr)`);
+    }
+    rows.push(`  Status:     ${isRunning ? "RUNNING" : "IDLE"}`);
+    rows.push(`  Watching:   ${elapsed} (refresh every ${POLL_INTERVAL / 1000}s)`);
+    rows.push(``);
+
+    if (error) {
+      rows.push(`  WARNING:    ${error}`);
+      rows.push(``);
+    }
+    if (!isRunning) {
+      rows.push(`  hashcat not running.`);
+      rows.push(`  Next: bun Tools/Brute8Planner.ts --collect ${activeMode === "thin" ? "--thin " : ""}--group ${groupId}`);
+    } else {
+      rows.push(`  Ctrl+C to stop watching.`);
+    }
+    rows.push(line);
+    return rows.join("\n");
+  }
+
+  // First render
+  let potCount = parseInt(sshCmd(config, `wc -l < ${config.workDir}/potfiles/${groupName}.pot 2>/dev/null || echo 0`, 15_000).trim());
+  const running = parseInt(sshCmd(config, `pgrep -c hashcat 2>/dev/null || echo 0`, 10_000));
+  const progress = parseProgress(config, logFile);
+  process.stdout.write(render(potCount, running > 0, progress));
+
+  if (running <= 0) return;
+
+  // SSH with one retry (first call after Bun.sleep often fails on Windows)
+  function sshRetry(cmd: string, timeout = 15_000): string {
+    try {
+      return sshCmd(config, cmd, timeout);
+    } catch {
+      // Brief pause then retry once
+      const start = Date.now();
+      while (Date.now() - start < 2000) {} // busy-wait 2s (can't await here)
+      return sshCmd(config, cmd, timeout);
+    }
+  }
+
+  // Poll loop
+  let notRunningCount = 0;
+  let sshErrors = 0;
+  const MAX_SSH_ERRORS = 5;
+  let lastProgress = progress;
+  while (true) {
+    await Bun.sleep(POLL_INTERVAL);
+    try {
+      const hcRunning = parseInt(sshRetry(`pgrep -c hashcat 2>/dev/null || echo 0`));
+      potCount = parseInt(sshRetry(`wc -l < ${config.workDir}/potfiles/${groupName}.pot 2>/dev/null || echo 0`).trim());
+      const prog = parseProgress(config, logFile);
+      lastProgress = prog ?? lastProgress;
+      sshErrors = 0; // reset on success
+
+      if (hcRunning > 0) {
+        notRunningCount = 0;
+        process.stdout.write(render(potCount, true, prog));
+      } else {
+        notRunningCount++;
+        if (notRunningCount >= 2) {
+          process.stdout.write(render(potCount, false, prog));
+          break;
+        }
+      }
+    } catch (e) {
+      sshErrors++;
+      const msg = (e as Error).message?.split("\n")[0]?.slice(0, 120) ?? "unknown";
+      process.stdout.write(render(potCount, true, lastProgress, `SSH error (${sshErrors}/${MAX_SSH_ERRORS}): ${msg}`));
+      if (sshErrors >= MAX_SSH_ERRORS) {
+        console.log(`\n  ${MAX_SSH_ERRORS} consecutive SSH failures. Exiting.`);
+        break;
+      }
+    }
   }
 }
 
@@ -704,8 +893,7 @@ if (isPlan) {
   if (!groupId) { console.error("Usage: --run [--thin] --group N"); process.exit(1); }
   runGroup(groupId, mode);
 } else if (isStatus) {
-  if (!groupId) { console.error("Usage: --status --group N"); process.exit(1); }
-  checkStatus(groupId);
+  await checkStatus(groupId || undefined);
 } else if (isCollect) {
   if (!groupId) { console.error("Usage: --collect [--thin] --group N"); process.exit(1); }
   collectGroup(groupId, mode);
@@ -717,5 +905,5 @@ if (isPlan) {
   console.log("  --collect --thin --group N     Collect thin cracks, update glass");
   console.log("  --run --group N               Phase 2: brute-8 (95^8, ~days)");
   console.log("  --collect --group N           Collect brute8 cracks, update glass");
-  console.log("  --status --group N            Check progress");
+  console.log("  --status [--group N]           Live progress dashboard (auto-detects group)");
 }

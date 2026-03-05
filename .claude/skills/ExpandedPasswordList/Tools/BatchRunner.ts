@@ -353,8 +353,7 @@ function runBatches(batches: number[], options: {
 }): void {
   const totalBatches = batches.length;
   const allStart = Date.now();
-  let completed = 0;
-  let failed = 0;
+  const results: BatchSummary[] = [];
 
   banner(`BATCH RUNNER — ${totalBatches} batch${totalBatches > 1 ? "es" : ""} queued`);
   console.log(`  Batches: ${batches.map(n => zeroPad(n, 4)).join(", ")}`);
@@ -372,7 +371,7 @@ function runBatches(batches: number[], options: {
     const resumeStep = getResumeStep(batchName);
     if (resumeStep > 5) {
       console.log(`  SKIP — ${batchName} already fully processed (completed + feedback)`);
-      completed++;
+      results.push({ batchName, steps: [], totalDurationMs: 0, success: true });
       continue;
     }
 
@@ -381,11 +380,9 @@ function runBatches(batches: number[], options: {
       dryRun: options.dryRun,
       startStep: resumeStep,
     });
+    results.push(result);
 
-    if (result.success) {
-      completed++;
-    } else {
-      failed++;
+    if (!result.success) {
       // Fatal failure — stop the run
       const fatalStep = result.steps.find(s => !s.success && s.detail !== "non-fatal");
       if (fatalStep) {
@@ -412,10 +409,28 @@ function runBatches(batches: number[], options: {
 
   // Final summary
   const totalMs = Date.now() - allStart;
+  const completed = results.filter(r => r.success).length;
+  const failed = results.filter(r => !r.success).length;
+
   banner(`RUN COMPLETE`);
   console.log(`  Completed: ${completed} / ${totalBatches}`);
   if (failed > 0) console.log(`  Failed:    ${failed}`);
   console.log(`  Total time: ${formatDuration(totalMs)}`);
+
+  // Per-batch breakdown
+  if (results.length > 1 || failed > 0) {
+    console.log(`\n  Per-batch results:`);
+    for (const r of results) {
+      const icon = r.success ? "OK" : "FAIL";
+      const failedSteps = r.steps.filter(s => !s.success);
+      const failDetail = failedSteps.length > 0
+        ? ` — ${failedSteps.map(s => `${s.name}${s.detail === "non-fatal" ? " (non-fatal)" : ""}`).join(", ")}`
+        : "";
+      const state = readBatchState(r.batchName);
+      const cracks = state?.cracked ? ` [${state.cracked.toLocaleString()} cracks]` : "";
+      console.log(`    ${r.batchName}  ${icon.padEnd(5)} ${formatDuration(r.totalDurationMs).padStart(12)}${cracks}${failDetail}`);
+    }
+  }
 
   if (completed === totalBatches) {
     console.log(`\n  All batches processed successfully.`);
