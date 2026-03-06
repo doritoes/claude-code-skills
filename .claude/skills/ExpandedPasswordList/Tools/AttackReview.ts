@@ -53,7 +53,8 @@ const TIER_MAP: Record<string, number> = {
   // Removed from production (kept for historical display)
   "mask-lllllldd": -1, "mask-lllldddd": -1,  // v7.3: subsumed by mask-l8/ld8
   "hybrid-roots-4any": -1, "nocapplus-nocaprule": -1, "hybrid-nocapplus-3digit": -1,
-  "brute-8": 99, "mask-lud8": 99,
+  "brute-8": 99,
+  "mask-lud8": 1.5,  // Brute8Planner thin phase — same funnel as mask-l8/ld8
   "mask-ld9": 98, "mask-l10": 98, "mask-Ulllllldd": 98,
 };
 

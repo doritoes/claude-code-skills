@@ -91,10 +91,11 @@ export interface SandState {
  */
 export const DEFAULT_ATTACK_ORDER = [
   // ══════════════════════════════════════════════════════════════════════
-  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v8.1 (2026-03-04)
+  // CONTINUOUS IMPROVEMENT ATTACK ORDER — v8.2 (2026-03-06)
   // Applies to: Gen2 batch-0001+ | 35 attacks
-  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (78K), UNOBTAINIUM.rule (285 rules)
-  // Based on: Gen2 batches 0001-0012 (12-batch data)
+  // Assets: nocap-plus.txt (14.4M), nocap.rule (48K), BETA.txt (79K), UNOBTAINIUM.rule (285 rules)
+  // Based on: Gen2 batches 0001-0035 (35-batch data)
+  // v8.2: REORDER 3 swaps from AttackReview (35-batch cr/min). mask-lud8 promoted to Tier 1a.
   // v8.1: REORDER 3 swaps from AttackReview (12-batch cr/min). Cohort expansion (+475 PT, +540 Slavic).
   // v8.0: REORDER all tiers by cr/min (AttackReview --overlap). ADD 31 suffix rules to UNOBTAINIUM.rule.
   // v7.7: ADD reverse hybrids (-a 7) and combinators (-a 1) — 8 new attacks, ~7 min added
@@ -112,13 +113,13 @@ export const DEFAULT_ATTACK_ORDER = [
   // v7.1: ADD mask-l8/ld8/l9, DROP hybrid-roots-4any/nocapplus-nocaprule/hybrid-nocapplus-3digit
   // ══════════════════════════════════════════════════════════════════════
   //
-  // TIER 0: INSTANT (trivial keyspace, <2 min total) — sorted by cr/min (v8.1)
-  "mask-d10",    // ?d^10, 10^10 — ~1 sec. Phone numbers. (4,706 cr/min) (v7.4)
-  "brute-4",     // 133 cracks/batch avg — ~0.1 min (961 cr/min)
-  "mask-d11",    // ?d^11, 10^11 — ~9 sec. International numbers. (3,771 cr/min) (v7.4)
-  "mask-d9",     // ?d^9, 10^9 — <1 sec. PINs, 9-digit numbers. (415.6 cr/min) (v7.4)
-  "mask-d12",    // ?d^12, 10^12 — ~92 sec. Full international format. (314.3 cr/min) (v7.4)
-  "brute-3",     // 17 cracks/batch avg — ~0.2 min (94.7 cr/min)
+  // TIER 0: INSTANT (trivial keyspace, <2 min total) — sorted by cr/min (v8.2)
+  "mask-d10",    // ?d^10, 10^10 — ~1 sec. Phone numbers. (10,252 cr/min)
+  "mask-d11",    // ?d^11, 10^11 — ~9 sec. International numbers. (8,225 cr/min) (v8.2: above brute-4)
+  "brute-4",     // 133 cracks/batch avg — ~0.1 min (1,796 cr/min)
+  "mask-d9",     // ?d^9, 10^9 — <1 sec. PINs, 9-digit numbers. (910 cr/min)
+  "mask-d12",    // ?d^12, 10^12 — ~92 sec. Full international format. (672 cr/min)
+  "brute-3",     // 17 cracks/batch avg — ~0.2 min (228 cr/min)
   //
   // TIER 1: HIGH ROI — 52.6% of cracks, dominates batch time
   "brute-6",     // 7,154 cracks/batch avg — ~1.7 min (3,778 cr/min)
@@ -130,13 +131,13 @@ export const DEFAULT_ATTACK_ORDER = [
   "mask-l8",     // ?l^8, 26^8 = 209B — 19 seconds. Strips pure lowercase 8-char from pipeline.
   "mask-ld8",    // -1 ?l?d ?1^8, 36^8 = 2.8T — ~4.3 min. Lowercase+digit 8-char.
   //
-  // TIER 2: FEEDBACK ATTACKS — sorted by cr/min (v8.0 reorder)
-  "nocapplus-unobtainium",         // nocap-plus.txt × UNOBTAINIUM.rule (739.7 cr/min)
-  "feedback-beta-nocaprule",       // BETA.txt × nocap.rule (322.9 cr/min)
-  "hybrid-beta-6digit",            // BETA × ?d^6 — ~7 sec (348.3 cr/min) (v7.2)
-  "reverse-nocapplus-4digit",      // -a 7 ?d^4+nocap-plus — 28s (1,093 cr/min) (v7.7)
-  "hybrid-beta-5digit",            // BETA × ?d^5 — <1 sec (182 cr/min) (v7.2)
-  "reverse-nocapplus-3digit",      // -a 7 ?d^3+nocap-plus — 14s (412.4 cr/min) (v7.7)
+  // TIER 2: FEEDBACK ATTACKS — sorted by cr/min (v8.2 reorder)
+  "nocapplus-unobtainium",         // nocap-plus.txt × UNOBTAINIUM.rule (2,430 cr/min)
+  "reverse-nocapplus-4digit",      // -a 7 ?d^4+nocap-plus — 28s (2,141 cr/min) (v8.2: above beta-6digit)
+  "hybrid-beta-6digit",            // BETA × ?d^6 — ~7 sec (1,294 cr/min)
+  "feedback-beta-nocaprule",       // BETA.txt × nocap.rule (1,118 cr/min)
+  "reverse-nocapplus-3digit",      // -a 7 ?d^3+nocap-plus — 14s (691 cr/min) (v8.2: above beta-5digit)
+  "hybrid-beta-5digit",            // BETA × ?d^5 — <1 sec (445 cr/min)
   "combo-beta-beta",               // -a 1 BETA×BETA — <1s (178.2 cr/min) (v7.7)
   "combo-beta-beta-cap",           // -a 1 -j c BETA×BETA — <1s (82.4 cr/min) (v7.7)
   "reverse-nocapplus-1special",    // -a 7 ?s+nocap-plus — 13s (26.1 cr/min) (v7.7)

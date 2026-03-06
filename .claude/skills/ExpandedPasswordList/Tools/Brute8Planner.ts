@@ -118,9 +118,10 @@ function sleepSync(ms: number): void {
 function parseLogDuration(config: BigRedConfig, mode: AttackMode, groupId: number): number {
   const logFile = `${config.workDir}/hashcat-${mode}-g${groupId}.log`;
   try {
-    const logTail = sshCmd(config, `tail -5 ${logFile} 2>/dev/null`, 15_000);
-    const startMatch = logTail.match(/Started[.:]+\s*(.+)/);
-    const stopMatch = logTail.match(/Stopped[.:]+\s*(.+)/);
+    // grep for Started/Stopped lines — tail -5 may miss them in long logs
+    const lines = sshCmd(config, `grep -E '^(Started|Stopped)' ${logFile} 2>/dev/null | tail -2`, 15_000);
+    const startMatch = lines.match(/Started[.:]+\s*(.+)/);
+    const stopMatch = lines.match(/Stopped[.:]+\s*(.+)/);
     if (startMatch && stopMatch) {
       const started = new Date(startMatch[1].trim());
       const stopped = new Date(stopMatch[1].trim());
