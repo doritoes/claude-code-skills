@@ -245,26 +245,35 @@ bun Tools/BatchSplitter.ts   # Creates pearls/ and sand/ directories
 ## Escalating Attack Stages (Stage 2+)
 
 After Stage 1 (rockyou+OneRule), SAND contains hard passwords that require escalating attacks.
-35 attacks across 5 tiers (v8.1), sorted by cr/min within tiers, orchestrated by `BigRedRunner.ts`. See `Workflows/Pipeline.md` for the full attack list.
+35 attacks across 5 tiers (v8.2), sorted by cr/min within tiers, orchestrated by `SandChunkProcessor.ts` (chunked, preferred) or `BigRedRunner.ts` (single-batch). See `Workflows/Pipeline.md` for the full attack list.
 
 | Tier | Attack Types | Examples | Typical Yield |
 |------|-------------|----------|---------------|
-| 0 | Exhaustive short + digit masks | brute-3/4, mask-d9/d10/d11/d12 | ~150 + ~5K cracks, <2 min |
-| 1 | Exhaustive 6-8 char | brute-6/7, mask-l8/ld8 | ~42K cracks, ~115 min |
-| 2 | Feedback + reverse hybrid + combinator | BETA×nocap.rule, -a 7 prefix, -a 1 word+word | ~5K cracks, ~2 min |
-| 3 | Dict+mask hybrids + masks | nocap-plus+digits, Ullllllldd, combinator | ~12K cracks, ~65 min |
-| 3a | Long-password discovery | nocap-plus+5digit, 3any, mask-l9, BETA+4any | ~15K cracks, ~55 min |
+| 0 | Exhaustive short + digit masks | brute-3/4, mask-d9/d10/d11/d12 | ~6.3K cracks, <2 min |
+| 1 | Exhaustive 6-7 char | brute-6/7 | ~16K cracks, ~52 min |
+| 1a | Cheap 8-char masks | mask-l8/ld8 + mask-lud8 (Brute8Planner) | ~42K cracks, ~3 min (excl. lud8) |
+| 2 | Feedback + reverse hybrid + combinator | BETA×nocap.rule, -a 7 prefix, -a 1 word+word | ~5K cracks, ~3 min |
+| 3 | Dict+mask hybrids + masks | nocap-plus+digits, Ullllllldd, combinator | ~8K cracks, ~25 min |
+| 3a | Long-password discovery | nocap-plus+5digit, 3any, mask-l9, BETA+4any | ~17K cracks, ~30 min |
 | 4 | Low-yield hybrids | Ullllldd, special+digits | ~1K cracks, ~2 min |
 
 **Attack modes used:** -a 0 (dict+rules), -a 3 (mask), -a 6 (hybrid dict+mask), -a 7 (reverse hybrid mask+dict), -a 1 (combinator)
 
-**Tool: BigRedRunner.ts**
+**Tools:**
 ```bash
-bun Tools/BigRedRunner.ts --batch N          # Run all 35 attacks (auto-syncs files)
-bun Tools/BigRedRunner.ts --batch N --collect # Collect diamonds + glass
+# Chunked processing (PREFERRED — 17× throughput)
+bun Tools/SandChunkProcessor.ts --auto --chunk N     # 20 batches at once
+
+# Single-batch (debugging)
+bun Tools/BigRedRunner.ts --batch N                  # Run all 35 attacks
+bun Tools/BigRedRunner.ts --batch N --collect        # Collect diamonds + glass
+
+# 8-char brute force on GLASS
+bun Tools/Brute8Planner.ts --run --thin --group N    # Phase 1: 62^8 (~hours)
+bun Tools/Brute8Planner.ts --run --group N           # Phase 2: 95^8 (~days)
 ```
 
-Each batch produces DIAMONDS (cracked) and GLASS (survivors). ~4 hrs per batch on RTX 4060 Ti.
+Each batch produces DIAMONDS (cracked) and GLASS (survivors). ~4 hrs per batch, ~14 min/batch chunked.
 
 ## Memory Efficiency Strategy
 

@@ -1,6 +1,6 @@
 # Gen2 Pipeline — End-to-End Workflow
 
-**Last Updated:** 2026-03-03
+**Last Updated:** 2026-03-06
 **Platform:** BIGRED (local RTX 4060 Ti, 192.168.99.204)
 
 ---
@@ -23,31 +23,28 @@ hibp-batched/ (raw HIBP data)
   gravel/ (1:1 batch correspondence with rocks/)
       |
       v
-  [GravelProcessor] .......... Stage 1: rockyou + OneRule on BIGRED
+  [GravelChunkProcessor] ..... Stage 1: nocap + nocap.rule on BIGRED (chunked, ~14 batches/chunk)
       |                |
       v                v
-  pearls/           sand/ (survivors)
+  pearls/           sand/ (survivors, ~1.505B hashes)
                        |
                        v
-                   [BigRedRunner] ... Stage 2: 35 attacks on BIGRED (v8.0)
+                   [SandChunkProcessor] . Stage 2: 35 attacks on BIGRED (chunked, ~20 batches/chunk)
                        |                |
                        v                v
-                   diamonds/         glass/ (uncrackable)
+                   diamonds/         glass/ (survivors)
+                       |                |
+                       v                v
+                   [DiamondFeedback]  [Brute8Planner] .. 8-char brute on combined GLASS
+                       |                |        |
+                       v                v        v
+                   [rebuild-nocap-plus] thin    brute8
+                       |             (62^8)   (95^8)
+                       v
+                   [AttackReview] .... ROI analysis, recommendations
                        |
                        v
-                   [DiamondFeedback] . Entropy classification, cohort analysis, feedback generation
-                       |
-                       v
-                   [rebuild-nocap-plus] . Merge cohorts into nocap-plus.txt
-                       |
-                       v
-                   [AttackReview] .... ROI analysis, overlap testing, recommendations
-                       |
-                       v
-                   [BigRedSync] ..... Sync updated assets to BIGRED
-                       |
-                       v
-                   [next batch] ..... Loop
+                   [next chunk] ...... Loop
 ```
 
 ---
@@ -58,10 +55,12 @@ hibp-batched/ (raw HIBP data)
 |------|---------|-----------|
 | `RocksExtractor.ts` | HIBP batched JSON → `rocks/batch-NNNN.txt` | `--resume` |
 | `GravelFilter.ts` | rocks - rockyou = gravel (1:1 batch mapping) | `--verify` |
-| `GravelProcessor.ts` | Stage 1 cracking (gravel → pearls + sand) | `--next`, `--batch N`, `--collect`, `--status`, `--dry-run` |
-| `BatchRunner.ts` | **Stage 2 orchestrator** (sync → attacks → collect → feedback → rebuild) | `--batch N`, `--through M`, `--next`, `--count N`, `--resume`, `--status` |
+| `GravelChunkProcessor.ts` | Stage 1 chunked cracking (gravel → pearls + sand) | `--plan`, `--run --chunk N`, `--collect --chunk N` |
+| `SandChunkProcessor.ts` | **Stage 2 chunked orchestrator** (20 batches/chunk, 17× throughput) | `--plan`, `--auto --chunk N [--through M]`, `--run/collect/feedback/status --chunk N` |
+| `Brute8Planner.ts` | 8-char brute force on combined GLASS (two-phase: thin + brute8) | `--plan`, `--run [--thin] --group N`, `--collect [--thin] --group N`, `--status` |
+| `BatchRunner.ts` | Stage 2 single-batch orchestrator (sync → attacks → collect → feedback) | `--batch N`, `--through M`, `--next`, `--count N`, `--resume`, `--status` |
 | `BigRedSync.ts` | Sync wordlists/rules/hashlists to BIGRED | `--hashlist batch-NNNN` |
-| `BigRedRunner.ts` | Stage 2 cracking (sand → diamonds + glass) | `--batch N`, `--collect`, `--status`, `--attack NAME`, `--dry-run` |
+| `BigRedRunner.ts` | Stage 2 per-batch cracking (sand → diamonds + glass) | `--batch N`, `--collect`, `--status`, `--attack NAME`, `--dry-run` |
 | `DiamondFeedback.ts` | Analyze diamonds, classify cohorts, generate feedback (noise-filtered) | `--batch batch-NNNN`, `--full`, `--analyze <file>`, `--dry-run` |
 | `AttackReview.ts` | Attack ROI analysis + recommendations | `--batch batch-NNNN`, `--overlap`, `--json` |
 | `SandStateManager.ts` | State inspection/validation | `--stats`, `--validate`, `--json` |
@@ -119,9 +118,72 @@ bun Tools/GravelProcessor.ts --batch N --collect
 
 ---
 
-## Phase 3: Stage 2 — Automated (BatchRunner)
+## Phase 3: Stage 2 — Chunked (SandChunkProcessor) ★ PREFERRED
 
-**Preferred method.** `BatchRunner.ts` orchestrates the full Stage 2 pipeline for 1 or more batches.
+**Preferred method.** Combines ~20 SAND batches into one ~7M-hash chunk. 17× throughput vs single-batch processing because brute-7 (45% of batch time) runs once instead of 20×.
+
+```bash
+cd .claude/skills/ExpandedPasswordList
+
+# Plan chunk grouping (shows time estimates per chunk)
+bun Tools/SandChunkProcessor.ts --plan
+
+# Run a single chunk end-to-end (run → collect → feedback)
+bun Tools/SandChunkProcessor.ts --auto --chunk 2
+
+# Multi-chunk overnight run (chunks 2 through 5)
+bun Tools/SandChunkProcessor.ts --auto --chunk 2 --through 5
+
+# Individual steps (for debugging or manual control)
+bun Tools/SandChunkProcessor.ts --run --chunk 2        # Run 35 attacks on chunk
+bun Tools/SandChunkProcessor.ts --status --chunk 2     # Check progress
+bun Tools/SandChunkProcessor.ts --collect --chunk 2    # Attribute cracks to batches
+bun Tools/SandChunkProcessor.ts --feedback --chunk 2   # DiamondFeedback + rebuild nocap-plus
+```
+
+**How it works:**
+1. Combines all SAND files in a chunk → deduped hashlist → uploads to BIGRED
+2. Runs all 35 attacks sequentially (same as BigRedRunner)
+3. `--collect` attributes group-level cracks back to individual batches using potfile offsets
+4. `--feedback` runs DiamondFeedback per batch, then rebuilds nocap-plus.txt
+
+**State:** `data/sand-chunk-state.json` (tracks chunk status, per-attack potfile offsets for attribution)
+
+---
+
+## Phase 3a: Stage 2 — Brute-8 on GLASS (Brute8Planner)
+
+Two-phase 8-char brute force on combined GLASS files. Runs in parallel with or after Stage 2 chunks.
+
+```bash
+cd .claude/skills/ExpandedPasswordList
+
+# Plan: groups glass files, shows time estimates for both phases
+bun Tools/Brute8Planner.ts --plan
+
+# Phase 1: THIN (mask-lud8, 62^8 — catches 88% of alphanumeric 8-char, ~8.5 hrs)
+bun Tools/Brute8Planner.ts --run --thin --group 1
+bun Tools/Brute8Planner.ts --status                    # Live dashboard (auto-detects)
+bun Tools/Brute8Planner.ts --collect --thin --group 1  # Attribute to batches, update glass
+
+# Phase 2: BRUTE-8 (95^8 — catches remaining 8-char with special chars, ~7 days)
+bun Tools/Brute8Planner.ts --run --group 1
+bun Tools/Brute8Planner.ts --collect --group 1
+```
+
+**Incremental planning:** Re-running `--plan` after new glass files appear preserves existing groups and appends new ones. Group numbering is stable.
+
+**Results (thin group 1, 24 batches):** 377,193 cracks (5.67% of glass), ~15,700/batch. Glass reduced from ~277K to ~261K per batch.
+
+**State:** `data/brute8-plan.json` (group assignments), `data/brute8-state.json` (phase status)
+
+---
+
+## Phase 3b: Stage 2 — Single Batch (BatchRunner)
+
+Use for debugging, one-off batches, or when fine-grained control is needed. SandChunkProcessor is preferred for production.
+
+**Former preferred method.** `BatchRunner.ts` orchestrates the full Stage 2 pipeline for 1 or more batches.
 
 ```bash
 cd .claude/skills/ExpandedPasswordList
@@ -317,31 +379,32 @@ bun Tools/BigRedRunner.ts --batch N
 
 ---
 
-## Current Attack List (35 attacks, v8.1 — 2026-03-04)
+## Current Attack List (35 attacks, v8.2 — 2026-03-06)
 
-Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min within tiers (12-batch data):
+Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min within tiers (35-batch data):
 
-| Tier | Attack | Description | ROI (12-batch avg) |
+| Tier | Attack | Description | ROI (35-batch avg) |
 |------|--------|-------------|-------------------|
-| 0 | mask-d10 | Pure digits 10 chars (phone numbers) | 2,880 cr/batch, 4,706 cr/min |
-| 0 | brute-4 | Exhaustive 4 chars | 132 cr/batch, 961 cr/min |
-| 0 | mask-d11 | Pure digits 11 chars (international) | 2,306 cr/batch, 3,763 cr/min |
-| 0 | mask-d9 | Pure digits 9 chars (PINs) | 256 cr/batch, 418 cr/min |
-| 0 | mask-d12 | Pure digits 12 chars | 694 cr/batch, 315 cr/min |
-| 0 | brute-3 | Exhaustive 3 chars | 17 cr/batch, 124 cr/min |
-| 1 | brute-6 | Exhaustive 6 chars | 7,144 cr/batch, 4,278 cr/min |
-| 1 | brute-7 | Exhaustive 7 chars | 8,661 cr/batch, 81 cr/min |
-| 1a | mask-l8 | ?l^8 — pure lowercase 8-char | 13,035 cr/batch, 21,506 cr/min |
-| 1a | mask-ld8 | -1 ?l?d ?1^8 — lowercase+digit 8-char | 12,824 cr/batch, 2,653 cr/min |
-| 2 | nocapplus-unobtainium | nocap-plus.txt × UNOBTAINIUM.rule (285 rules) | 547 cr/batch, 982 cr/min |
-| 2 | feedback-beta-nocaprule | BETA.txt × nocap.rule | 269 cr/batch, 443 cr/min |
-| 2 | hybrid-beta-6digit | BETA.txt + ?d^6 | 302 cr/batch, 497 cr/min |
-| 2 | reverse-nocapplus-4digit | -a 7 ?d^4 + nocap-plus (prefix) | 855 cr/batch, 1,093 cr/min |
-| 2 | hybrid-beta-5digit | BETA.txt + ?d^5 | 111 cr/batch, 182 cr/min |
-| 2 | reverse-nocapplus-3digit | -a 7 ?d^3 + nocap-plus (prefix) | 213 cr/batch, 351 cr/min |
-| 2 | combo-beta-beta | -a 1 BETA × BETA (word+word) | 97 cr/batch, 188 cr/min |
-| 2 | combo-beta-beta-cap | -a 1 -j c BETA × BETA (Cap+word) | 44 cr/batch, 85 cr/min |
-| 2 | reverse-nocapplus-1special | -a 7 ?s + nocap-plus (prefix) | 13 cr/batch, 21 cr/min |
+| 0 | mask-d10 | Pure digits 10 chars (phone numbers) | 2,888 cr/batch, 10,252 cr/min |
+| 0 | mask-d11 | Pure digits 11 chars (international) | 2,318 cr/batch, 8,225 cr/min |
+| 0 | brute-4 | Exhaustive 4 chars | 134 cr/batch, 1,796 cr/min |
+| 0 | mask-d9 | Pure digits 9 chars (PINs) | 257 cr/batch, 910 cr/min |
+| 0 | mask-d12 | Pure digits 12 chars | 698 cr/batch, 672 cr/min |
+| 0 | brute-3 | Exhaustive 3 chars | 17 cr/batch, 228 cr/min |
+| 1 | brute-6 | Exhaustive 6 chars | 7,150 cr/batch, 9,130 cr/min |
+| 1 | brute-7 | Exhaustive 7 chars | 8,653 cr/batch, 170 cr/min |
+| 1a | mask-l8 | ?l^8 — pure lowercase 8-char | 13,078 cr/batch, 43,827 cr/min |
+| 1a | mask-ld8 | -1 ?l?d ?1^8 — lowercase+digit 8-char | 12,791 cr/batch, 5,579 cr/min |
+| 1a | mask-lud8 | -1 ?l?u?d ?1^8 — alphanumeric 8-char (Brute8Planner thin) | 15,717 cr/batch |
+| 2 | nocapplus-unobtainium | nocap-plus.txt × UNOBTAINIUM.rule (285 rules) | 639 cr/batch, 2,430 cr/min |
+| 2 | reverse-nocapplus-4digit | -a 7 ?d^4 + nocap-plus (prefix) | 813 cr/batch, 2,141 cr/min |
+| 2 | hybrid-beta-6digit | BETA.txt + ?d^6 | 362 cr/batch, 1,294 cr/min |
+| 2 | feedback-beta-nocaprule | BETA.txt × nocap.rule | 313 cr/batch, 1,118 cr/min |
+| 2 | reverse-nocapplus-3digit | -a 7 ?d^3 + nocap-plus (prefix) | 194 cr/batch, 691 cr/min |
+| 2 | hybrid-beta-5digit | BETA.txt + ?d^5 | 125 cr/batch, 445 cr/min |
+| 2 | combo-beta-beta | -a 1 BETA × BETA (word+word) | 113 cr/batch, 454 cr/min |
+| 2 | combo-beta-beta-cap | -a 1 -j c BETA × BETA (Cap+word) | 54 cr/batch, 219 cr/min |
+| 2 | reverse-nocapplus-1special | -a 7 ?s + nocap-plus (prefix) | 12 cr/batch, 44 cr/min |
 | 3 | hybrid-nocapplus-4digit | nocap-plus + 4 digits | 1,844 cr/batch, 3,033 cr/min |
 | 3 | brute-5 | Exhaustive 5 chars | 969 cr/batch, 1,594 cr/min |
 | 3 | combo-beta-nocapplus-cap | -a 1 -j c BETA × nocap-plus | 994 cr/batch, 429 cr/min |
@@ -359,6 +422,7 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min with
 | 4 | hybrid-nocapplus-digit-1special | nocap-plus + ?d?s | 55 cr/batch, 91 cr/min |
 | 4 | reverse-nocapplus-special-3digit | -a 7 ?s?d^3 + nocap-plus | 27 cr/batch, 16 cr/min |
 
+**v8.2 (2026-03-06):** REORDER 3 swaps (35-batch cr/min): mask-d11 above brute-4, reverse-nocapplus-4digit above hybrid-beta-6digit, reverse-nocapplus-3digit above hybrid-beta-5digit. mask-lud8 promoted to Tier 1a (Brute8Planner thin phase).
 **v8.1 (2026-03-04):** REORDER 3 swaps (12-batch cr/min). Cohort expansion (+475 Portuguese, +540 Slavic).
 **v8.0 (2026-03-03):** REORDER all tiers by cr/min (AttackReview --overlap). ADD 31 suffix rules to UNOBTAINIUM.rule (285 total).
 **v7.9 (2026-03-02):** 4 reverse hybrids (-a 7) + 4 combinators (-a 1). Removed brute-1/2 (0 cracks in Gen2).
@@ -383,6 +447,9 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min with
 | `BETA.txt` | `data/feedback/BETA.txt` | Discovered roots from diamonds (rebuilds each batch via DiamondFeedback) |
 | `unobtainium.rule` | `data/feedback/unobtainium.rule` | 285 rules: auto-generated + deep analysis + manual v7.2 + v8.0/v8.1 suffix gaps |
 | `sand-state.json` | `data/sand-state.json` | Stage 2 state (batches, attack results, feedback metrics) |
+| `sand-chunk-state.json` | `data/sand-chunk-state.json` | Chunked Stage 2 state (chunk status, per-attack potfile offsets) |
+| `brute8-plan.json` | `data/brute8-plan.json` | Brute8Planner group assignments (incremental, stable numbering) |
+| `brute8-state.json` | `data/brute8-state.json` | Brute8Planner phase status per group (thin/brute8 pending/running/completed) |
 | `gravel-state.json` | `data/gravel-state.json` | Stage 1 state |
 | Cohort files | `data/cohorts/*.txt` | 12 language/cultural wordlists (79K words) |
 | `build-nocap-rule.ts` | `scripts/build-nocap-rule.ts` | Builds nocap.rule from OneRule + bussin at performance-correct positions |
@@ -408,7 +475,7 @@ Defined in `SandStateManager.ts → DEFAULT_ATTACK_ORDER`. Sorted by cr/min with
 BigRedRunner launches hashcat in `screen` sessions. Triple completion check: process + screen + log status.
 
 ### brute-8
-Deferred to post-pipeline. 169 hours on BIGRED (7 days). Plan: after all gravel batches processed, combine ALL GLASS into single brute-8 pass.
+Now managed by `Brute8Planner.ts` with two-phase approach. Phase 1 (thin/mask-lud8) catches 88% of 8-char alphanumeric in ~8.5 hrs per group. Phase 2 (full 95^8) catches remaining ~12% in ~7 days per group. Use `--plan` to see grouping and `--status` for live dashboard.
 
 ### File sync issues
 Always run `bun Tools/BigRedSync.ts --status` before submitting. Verify all wordlists/rules show correct sizes.
@@ -422,8 +489,12 @@ Backup at `sand-state.json.bak`. Use `bun Tools/SandStateManager.ts --validate` 
 
 Attacks too expensive for per-batch execution. Run as single passes on combined GLASS after pipeline completes.
 
-### brute-8
-`?a?a?a?a?a?a?a?a` (95^8). ~169 hours (7 days). Combine ALL GLASS → single pass.
+### brute-8 (NOW MANAGED BY Brute8Planner)
+Two-phase approach replaces the "combine ALL GLASS" plan:
+- **Phase 1 (thin):** mask-lud8 (62^8), ~8.5 hrs/group. Catches 88% of 8-char alphanumeric. **Group 1 COMPLETE:** 377,193 cracks (5.67%), 24 batches. Group 2 running.
+- **Phase 2 (brute8):** ?a^8 (95^8), ~7 days/group. Catches remaining 12% (special chars).
+- **Incremental planning:** `--plan` preserves existing groups when new glass files appear.
+- Groups target ~7M hashes (peak throughput before bitmap table overflow).
 
 ### 9+ Char Mask Candidates (deep analysis 2026-03-04, 560K diamonds)
 

@@ -29,7 +29,9 @@ Research pipeline to study password cracking effectiveness and improve tools.
 - **Stage 1 COMPLETE** (2026-02-20): All 4,328 GRAVEL batches processed
   - 644,544,278 PEARLS (29.99% crack rate) via nocap.txt + nocap.rule
   - 1,504,909,773 SAND remaining for Stage 2
-- **Stage 2**: 22 Gen1 + 12 Gen2 batches completed (v8.1: 35 attacks sorted by cr/min, 285 UNOBTAINIUM rules)
+- **Stage 2**: 35 batches completed via SandChunkProcessor (chunked, 20 batches/chunk) + BatchRunner
+  - 2,850,540 DIAMONDS (v8.2: 35 attacks sorted by cr/min, 285 UNOBTAINIUM rules)
+  - Brute8Planner thin phase: 377,193 additional cracks from mask-lud8 (62^8) on 24 batches
 - **HIBP Top 1000 Coverage**: nocap.txt + nocap.rule cracks **950/1000 (95.0%)** of the most frequently breached passwords
   - 50 uncracked hashes saved to `data/hibp-top1000-uncracked.txt` for future analysis
 - Every batch teaches us something. Every crack is a data point.
@@ -387,6 +389,9 @@ sa@ se3 si1 so0
 | "archive sand tasks", "archive completed", "sand archiver" | `bun Tools/SandArchiver.ts` |
 | "glass attacks", "untried attacks", "what attacks for glass" | `bun Tools/SandProcessor.ts --glass <batch>` |
 | "attack history", "which attacks tried" | `bun Tools/SandProcessor.ts --history <batch>` |
+| "chunk processing", "run chunk", "chunked stage 2" | `bun Tools/SandChunkProcessor.ts --plan` |
+| "brute 8", "thin phase", "8-char brute force" | `bun Tools/Brute8Planner.ts --plan` |
+| "attack review", "attack ROI", "attack effectiveness" | `bun Tools/AttackReview.ts` |
 
 ## Quick Commands
 
@@ -447,15 +452,30 @@ bun Tools/CrackSubmitter.ts --batch 17 --workers 8 --priority 90  # Override pri
 # SAND PROCESSING (Stage 2: SAND → DIAMONDS + GLASS)
 # ============================================================================
 
-# Process SAND batches with escalating attacks
+# Chunked processing (PREFERRED — 17× throughput vs single-batch)
+bun Tools/SandChunkProcessor.ts --plan               # Show chunk grouping + time estimates
+bun Tools/SandChunkProcessor.ts --auto --chunk 2     # Full pipeline: run → collect → feedback
+bun Tools/SandChunkProcessor.ts --auto --chunk 2 --through 5  # Multi-chunk overnight run
+bun Tools/SandChunkProcessor.ts --run --chunk 2      # Run attacks only (no collect/feedback)
+bun Tools/SandChunkProcessor.ts --collect --chunk 2  # Attribute cracks to batches, update glass
+bun Tools/SandChunkProcessor.ts --feedback --chunk 2 # DiamondFeedback per batch + rebuild nocap-plus
+bun Tools/SandChunkProcessor.ts --status --chunk 2   # Show attack progress for chunk
+
+# Brute-8 on combined GLASS (post-pipeline, two-phase)
+bun Tools/Brute8Planner.ts --plan                    # Show grouping for both phases
+bun Tools/Brute8Planner.ts --run --thin --group 1    # Phase 1: mask-lud8 (62^8, ~hours)
+bun Tools/Brute8Planner.ts --status                  # Live dashboard (auto-detects group)
+bun Tools/Brute8Planner.ts --collect --thin --group 1  # Collect thin cracks, update glass
+bun Tools/Brute8Planner.ts --run --group 1           # Phase 2: brute-8 (95^8, ~days)
+bun Tools/Brute8Planner.ts --collect --group 1       # Collect brute8 cracks, update glass
+
+# Single-batch processing (use for debugging or one-off batches)
+bun Tools/BatchRunner.ts --batch N                   # Full pipeline: sync → attacks → collect → feedback
+bun Tools/BatchRunner.ts --batch 1 --through 10      # Run batches 1-10 sequentially
+
+# Legacy Hashtopolis-based SAND processing (deprecated — use BIGRED tools above)
 bun Tools/SandProcessor.ts --batch 1                 # Process SAND batch 1 (all attacks)
-bun Tools/SandProcessor.ts --batch 1 --attack rule-dive  # Run specific attack only
-bun Tools/SandProcessor.ts --batch 1 --dry-run       # Preview without submitting
 bun Tools/SandProcessor.ts --status                  # Show processing status
-bun Tools/SandProcessor.ts --history 1               # Show attack history for batch
-bun Tools/SandProcessor.ts --analyze                 # Analyze attack effectiveness
-bun Tools/SandProcessor.ts --attacks                 # List all available attacks
-bun Tools/SandProcessor.ts --list                    # List available SAND batches
 
 # SAND state management
 bun Tools/SandStateManager.ts                        # Show SAND processing state
