@@ -226,26 +226,33 @@ function findOptimalGroupSize(totalBatches: number, avgPerBatch: number, keyspac
   return bestSize;
 }
 
-/** Build phase plan with groups of optimal size. */
+/** Build phase plan with groups of optimal size. Preserves existing groups and appends new ones. */
 function buildPhase(
   attack: AttackMode,
-  glassBatches: GlassBatch[],
+  newBatches: GlassBatch[],
   avgPerBatch: number,
+  existingGroups: PhasePlan["groups"] = [],
 ): PhasePlan {
   const keyspace = ATTACKS[attack].keyspace;
-  const optSize = findOptimalGroupSize(glassBatches.length, avgPerBatch, keyspace);
+  const nextId = existingGroups.length > 0
+    ? Math.max(...existingGroups.map(g => g.id)) + 1
+    : 1;
 
-  const groups: PhasePlan["groups"] = [];
-  for (let i = 0; i < glassBatches.length; i += optSize) {
-    const slice = glassBatches.slice(i, i + optSize);
-    const h = slice.reduce((s, b) => s + b.hashes, 0);
-    groups.push({
-      id: groups.length + 1,
-      batches: slice.map(b => b.name),
-      totalHashes: h,
-      speedGHs: interpolateSpeed(h),
-      estimatedDays: estimateDays(h, keyspace),
-    });
+  const groups: PhasePlan["groups"] = [...existingGroups];
+
+  if (newBatches.length > 0) {
+    const optSize = findOptimalGroupSize(newBatches.length, avgPerBatch, keyspace);
+    for (let i = 0; i < newBatches.length; i += optSize) {
+      const slice = newBatches.slice(i, i + optSize);
+      const h = slice.reduce((s, b) => s + b.hashes, 0);
+      groups.push({
+        id: nextId + Math.floor(i / optSize),
+        batches: slice.map(b => b.name),
+        totalHashes: h,
+        speedGHs: interpolateSpeed(h),
+        estimatedDays: estimateDays(h, keyspace),
+      });
+    }
   }
 
   return {
@@ -253,19 +260,54 @@ function buildPhase(
     keyspace,
     groups,
     totalDays: groups.reduce((s, g) => s + g.estimatedDays, 0),
-    optimalGroupSize: optSize,
+    optimalGroupSize: newBatches.length > 0
+      ? findOptimalGroupSize(newBatches.length, avgPerBatch, keyspace)
+      : (existingGroups.length > 0 ? existingGroups[0].batches.length : 1),
   };
 }
 
 function createPlan(glassBatches: GlassBatch[]): Brute8Plan {
+  // Load existing plan to preserve completed/running groups
+  let existingPlan: Brute8Plan | null = null;
+  if (existsSync(PLAN_FILE)) {
+    existingPlan = JSON.parse(readFileSync(PLAN_FILE, "utf-8"));
+  }
+
+  // Find batches already assigned to existing groups
+  const assignedBatches = new Set<string>();
+  const existingThinGroups: PhasePlan["groups"] = [];
+  const existingBrute8Groups: PhasePlan["groups"] = [];
+  if (existingPlan) {
+    for (const g of existingPlan.thin.groups) {
+      for (const b of g.batches) assignedBatches.add(b);
+      existingThinGroups.push(g);
+    }
+    for (const g of existingPlan.brute8.groups) {
+      existingBrute8Groups.push(g);
+    }
+  }
+
+  // Only plan for NEW batches not in any existing group
+  const newBatches = glassBatches.filter(b => !assignedBatches.has(b.name));
+
   const totalHashes = glassBatches.reduce((s, b) => s + b.hashes, 0);
   const avgPerBatch = totalHashes / glassBatches.length;
+  const newAvg = newBatches.length > 0
+    ? newBatches.reduce((s, b) => s + b.hashes, 0) / newBatches.length
+    : avgPerBatch;
 
-  const thin = buildPhase("thin", glassBatches, avgPerBatch);
+  const thin = buildPhase("thin", newBatches, newAvg, existingThinGroups);
 
   // For brute8 estimate, assume thin reduces glass by ~6%
-  const postThinAvg = avgPerBatch * (1 - ATTACKS.thin.glassReductionPct);
-  const brute8 = buildPhase("brute8", glassBatches, postThinAvg);
+  const postThinAvg = newAvg * (1 - ATTACKS.thin.glassReductionPct);
+  const brute8 = buildPhase("brute8", newBatches, postThinAvg, existingBrute8Groups);
+
+  if (existingPlan && newBatches.length > 0) {
+    console.log(`  Existing groups preserved: ${existingThinGroups.length} thin, ${existingBrute8Groups.length} brute8`);
+    console.log(`  New batches to plan: ${newBatches.length} (${newBatches[0].name} → ${newBatches[newBatches.length - 1].name})`);
+  } else if (existingPlan && newBatches.length === 0) {
+    console.log(`  No new batches — all ${glassBatches.length} already assigned to groups.`);
+  }
 
   return {
     created: new Date().toISOString(),
