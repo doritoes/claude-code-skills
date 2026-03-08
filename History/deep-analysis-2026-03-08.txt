@@ -1,0 +1,105 @@
+══════════════════════════════════════════════════════════════
+  DEEP ANALYSIS — 155 Batches, 11.5M Diamonds
+  Date: 2026-03-08
+  Data: C:\Users\sethh\AI-Projects\.claude\skills\ExpandedPasswordList\data
+══════════════════════════════════════════════════════════════
+
+Scale:
+  - 11,536,310 diamonds across 155 completed batches
+  - BETA.txt: 79,901 roots
+  - UNOBTAINIUM.rule: 287 active rules
+  - Batches 1-35: with thin phase (~24.9%/batch)
+  - Batches 36-155: without thin phase (~20.4%/batch)
+
+══════════════════════════════════════════════════════════════
+  LENGTH DISTRIBUTION — Pearls vs Diamonds
+══════════════════════════════════════════════════════════════
+
+Len     Pearls (samp)   Prl %    Diamonds   Dia %   Delta
+─────────────────────────────────────────────────────────
+8             172,642   26.8%   4,824,498   41.8% +15.0pp
+9             119,251   18.5%   1,080,986    9.4%  -9.1pp
+10             98,898   15.3%   1,292,536   11.2%  -4.1pp
+11             46,690    7.2%     900,040    7.8%  +0.6pp
+12             28,727    4.5%     438,466    3.8%  -0.7pp
+13+            26,359    4.1%     371,475    3.2%  -0.9pp
+
+Key insight: 8-char is 41.8% of diamonds (inflated by thin phase masks)
+  but only 26.8% of pearls. 9+ is 35.4% of diamonds vs 49.9% of pearls.
+  Stage 2 is proportionally weaker at cracking longer passwords.
+
+══════════════════════════════════════════════════════════════
+  9+ CHAR GAP ANALYSIS
+══════════════════════════════════════════════════════════════
+
+4,082,025 passwords are 9+ chars (35.4% of diamonds)
+67.9% of 9+ char diamonds have WEAK/NO dedicated attack coverage.
+
+Pattern                   Count      Share   Coverage
+───────────────────────────────────────────────────────
+pure-digits              960,764    23.5%   Only brute-7 (7 only). NO 9+ digit mask
+complex-with-special     693,606    17.0%   Mostly UNCOVERED
+word+digits              667,364    16.3%   Hybrid attacks (partial)
+Word+digits              483,827    11.9%   Hybrid with capitalize (partial)
+pure-lowercase           437,289    10.7%   mask-l9 only. NO 10+ lowercase mask
+pure-alnum               369,605     9.1%   mask-ld8 only. NO 9+ alnum mask
+mixed-case+digits        125,294     3.1%   Mostly UNCOVERED
+word+special+digits      116,566     2.9%   Partial hybrid coverage
+Capitalize+word           44,574     1.1%   feedback-beta-nocaprule (partial)
+mixed-case-alpha          24,143     0.6%   NO dedicated mask
+
+══════════════════════════════════════════════════════════════
+  SUFFIX ANALYSIS
+══════════════════════════════════════════════════════════════
+
+Only 2 MISSING rules in top 50 suffixes:
+  $2 $8 $!  # "28!" (1,354 diamonds)
+  $6 $$     # "6$" (1,331 diamonds)
+
+Root found in: unknown 53.9% | nocap-plus 39.9% | beta 6.2%
+
+══════════════════════════════════════════════════════════════
+  COHORT ROI (diamonds per root)
+══════════════════════════════════════════════════════════════
+
+Source                    Roots   Avg Cr/Root
+──────────────────────────────────────────────
+portuguese-brazilian      1,647     151.54
+slavic-names              1,565      96.09
+culture-sports-music        536      82.97
+arabic-names              2,333      69.05
+indian-names              2,936      61.66
+turkish-names               793      58.19
+discovered                  824      41.84
+chinese-pinyin            2,493      30.37
+korean-romanized            525      23.91
+spanish-phrases           7,499       3.07
+french-phrases            5,819       2.46
+markov-phrase-roots      52,919       1.91
+
+Name cohorts >> phrase cohorts on per-root ROI (60x difference).
+Top 10% of roots produce 91.7% of attributions.
+Bottom 50% produce 0.0%.
+
+══════════════════════════════════════════════════════════════
+  FEEDBACK LOOP HEALTH
+══════════════════════════════════════════════════════════════
+
+Feedback cracks FLAT at ~4,176/batch
+BETA.txt essentially static (79,890 → 79,901 over last 20 batches)
+Diminishing returns on root discovery.
+
+Top feedback attacks (cumulative):
+  combo-beta-nocapplus-cap    200,293 total (1,292/batch avg)
+  nocapplus-unobtainium       105,146 total (678/batch avg)
+  combo-beta-nocapplus        100,619 total (649/batch avg)
+  hybrid-beta-4any             63,168 total (408/batch avg)
+  hybrid-beta-6digit           59,656 total (385/batch avg)
+
+══════════════════════════════════════════════════════════════
+  ACTIONS TAKEN
+══════════════════════════════════════════════════════════════
+
+1. Added 2 missing UNOBTAINIUM rules: $2 $8 $! and $6 $$
+2. Overlap analysis OOMed at 11.5M passwords — needs memory optimization
+3. Saved research direction to memory (longer-passwords-research.md)

@@ -219,11 +219,6 @@ interface FeedbackTrendRow {
   betaSize: number;
 }
 
-interface OverlapEntry {
-  password: string;
-  coveredBy: string[];
-}
-
 interface JsonOutput {
   roiTable: AttackROI[];
   tierSummary: Record<string, { cracks: number; rate: number; durationSeconds: number }>;
@@ -252,21 +247,6 @@ function formatDuration(seconds: number): string {
 function pad(s: string, width: number, align: "left" | "right" = "left"): string {
   if (align === "right") return s.padStart(width);
   return s.padEnd(width);
-}
-
-/**
- * Load passwords from a diamond passwords file, one per line.
- */
-async function loadPasswords(filePath: string): Promise<string[]> {
-  if (!existsSync(filePath)) return [];
-  const passwords: string[] = [];
-  const rl = createInterface({ input: createReadStream(filePath, "utf-8"), crlfDelay: Infinity });
-  for await (const line of rl) {
-    // Strip \r only — passwords may have intentional leading/trailing spaces
-    const clean = line.replace(/\r$/, "");
-    if (clean.length > 0) passwords.push(clean);
-  }
-  return passwords;
 }
 
 /**
@@ -556,37 +536,7 @@ function classifyPassword(
   return coveredBy;
 }
 
-/**
- * Detect structural patterns not covered by current attacks.
- */
-function detectUncoveredPatterns(passwords: string[]): { pattern: string; count: number; sample: string }[] {
-  const patterns: Record<string, { count: number; sample: string }> = {};
-
-  function addPattern(key: string, pw: string) {
-    if (!patterns[key]) patterns[key] = { count: 0, sample: pw };
-    patterns[key].count++;
-  }
-
-  for (const pw of passwords) {
-    // 9+ char all lowercase (not covered by brute-7 or mask-lllllldd)
-    if (/^[a-z]{9,}$/.test(pw)) addPattern("lower-9plus", pw);
-    // Capital + lowercase + 3+ digits (Ulll...ddd)
-    if (/^[A-Z][a-z]+\d{3,}$/.test(pw) && pw.length >= 9) addPattern("Ulower-3plusdigits", pw);
-    // All digits 9+ (not covered by brute-7 or mask-lllldddd)
-    if (/^\d{9,}$/.test(pw)) addPattern("digits-9plus", pw);
-    // Mixed case without digits (not covered by masks)
-    if (/^[a-zA-Z]{9,}$/.test(pw) && /[a-z]/.test(pw) && /[A-Z]/.test(pw)) addPattern("mixedcase-9plus", pw);
-    // Word + special + word pattern
-    if (/^[a-zA-Z]+[^a-zA-Z0-9][a-zA-Z]+$/.test(pw)) addPattern("word-special-word", pw);
-    // Leet speak (contains both letters and digit substitutions)
-    if (/[a-zA-Z]/.test(pw) && /[0@1!3$5%7&]/.test(pw) && pw.length >= 8) addPattern("leet-8plus", pw);
-  }
-
-  return Object.entries(patterns)
-    .map(([pattern, data]) => ({ pattern, ...data }))
-    .filter(p => p.count >= 10) // Only report patterns with meaningful counts
-    .sort((a, b) => b.count - a.count);
-}
+// detectUncoveredPatterns replaced by inline classifyUncoveredPattern() in streaming pipeline
 
 async function runOverlapAnalysis(
   batches: Record<string, BatchState>,
@@ -597,16 +547,17 @@ async function runOverlapAnalysis(
   uncoveredCount: number;
   uncoveredSample: string[];
   uncoveredPatterns: { pattern: string; count: number; sample: string }[];
-  allPasswords: string[];
+  lengthBuckets: Record<number, number>;
+  totalPasswords: number;
 }> {
-  // ── Inverted lookup pattern (same as DiamondFeedback OOM fix) ──
-  // Instead of loading 14M-word nocap-plus.txt into a Set (~1.5GB OOM),
-  // we build a candidate Set from passwords (~500MB), then STREAM
-  // nocap-plus.txt against it. O(candidates) memory, not O(wordlist).
+  // ── Memory-efficient overlap analysis ──
+  // Phase 1: Stream ALL passwords to collect candidate roots (no password array kept)
+  // Phase 2: Single pass over nocap-plus.txt to find matching roots
+  // Phase 3: Stream passwords AGAIN to classify using matched roots
+  // Memory: O(unique_roots + nocap_matches + betaSet) ≈ ~500MB, not O(all_passwords)
 
   console.log("\nLoading passwords for overlap analysis...");
 
-  // Load passwords from relevant batches
   const batchNames = filterBatch
     ? [filterBatch]
     : Object.entries(batches)
@@ -614,56 +565,86 @@ async function runOverlapAnalysis(
         .map(([name]) => name)
         .sort();
 
-  let allPasswords: string[] = [];
+  // Get password file paths (filter to existing files)
+  const pwFiles: string[] = [];
   for (const name of batchNames) {
     const pwPath = resolve(DIAMONDS_DIR, `passwords-${name}.txt`);
-    const pws = await loadPasswords(pwPath);
-    allPasswords = allPasswords.concat(pws);
+    if (existsSync(pwPath)) pwFiles.push(pwPath);
   }
 
-  if (allPasswords.length === 0) {
+  if (pwFiles.length === 0) {
     console.log("  No password files found for analysis.");
-    return { classification: {}, exclusive: {}, uncoveredCount: 0, uncoveredSample: [], uncoveredPatterns: [], allPasswords: [] };
+    return { classification: {}, exclusive: {}, uncoveredCount: 0, uncoveredSample: [], uncoveredPatterns: [], lengthBuckets: {}, totalPasswords: 0 };
   }
 
-  console.log(`  Passwords to classify: ${allPasswords.length.toLocaleString()}`);
+  // ── Phase 1: Count passwords and chunk file list ──
+  console.log("  Phase 1: Counting passwords...");
+  let totalPasswords = 0;
+  const fileSizes: { path: string; count: number }[] = [];
+  for (const filePath of pwFiles) {
+    let count = 0;
+    const rl = createInterface({ input: createReadStream(filePath, "utf-8"), crlfDelay: Infinity });
+    for await (const line of rl) {
+      if (line.replace(/\r$/, "")) count++;
+    }
+    fileSizes.push({ path: filePath, count });
+    totalPasswords += count;
+  }
+  console.log(`  Total passwords: ${totalPasswords.toLocaleString()} across ${pwFiles.length} files`);
 
-  // Steps 1-3 combined: Chunk passwords to cap candidate Set memory (~200MB/chunk
-  // instead of ~1.2GB all-at-once). Streams nocap-plus.txt once per chunk.
-  // Trade-off: ~5 passes over nocap-plus.txt vs 1, but avoids OOM at 900K+ passwords.
-  const OVERLAP_CHUNK_SIZE = 100_000;
+  // ── Phase 2: Chunked candidate collection + nocap-plus matching ──
+  // Process ~2M passwords per chunk to keep candidate Set under ~1.5GB.
+  // Each chunk: collect roots → stream nocap-plus.txt → save matches → clear.
+  const CHUNK_TARGET = 2_000_000;
   const nocapPlusPath = resolve(DATA_DIR, "nocap-plus.txt");
   const nocapPlusMatches = new Set<string>();
   let nocapPlusTotal = 0;
-  const numChunks = Math.ceil(allPasswords.length / OVERLAP_CHUNK_SIZE);
 
-  console.log(`  Processing in ${numChunks} chunk(s) of ${OVERLAP_CHUNK_SIZE.toLocaleString()}...`);
+  // Build chunk boundaries (groups of files summing to ~CHUNK_TARGET passwords)
+  const fileChunks: string[][] = [];
+  let currentChunk: string[] = [];
+  let currentCount = 0;
+  for (const { path, count } of fileSizes) {
+    currentChunk.push(path);
+    currentCount += count;
+    if (currentCount >= CHUNK_TARGET) {
+      fileChunks.push(currentChunk);
+      currentChunk = [];
+      currentCount = 0;
+    }
+  }
+  if (currentChunk.length > 0) fileChunks.push(currentChunk);
 
-  for (let ci = 0; ci < numChunks; ci++) {
-    const chunk = allPasswords.slice(ci * OVERLAP_CHUNK_SIZE, (ci + 1) * OVERLAP_CHUNK_SIZE);
+  console.log(`  Phase 2: Matching roots against nocap-plus.txt (${fileChunks.length} chunks)...`);
+
+  for (let ci = 0; ci < fileChunks.length; ci++) {
+    const chunkFiles = fileChunks[ci];
     const chunkCandidates = new Set<string>();
 
-    for (const pw of chunk) {
-      // Dict+rules reverse roots
-      const roots = reverseRuleRoots(pw);
-      for (const r of roots) chunkCandidates.add(r);
-      // Hybrid base words (strip digit/any suffixes)
-      const m4d = pw.match(/^(.+?)(\d{4})$/);
-      if (m4d) chunkCandidates.add(m4d[1].toLowerCase());
-      const m5d = pw.match(/^(.+?)(\d{5})$/);
-      if (m5d) chunkCandidates.add(m5d[1].toLowerCase());
-      const m6d = pw.match(/^(.+?)(\d{6})$/);
-      if (m6d) chunkCandidates.add(m6d[1].toLowerCase());
-      const msd = pw.match(/^(.+?)([^a-zA-Z0-9])(\d{3})$/);
-      if (msd) chunkCandidates.add(msd[1].toLowerCase());
-      // hybrid-3any base
-      if (pw.length >= 4) chunkCandidates.add(pw.slice(0, -3).toLowerCase());
+    // Collect candidate roots from this chunk's passwords
+    for (const filePath of chunkFiles) {
+      const rl = createInterface({ input: createReadStream(filePath, "utf-8"), crlfDelay: Infinity });
+      for await (const line of rl) {
+        const pw = line.replace(/\r$/, "");
+        if (!pw) continue;
+        const roots = reverseRuleRoots(pw);
+        for (const r of roots) chunkCandidates.add(r);
+        const m4d = pw.match(/^(.+?)(\d{4})$/);
+        if (m4d) chunkCandidates.add(m4d[1].toLowerCase());
+        const m5d = pw.match(/^(.+?)(\d{5})$/);
+        if (m5d) chunkCandidates.add(m5d[1].toLowerCase());
+        const m6d = pw.match(/^(.+?)(\d{6})$/);
+        if (m6d) chunkCandidates.add(m6d[1].toLowerCase());
+        const msd = pw.match(/^(.+?)([^a-zA-Z0-9])(\d{3})$/);
+        if (msd) chunkCandidates.add(msd[1].toLowerCase());
+        if (pw.length >= 4) chunkCandidates.add(pw.slice(0, -3).toLowerCase());
+      }
     }
 
-    // Stream nocap-plus.txt — only keep words that match this chunk's candidates
+    // Stream nocap-plus.txt against this chunk's candidates
     let lineCount = 0;
-    const rl = createInterface({ input: createReadStream(nocapPlusPath, "utf-8"), crlfDelay: Infinity });
-    for await (const line of rl) {
+    const rl2 = createInterface({ input: createReadStream(nocapPlusPath, "utf-8"), crlfDelay: Infinity });
+    for await (const line of rl2) {
       const word = line.trim().toLowerCase();
       if (word) {
         lineCount++;
@@ -672,47 +653,91 @@ async function runOverlapAnalysis(
     }
     if (ci === 0) nocapPlusTotal = lineCount;
 
+    console.log(`  Chunk ${ci + 1}/${fileChunks.length}: ${chunkCandidates.size.toLocaleString()} candidates, ${nocapPlusMatches.size.toLocaleString()} total matches`);
     chunkCandidates.clear();
-    console.log(`  Chunk ${ci + 1}/${numChunks}: ${chunk.length.toLocaleString()} passwords, ${nocapPlusMatches.size.toLocaleString()} wordlist matches`);
   }
 
-  console.log(`  nocap-plus.txt: ${nocapPlusTotal.toLocaleString()} words, ${nocapPlusMatches.size.toLocaleString()} candidates matched (${numChunks} passes)`);
+  console.log(`  nocap-plus.txt: ${nocapPlusTotal.toLocaleString()} words, ${nocapPlusMatches.size.toLocaleString()} candidates matched (${fileChunks.length} passes)`);
 
-  // Step 2: Load BETA.txt into Set (small — 78K, no OOM risk)
+  // Load BETA.txt (small — 80K, no OOM risk)
   const betaPath = resolve(FEEDBACK_DIR, "BETA.txt");
   const betaSet = await loadWordlistSet(betaPath);
   console.log(`  BETA.txt: ${betaSet.size.toLocaleString()} words`);
 
-  // Step 4: Classify each password using betaSet + nocapPlusMatches + regex
-  console.log("  Classifying...");
+  // ── Phase 3: Stream passwords again to classify + accumulate counters ──
+  console.log("  Phase 3: Classifying passwords (streaming)...");
   const classification: Record<string, number> = {};
   const exclusive: Record<string, number> = {};
-  const uncovered: string[] = [];
+  let uncoveredCount = 0;
+  const uncoveredSample: string[] = [];
+  const lengthBuckets: Record<number, number> = {};
+  // Streaming uncovered pattern detection (counters + first sample)
+  const uncoveredPatternCounters: Record<string, { count: number; sample: string }> = {};
+  let classified = 0;
 
-  for (const pw of allPasswords) {
-    const coveredBy = classifyPassword(pw, nocapPlusMatches, betaSet);
+  for (const filePath of pwFiles) {
+    const rl3 = createInterface({ input: createReadStream(filePath, "utf-8"), crlfDelay: Infinity });
+    for await (const line of rl3) {
+      const pw = line.replace(/\r$/, "");
+      if (!pw) continue;
 
-    for (const attack of coveredBy) {
-      classification[attack] = (classification[attack] ?? 0) + 1;
-    }
+      // Length distribution
+      lengthBuckets[pw.length] = (lengthBuckets[pw.length] ?? 0) + 1;
 
-    if (coveredBy.length === 1) {
-      exclusive[coveredBy[0]] = (exclusive[coveredBy[0]] ?? 0) + 1;
-    } else if (coveredBy.length === 0) {
-      uncovered.push(pw);
+      // Classify
+      const coveredBy = classifyPassword(pw, nocapPlusMatches, betaSet);
+
+      for (const attack of coveredBy) {
+        classification[attack] = (classification[attack] ?? 0) + 1;
+      }
+
+      if (coveredBy.length === 1) {
+        exclusive[coveredBy[0]] = (exclusive[coveredBy[0]] ?? 0) + 1;
+      } else if (coveredBy.length === 0) {
+        uncoveredCount++;
+        if (uncoveredSample.length < 20) uncoveredSample.push(pw);
+        // Inline uncovered pattern detection
+        classifyUncoveredPattern(pw, uncoveredPatternCounters);
+      }
+
+      classified++;
+      if (classified % 1_000_000 === 0) {
+        console.log(`  Classified ${(classified / 1_000_000).toFixed(0)}M / ${(totalPasswords / 1_000_000).toFixed(1)}M passwords...`);
+      }
     }
   }
 
-  const uncoveredPatterns = detectUncoveredPatterns(uncovered);
+  const uncoveredPatterns = Object.entries(uncoveredPatternCounters)
+    .map(([pattern, data]) => ({ pattern, ...data }))
+    .filter(p => p.count >= 10)
+    .sort((a, b) => b.count - a.count);
 
   return {
     classification,
     exclusive,
-    uncoveredCount: uncovered.length,
-    uncoveredSample: uncovered.slice(0, 20),
+    uncoveredCount,
+    uncoveredSample,
     uncoveredPatterns,
-    allPasswords,
+    lengthBuckets,
+    totalPasswords,
   };
+}
+
+/** Classify a single uncovered password into pattern counters (streaming-friendly) */
+function classifyUncoveredPattern(
+  pw: string,
+  counters: Record<string, { count: number; sample: string }>,
+): void {
+  function addPattern(key: string) {
+    if (!counters[key]) counters[key] = { count: 0, sample: pw };
+    counters[key].count++;
+  }
+  if (/^[a-z]{9,}$/.test(pw)) addPattern("lower-9plus");
+  if (/^[A-Z][a-z]+\d{3,}$/.test(pw) && pw.length >= 9) addPattern("Ulower-3plusdigits");
+  if (/^\d{9,}$/.test(pw)) addPattern("digits-9plus");
+  if (/^[a-zA-Z]{9,}$/.test(pw) && /[a-z]/.test(pw) && /[A-Z]/.test(pw)) addPattern("mixedcase-9plus");
+  if (/^[a-zA-Z]+[^a-zA-Z0-9][a-zA-Z]+$/.test(pw)) addPattern("word-special-word");
+  if (/[a-zA-Z]/.test(pw) && /[0@1!3$5%7&]/.test(pw) && pw.length >= 8) addPattern("leet-8plus");
 }
 
 // =============================================================================
@@ -898,18 +923,16 @@ function printOverlap(overlap: Awaited<ReturnType<typeof runOverlapAnalysis>>, t
   }
 }
 
-function printLengthDistribution(passwords: string[]): void {
+function printLengthDistribution(lengthBuckets: Record<number, number>, total: number): void {
   console.log("\n── PASSWORD LENGTH DISTRIBUTION ──────────────────────────────\n");
 
-  const lengthBuckets: Record<number, number> = {};
-  for (const pw of passwords) {
-    const len = pw.length;
-    lengthBuckets[len] = (lengthBuckets[len] ?? 0) + 1;
+  if (total === 0) {
+    console.log("  No passwords to analyze.\n");
+    return;
   }
 
   const maxLen = Math.max(...Object.keys(lengthBuckets).map(Number));
   const minLen = Math.min(...Object.keys(lengthBuckets).map(Number));
-  const total = passwords.length;
   const maxCount = Math.max(...Object.values(lengthBuckets));
   const barMax = 40;
 
@@ -1053,9 +1076,8 @@ async function main(): Promise<void> {
   printRecommendations(recs);
 
   if (overlap) {
-    const totalPasswords = roi.reduce((sum, r) => sum + r.cracks, 0);
-    printOverlap(overlap, totalPasswords);
-    printLengthDistribution(overlap.allPasswords);
+    printOverlap(overlap, overlap.totalPasswords);
+    printLengthDistribution(overlap.lengthBuckets, overlap.totalPasswords);
   }
 }
 
