@@ -1,6 +1,6 @@
 {
   "version": "2.16.0",
-  "lastUpdated": "2026-01-22",
+  "lastUpdated": "2026-03-08",
   "vendors": {
     "netgear": {
       "id": "netgear",
@@ -16,21 +16,32 @@
           "displayName": "Nighthawk",
           "category": "wifi-router",
           "targetMarket": "prosumer",
-          "models": ["netgear_r7000", "netgear_r8000", "netgear_rax50"],
+          "models": [
+            "netgear_r7000",
+            "netgear_r8000",
+            "netgear_rax50"
+          ],
           "description": "High-performance WiFi routers"
         },
         "orbi": {
           "displayName": "Orbi",
           "category": "mesh",
           "targetMarket": "consumer",
-          "models": ["netgear_orbi_370", "netgear_orbi_rbk852", "netgear_orbi_rbk50"],
+          "models": [
+            "netgear_orbi_370",
+            "netgear_orbi_rbk852",
+            "netgear_orbi_rbk50"
+          ],
           "description": "Whole-home mesh WiFi systems"
         },
         "legacy": {
           "displayName": "Legacy",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["netgear_dgn2200", "netgear_wnr2000"],
+          "models": [
+            "netgear_dgn2200",
+            "netgear_wnr2000"
+          ],
           "description": "Legacy consumer routers"
         }
       },
@@ -50,21 +61,29 @@
           "displayName": "RT Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["asus_rt_ax55", "asus_rt_ax86u", "asus_rt_ax88u"],
+          "models": [
+            "asus_rt_ax55",
+            "asus_rt_ax86u",
+            "asus_rt_ax88u"
+          ],
           "description": "Standard wireless routers"
         },
         "rog": {
           "displayName": "ROG Rapture",
           "category": "gaming-router",
           "targetMarket": "prosumer",
-          "models": ["asus_gt_ax11000"],
+          "models": [
+            "asus_gt_ax11000"
+          ],
           "description": "Gaming-focused routers with advanced QoS"
         },
         "zenwifi": {
           "displayName": "ZenWiFi",
           "category": "mesh",
           "targetMarket": "consumer",
-          "models": ["asus_zenwifi_xt8"],
+          "models": [
+            "asus_zenwifi_xt8"
+          ],
           "description": "Mesh WiFi systems"
         }
       },
@@ -84,21 +103,31 @@
           "displayName": "Archer",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["tplink_archer_ax21", "tplink_archer_ax50", "tplink_archer_c7"],
+          "models": [
+            "tplink_archer_ax21",
+            "tplink_archer_ax50",
+            "tplink_archer_c7"
+          ],
           "description": "Mid-range to high-end wireless routers"
         },
         "deco": {
           "displayName": "Deco",
           "category": "mesh",
           "targetMarket": "consumer",
-          "models": ["tplink_deco_m5", "tplink_deco_x60"],
+          "models": [
+            "tplink_deco_m5",
+            "tplink_deco_x60"
+          ],
           "description": "Mesh WiFi systems"
         },
         "legacy": {
           "displayName": "Legacy",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["tplink_tl_wr841n", "tplink_tl_wa855re"],
+          "models": [
+            "tplink_tl_wr841n",
+            "tplink_tl_wa855re"
+          ],
           "description": "Budget and legacy routers"
         }
       },
@@ -117,28 +146,46 @@
           "displayName": "DIR Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["dlink_dir_859", "dlink_dir_820l", "dlink_dir_820", "dlink_dir_645", "dlink_dir_605", "dlink_dir_610", "dlink_dir_825", "dlink_dir_300", "dlink_dir_600", "dlink_dir_1950"],
+          "models": [
+            "dlink_dir_859",
+            "dlink_dir_820l",
+            "dlink_dir_820",
+            "dlink_dir_645",
+            "dlink_dir_605",
+            "dlink_dir_610",
+            "dlink_dir_825",
+            "dlink_dir_300",
+            "dlink_dir_600",
+            "dlink_dir_1950"
+          ],
           "description": "Consumer wireless routers"
         },
         "dsl": {
           "displayName": "DSL Series",
           "category": "modem-router",
           "targetMarket": "consumer",
-          "models": ["dlink_dsl_2750b", "dlink_dsl_2760u"],
+          "models": [
+            "dlink_dsl_2750b",
+            "dlink_dsl_2760u"
+          ],
           "description": "DSL modem/router combos"
         },
         "dns": {
           "displayName": "DNS Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["dlink_dns_320"],
+          "models": [
+            "dlink_dns_320"
+          ],
           "description": "Network storage with router features"
         },
         "dwl": {
           "displayName": "DWL Series",
           "category": "access-point",
           "targetMarket": "soho",
-          "models": ["dlink_dwl_2600ap"],
+          "models": [
+            "dlink_dwl_2600ap"
+          ],
           "description": "Wireless access points"
         }
       },
@@ -158,28 +205,36 @@
           "displayName": "EMG Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["zyxel_emg2926"],
+          "models": [
+            "zyxel_emg2926"
+          ],
           "description": "Dual-band wireless routers"
         },
         "p660": {
           "displayName": "P660 Series",
           "category": "modem-router",
           "targetMarket": "consumer",
-          "models": ["zyxel_p660hn_t1a"],
+          "models": [
+            "zyxel_p660hn_t1a"
+          ],
           "description": "DSL modem/router combos"
         },
         "usg": {
           "displayName": "USG Series",
           "category": "business-router",
           "targetMarket": "smb",
-          "models": ["zyxel_usg_flex"],
+          "models": [
+            "zyxel_usg_flex"
+          ],
           "description": "Unified security gateways"
         },
         "vmg": {
           "displayName": "VMG Series",
           "category": "modem-router",
           "targetMarket": "consumer",
-          "models": ["zyxel_vmg_series"],
+          "models": [
+            "zyxel_vmg_series"
+          ],
           "description": "VDSL modem/routers"
         }
       },
@@ -198,7 +253,9 @@
           "displayName": "RouterBOARD",
           "category": "wifi-router",
           "targetMarket": "prosumer",
-          "models": ["mikrotik_routeros"],
+          "models": [
+            "mikrotik_routeros"
+          ],
           "description": "Professional-grade routers running RouterOS"
         }
       },
@@ -217,7 +274,10 @@
           "displayName": "Vigor",
           "category": "business-router",
           "targetMarket": "smb",
-          "models": ["draytek_vigor_2960", "draytek_vigor_3900"],
+          "models": [
+            "draytek_vigor_2960",
+            "draytek_vigor_3900"
+          ],
           "description": "Business-class routers with VPN"
         }
       },
@@ -236,7 +296,13 @@
           "displayName": "AC Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["tenda_ac11", "tenda_ac15", "tenda_ac7", "tenda_ac9", "tenda_ac10"],
+          "models": [
+            "tenda_ac11",
+            "tenda_ac15",
+            "tenda_ac7",
+            "tenda_ac9",
+            "tenda_ac10"
+          ],
           "description": "Budget WiFi routers"
         }
       },
@@ -256,21 +322,27 @@
           "displayName": "UniFi",
           "category": "access-point",
           "targetMarket": "prosumer",
-          "models": ["ubiquiti_unifi_ap"],
+          "models": [
+            "ubiquiti_unifi_ap"
+          ],
           "description": "Enterprise-grade WiFi access points"
         },
         "edgerouter": {
           "displayName": "EdgeRouter",
           "category": "business-router",
           "targetMarket": "prosumer",
-          "models": ["ubiquiti_edgerouter"],
+          "models": [
+            "ubiquiti_edgerouter"
+          ],
           "description": "Professional routing platform"
         },
         "airos": {
           "displayName": "AirOS",
           "category": "access-point",
           "targetMarket": "prosumer",
-          "models": ["ubiquiti_airos"],
+          "models": [
+            "ubiquiti_airos"
+          ],
           "description": "Outdoor wireless systems"
         }
       },
@@ -289,7 +361,10 @@
           "displayName": "xFi Gateway",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["xfinity_xb7", "xfinity_xb8"],
+          "models": [
+            "xfinity_xb7",
+            "xfinity_xb8"
+          ],
           "description": "Comcast xFi gateway devices"
         }
       },
@@ -308,7 +383,10 @@
           "displayName": "Fios Gateway",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["verizon_g1100", "verizon_g3100"],
+          "models": [
+            "verizon_g1100",
+            "verizon_g3100"
+          ],
           "description": "Verizon Fios home gateway devices"
         }
       },
@@ -327,7 +405,11 @@
           "displayName": "BGW Gateway",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["att_bgw210", "att_bgw320", "att_bgw620"],
+          "models": [
+            "att_bgw210",
+            "att_bgw320",
+            "att_bgw620"
+          ],
           "description": "AT&T fiber/DSL gateway devices"
         }
       },
@@ -346,28 +428,40 @@
           "displayName": "Velop",
           "category": "mesh",
           "targetMarket": "consumer",
-          "models": ["linksys_velop_mx5300", "linksys_velop_mx8400", "linksys_velop_mx4200"],
+          "models": [
+            "linksys_velop_mx5300",
+            "linksys_velop_mx8400",
+            "linksys_velop_mx4200"
+          ],
           "description": "Whole-home mesh WiFi systems"
         },
         "hydra": {
           "displayName": "Hydra Pro",
           "category": "wifi-router",
           "targetMarket": "prosumer",
-          "models": ["linksys_hydra_pro_6e"],
+          "models": [
+            "linksys_hydra_pro_6e"
+          ],
           "description": "High-performance WiFi 6E routers"
         },
         "mr": {
           "displayName": "Max-Stream MR Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["linksys_mr9600", "linksys_mr6350", "linksys_mr8300"],
+          "models": [
+            "linksys_mr9600",
+            "linksys_mr6350",
+            "linksys_mr8300"
+          ],
           "description": "WiFi 5/6 dual-band routers with mesh capability"
         },
         "atlas": {
           "displayName": "Atlas Max",
           "category": "mesh",
           "targetMarket": "prosumer",
-          "models": ["linksys_atlas_max_6e"],
+          "models": [
+            "linksys_atlas_max_6e"
+          ],
           "description": "Premium WiFi 6E mesh systems"
         }
       },
@@ -388,7 +482,11 @@
           "displayName": "eero",
           "category": "mesh",
           "targetMarket": "consumer",
-          "models": ["eero_pro_6e", "eero_basic", "eero_6"],
+          "models": [
+            "eero_pro_6e",
+            "eero_basic",
+            "eero_6"
+          ],
           "description": "Cloud-managed mesh WiFi systems with auto-updates"
         }
       },
@@ -409,7 +507,10 @@
           "displayName": "AirPort",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["apple_airport_extreme", "apple_airport_express"],
+          "models": [
+            "apple_airport_extreme",
+            "apple_airport_express"
+          ],
           "description": "DISCONTINUED - Apple's WiFi router line (2003-2018)"
         }
       },
@@ -430,7 +531,10 @@
           "displayName": "Nest WiFi",
           "category": "mesh",
           "targetMarket": "consumer",
-          "models": ["google_nest_wifi_pro", "google_wifi_original"],
+          "models": [
+            "google_nest_wifi_pro",
+            "google_wifi_original"
+          ],
           "description": "Google Home integrated mesh WiFi systems with auto-updates"
         }
       },
@@ -450,7 +554,10 @@
           "displayName": "Starlink Router",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["starlink_router_gen2", "starlink_router_gen3"],
+          "models": [
+            "starlink_router_gen2",
+            "starlink_router_gen3"
+          ],
           "description": "WiFi routers for Starlink satellite internet"
         }
       },
@@ -469,21 +576,32 @@
           "displayName": "N Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["belkin_n750", "belkin_n450", "belkin_n600", "belkin_n300"],
+          "models": [
+            "belkin_n750",
+            "belkin_n450",
+            "belkin_n600",
+            "belkin_n300"
+          ],
           "description": "802.11n wireless routers"
         },
         "ac": {
           "displayName": "AC Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["belkin_ac1200", "belkin_ac1900"],
+          "models": [
+            "belkin_ac1200",
+            "belkin_ac1900"
+          ],
           "description": "802.11ac wireless routers"
         },
         "range": {
           "displayName": "Range Extenders",
           "category": "range-extender",
           "targetMarket": "consumer",
-          "models": ["belkin_f9k1122", "belkin_f9k1015"],
+          "models": [
+            "belkin_f9k1122",
+            "belkin_f9k1015"
+          ],
           "description": "WiFi range extenders"
         }
       },
@@ -502,14 +620,21 @@
           "displayName": "Surfboard",
           "category": "modem-router",
           "targetMarket": "consumer",
-          "models": ["arris_sbg6580", "arris_sbg7580", "arris_sbg8300"],
+          "models": [
+            "arris_sbg6580",
+            "arris_sbg7580",
+            "arris_sbg8300"
+          ],
           "description": "Cable modem/router combos (Motorola brand)"
         },
         "nvg": {
           "displayName": "NVG Series",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["arris_nvg589", "arris_nvg599"],
+          "models": [
+            "arris_nvg589",
+            "arris_nvg599"
+          ],
           "description": "ISP-provided gateways (AT&T U-verse)"
         }
       },
@@ -528,7 +653,11 @@
           "displayName": "AirStation",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["buffalo_wzr_hp_g300nh", "buffalo_wsr_3200ax4s", "buffalo_wzr_1750dhp"],
+          "models": [
+            "buffalo_wzr_hp_g300nh",
+            "buffalo_wsr_3200ax4s",
+            "buffalo_wzr_1750dhp"
+          ],
           "description": "Consumer and prosumer wireless routers"
         }
       },
@@ -547,21 +676,28 @@
           "displayName": "MI424WR Series",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["actiontec_mi424wr"],
+          "models": [
+            "actiontec_mi424wr"
+          ],
           "description": "Verizon FiOS gateways"
         },
         "c-series": {
           "displayName": "C-Series",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["actiontec_c1000a", "actiontec_c2000a"],
+          "models": [
+            "actiontec_c1000a",
+            "actiontec_c2000a"
+          ],
           "description": "CenturyLink ISP gateways"
         },
         "t-series": {
           "displayName": "T-Series",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["actiontec_t3200"],
+          "models": [
+            "actiontec_t3200"
+          ],
           "description": "CenturyLink fiber gateways"
         }
       },
@@ -582,21 +718,29 @@
           "displayName": "HG Series",
           "category": "modem-router",
           "targetMarket": "consumer",
-          "models": ["huawei_hg532", "huawei_hg8245"],
+          "models": [
+            "huawei_hg532",
+            "huawei_hg8245"
+          ],
           "description": "Home gateways and DSL modems"
         },
         "ws": {
           "displayName": "WS Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["huawei_ws5200", "huawei_ws7100"],
+          "models": [
+            "huawei_ws5200",
+            "huawei_ws7100"
+          ],
           "description": "Consumer WiFi routers"
         },
         "ax": {
           "displayName": "AX Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["huawei_ax3"],
+          "models": [
+            "huawei_ax3"
+          ],
           "description": "WiFi 6 routers"
         }
       },
@@ -615,14 +759,22 @@
           "displayName": "AC Series",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["wavlink_ac3000", "wavlink_ac1200"],
+          "models": [
+            "wavlink_ac3000",
+            "wavlink_ac1200"
+          ],
           "description": "802.11ac wireless routers and extenders"
         },
         "wn": {
           "displayName": "WN Series",
           "category": "range-extender",
           "targetMarket": "consumer",
-          "models": ["wavlink_wn530h4", "wavlink_wn530hg4", "wavlink_wn572hg3", "wavlink_wn578w2"],
+          "models": [
+            "wavlink_wn530h4",
+            "wavlink_wn530hg4",
+            "wavlink_wn572hg3",
+            "wavlink_wn578w2"
+          ],
           "description": "WiFi range extenders"
         }
       },
@@ -643,7 +795,9 @@
           "displayName": "Mi Router",
           "category": "wifi-router",
           "targetMarket": "consumer",
-          "models": ["xiaomi_be7000"],
+          "models": [
+            "xiaomi_be7000"
+          ],
           "description": "Consumer wireless routers"
         }
       },
@@ -662,7 +816,9 @@
           "displayName": "GigaSpire",
           "category": "isp-gateway",
           "targetMarket": "consumer",
-          "models": ["calix_gigaspire_u4m"],
+          "models": [
+            "calix_gigaspire_u4m"
+          ],
           "description": "ISP-provided WiFi 6 mesh systems"
         },
         "gigacenter": {
@@ -684,7 +840,11 @@
       "family": "nighthawk",
       "model": "R7000",
       "displayName": "NETGEAR R7000 Nighthawk",
-      "aliases": ["nighthawk r7000", "r7000", "netgear nighthawk r7000"],
+      "aliases": [
+        "nighthawk r7000",
+        "r7000",
+        "netgear nighthawk r7000"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2013,
@@ -698,16 +858,23 @@
           "firmwareBranches": {
             "1.0.11.x": {
               "branchName": "1.0.11.x",
-              "msv": "1.0.11.134",
-              "msvDate": "2023-06-12",
-              "msvCves": ["CVE-2017-5521", "CVE-2017-6862"],
+              "msv": "1.4.1.30",
+              "msvDate": "2026-03-08",
+              "msvCves": [
+                "CVE-2017-5521",
+                "CVE-2017-6862"
+              ],
               "latest": "1.0.11.148",
               "latestDate": "2024-11-20",
               "downloadUrl": "https://www.netgear.com/support/product/R7000.aspx#download",
               "eol": false
             }
           },
-          "kevCves": ["CVE-2017-5521", "CVE-2017-6862"],
+          "kevCves": [
+            "CVE-2017-5521",
+            "CVE-2017-6862",
+            "CVE-2016-6277"
+          ],
           "altFirmware": {
             "ddwrt": {
               "status": "supported",
@@ -737,7 +904,13 @@
       "family": "nighthawk",
       "model": "R6400v2",
       "displayName": "NETGEAR R6400v2 AC1750 Smart WiFi Router",
-      "aliases": ["r6400v2", "r6400 v2", "netgear r6400v2", "ac1750 r6400", "r6400"],
+      "aliases": [
+        "r6400v2",
+        "r6400 v2",
+        "netgear r6400v2",
+        "ac1750 r6400",
+        "r6400"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2017,
@@ -753,7 +926,11 @@
               "branchName": "1.0.4.x",
               "msv": "1.0.4.126",
               "msvDate": "2022-08-01",
-              "msvCves": ["CVE-2021-40847", "CVE-2022-27642", "CVE-2022-27647"],
+              "msvCves": [
+                "CVE-2021-40847",
+                "CVE-2022-27642",
+                "CVE-2022-27647"
+              ],
               "latest": "1.0.5.128",
               "latestDate": "2024-06-01",
               "downloadUrl": "https://www.netgear.com/support/product/R6400v2.aspx#download",
@@ -791,7 +968,11 @@
       "family": "legacy",
       "model": "DGN2200",
       "displayName": "NETGEAR DGN2200",
-      "aliases": ["dgn2200", "netgear dgn2200", "dgn-2200"],
+      "aliases": [
+        "dgn2200",
+        "netgear dgn2200",
+        "dgn-2200"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2011,
@@ -805,13 +986,19 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2017-6334", "CVE-2017-6077"],
+              "msvCves": [
+                "CVE-2017-6334",
+                "CVE-2017-6077"
+              ],
               "latest": "1.0.0.60",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2017-6334", "CVE-2017-6077"]
+          "kevCves": [
+            "CVE-2017-6334",
+            "CVE-2017-6077"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -822,7 +1009,11 @@
       "family": "legacy",
       "model": "WNR2000v5",
       "displayName": "NETGEAR WNR2000v5",
-      "aliases": ["wnr2000", "wnr2000v5", "netgear wnr2000"],
+      "aliases": [
+        "wnr2000",
+        "wnr2000v5",
+        "netgear wnr2000"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2015,
@@ -836,13 +1027,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2016-10174"],
+              "msvCves": [
+                "CVE-2016-10174"
+              ],
               "latest": "1.0.0.72",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2016-10174"]
+          "kevCves": [
+            "CVE-2016-10174"
+          ]
         }
       },
       "defaultHwVersion": "v5"
@@ -853,7 +1048,10 @@
       "family": "legacy",
       "model": "WAP Devices",
       "displayName": "NETGEAR Wireless Access Point Devices",
-      "aliases": ["netgear wap", "netgear wireless access point"],
+      "aliases": [
+        "netgear wap",
+        "netgear wireless access point"
+      ],
       "category": "access-point",
       "targetMarket": "soho",
       "wifiStandard": "n300",
@@ -864,13 +1062,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2016-1555"],
+              "msvCves": [
+                "CVE-2016-1555"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "Multiple models affected - verify specific model EOL status"
             }
           },
-          "kevCves": ["CVE-2016-1555"]
+          "kevCves": [
+            "CVE-2016-1555"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -881,7 +1083,11 @@
       "family": "rt",
       "model": "RT-AX55",
       "displayName": "ASUS RT-AX55",
-      "aliases": ["rt-ax55", "rtax55", "asus ax55"],
+      "aliases": [
+        "rt-ax55",
+        "rtax55",
+        "asus ax55"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -897,14 +1103,18 @@
               "branchName": "3.0.0.4.x",
               "msv": "3.0.0.4.386_51948",
               "msvDate": "2023-09-01",
-              "msvCves": ["CVE-2023-39780"],
+              "msvCves": [
+                "CVE-2023-39780"
+              ],
               "latest": "3.0.0.4.388_24198",
               "latestDate": "2024-08-15",
               "downloadUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-wifi-routers/rt-ax55/helpdesk_bios/",
               "eol": false
             }
           },
-          "kevCves": ["CVE-2023-39780"]
+          "kevCves": [
+            "CVE-2023-39780"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -915,7 +1125,14 @@
       "family": "zenwifi",
       "model": "ZenWiFi XT8",
       "displayName": "ASUS ZenWiFi AX (XT8) AX6600 Tri-Band Mesh",
-      "aliases": ["zenwifi xt8", "xt8", "asus xt8", "zenwifi ax", "ax6600 xt8", "asus zenwifi ax6600"],
+      "aliases": [
+        "zenwifi xt8",
+        "xt8",
+        "asus xt8",
+        "zenwifi ax",
+        "ax6600 xt8",
+        "asus zenwifi ax6600"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -931,7 +1148,11 @@
               "branchName": "3.0.0.4.388.x",
               "msv": "3.0.0.4.388_24621",
               "msvDate": "2024-06-14",
-              "msvCves": ["CVE-2024-3080", "CVE-2024-3912", "CVE-2024-3079"],
+              "msvCves": [
+                "CVE-2024-3080",
+                "CVE-2024-3912",
+                "CVE-2024-3079"
+              ],
               "latest": "3.0.0.4.388_24768",
               "latestDate": "2025-01-15",
               "downloadUrl": "https://www.asus.com/networking-iot-servers/whole-home-mesh-wifi-system/zenwifi-wifi-systems/asus-zenwifi-ax-xt8/helpdesk_bios/",
@@ -965,7 +1186,11 @@
               "branchName": "3.0.0.4.388.x",
               "msv": "3.0.0.4.388_24621",
               "msvDate": "2024-06-14",
-              "msvCves": ["CVE-2024-3080", "CVE-2024-3912", "CVE-2024-3079"],
+              "msvCves": [
+                "CVE-2024-3080",
+                "CVE-2024-3912",
+                "CVE-2024-3079"
+              ],
               "latest": "3.0.0.4.388_24768",
               "latestDate": "2025-01-15",
               "downloadUrl": "https://www.asus.com/networking-iot-servers/whole-home-mesh-wifi-system/zenwifi-wifi-systems/asus-zenwifi-ax-xt8/helpdesk_bios/",
@@ -997,7 +1222,15 @@
       "family": "rog",
       "model": "GT-AX11000",
       "displayName": "ASUS ROG Rapture GT-AX11000",
-      "aliases": ["gt-ax11000", "rog rapture", "gtax11000", "asus rog", "ax11000", "rog rapture gt-ax11000", "asus gaming router"],
+      "aliases": [
+        "gt-ax11000",
+        "rog rapture",
+        "gtax11000",
+        "asus rog",
+        "ax11000",
+        "rog rapture gt-ax11000",
+        "asus gaming router"
+      ],
       "category": "gaming-router",
       "targetMarket": "prosumer",
       "releaseYear": 2019,
@@ -1013,7 +1246,11 @@
               "branchName": "3.0.0.4.388.x",
               "msv": "3.0.0.4.388_24621",
               "msvDate": "2024-06-14",
-              "msvCves": ["CVE-2024-3080", "CVE-2024-3912", "CVE-2024-3079"],
+              "msvCves": [
+                "CVE-2024-3080",
+                "CVE-2024-3912",
+                "CVE-2024-3079"
+              ],
               "latest": "3.0.0.4.388_24461",
               "latestDate": "2025-10-27",
               "downloadUrl": "https://www.asus.com/supportonly/gt-ax11000/helpdesk_bios/",
@@ -1047,7 +1284,13 @@
       "family": "rt",
       "model": "RT-AX1800S",
       "displayName": "ASUS RT-AX1800S",
-      "aliases": ["rt-ax1800s", "rtax1800s", "asus ax1800s", "rt-ax54hp", "rt-ax1800hp"],
+      "aliases": [
+        "rt-ax1800s",
+        "rtax1800s",
+        "asus ax1800s",
+        "rt-ax54hp",
+        "rt-ax1800hp"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2022,
@@ -1063,7 +1306,10 @@
               "branchName": "3.0.0.4.386.x",
               "msv": "3.0.0.4.386_69089",
               "msvDate": "2024-11-08",
-              "msvCves": ["CVE-2025-2492", "CVE-2024-12912"],
+              "msvCves": [
+                "CVE-2025-2492",
+                "CVE-2024-12912"
+              ],
               "latest": "3.0.0.4.386_69136",
               "latestDate": "2025-08-06",
               "downloadUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-wifi-routers/rt-ax1800s/helpdesk_bios/",
@@ -1082,7 +1328,11 @@
               "branchName": "3.0.0.4.388.x",
               "msv": "3.0.0.4.388_33625",
               "msvDate": "2024-11-08",
-              "msvCves": ["CVE-2025-2492", "CVE-2025-59366", "CVE-2024-12912"],
+              "msvCves": [
+                "CVE-2025-2492",
+                "CVE-2025-59366",
+                "CVE-2024-12912"
+              ],
               "latest": "3.0.0.4.388_33965",
               "latestDate": "2025-10-22",
               "downloadUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-wifi-routers/rt-ax1800s/helpdesk_bios/",
@@ -1101,7 +1351,10 @@
       "family": "rt",
       "model": "Multiple Routers",
       "displayName": "ASUS Routers (Multiple Models)",
-      "aliases": ["asus routers", "asus router"],
+      "aliases": [
+        "asus routers",
+        "asus router"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "hardwareVersions": {
@@ -1111,13 +1364,17 @@
             "varies": {
               "branchName": "varies",
               "msv": "unknown",
-              "msvCves": ["CVE-2021-32030"],
+              "msvCves": [
+                "CVE-2021-32030"
+              ],
               "latest": "varies",
               "eol": false,
               "eolNote": "Check specific model for version info"
             }
           },
-          "kevCves": ["CVE-2021-32030"],
+          "kevCves": [
+            "CVE-2021-32030"
+          ],
           "note": "CVE-2021-32030 affects multiple ASUS router models - check specific model"
         }
       },
@@ -1129,7 +1386,12 @@
       "family": "archer",
       "model": "Archer AX21",
       "displayName": "TP-Link Archer AX21",
-      "aliases": ["ax21", "archer ax21", "tplink ax21", "ax1800"],
+      "aliases": [
+        "ax21",
+        "archer ax21",
+        "tplink ax21",
+        "ax1800"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2021,
@@ -1145,14 +1407,18 @@
               "branchName": "1.x",
               "msv": "1.1.4",
               "msvDate": "2023-03-17",
-              "msvCves": ["CVE-2023-1389"],
+              "msvCves": [
+                "CVE-2023-1389"
+              ],
               "latest": "1.1.6",
               "latestDate": "2024-05-10",
               "downloadUrl": "https://www.tp-link.com/us/support/download/archer-ax21/v1/#Firmware",
               "eol": false
             }
           },
-          "kevCves": ["CVE-2023-1389"],
+          "kevCves": [
+            "CVE-2023-1389"
+          ],
           "altFirmware": {
             "openwrt": {
               "status": "supported",
@@ -1176,14 +1442,18 @@
               "branchName": "1.x",
               "msv": "1.1.4",
               "msvDate": "2023-03-17",
-              "msvCves": ["CVE-2023-1389"],
+              "msvCves": [
+                "CVE-2023-1389"
+              ],
               "latest": "1.1.7",
               "latestDate": "2024-09-15",
               "downloadUrl": "https://www.tp-link.com/us/support/download/archer-ax21/v3/#Firmware",
               "eol": false
             }
           },
-          "kevCves": ["CVE-2023-1389"],
+          "kevCves": [
+            "CVE-2023-1389"
+          ],
           "altFirmware": {
             "openwrt": {
               "status": "supported",
@@ -1202,7 +1472,11 @@
       "family": "legacy",
       "model": "TL-WR841N",
       "displayName": "TP-Link TL-WR841N",
-      "aliases": ["wr841n", "tl-wr841n", "841n"],
+      "aliases": [
+        "wr841n",
+        "tl-wr841n",
+        "841n"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2010,
@@ -1217,14 +1491,18 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2023-50224"],
+              "msvCves": [
+                "CVE-2023-50224"
+              ],
               "latest": "14.0.1",
               "latestDate": "2023-01-15",
               "eol": true,
               "eolNote": "Model discontinued, no security patches available"
             }
           },
-          "kevCves": ["CVE-2023-50224"],
+          "kevCves": [
+            "CVE-2023-50224"
+          ],
           "note": "Multiple hardware versions exist (v1-v14), most are EOL"
         }
       },
@@ -1236,7 +1514,12 @@
       "family": "legacy",
       "model": "TL-WA855RE",
       "displayName": "TP-Link TL-WA855RE",
-      "aliases": ["wa855re", "tl-wa855re", "855re", "tplink range extender"],
+      "aliases": [
+        "wa855re",
+        "tl-wa855re",
+        "855re",
+        "tplink range extender"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -1249,13 +1532,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2020-24363"],
+              "msvCves": [
+                "CVE-2020-24363"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2020-24363"]
+          "kevCves": [
+            "CVE-2020-24363"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1266,7 +1553,10 @@
       "family": "archer",
       "model": "Multiple Archer Devices",
       "displayName": "TP-Link Archer Devices (Multiple)",
-      "aliases": ["tplink archer", "archer router"],
+      "aliases": [
+        "tplink archer",
+        "archer router"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "hardwareVersions": {
@@ -1276,13 +1566,17 @@
             "varies": {
               "branchName": "varies",
               "msv": "unknown",
-              "msvCves": ["CVE-2015-3035"],
+              "msvCves": [
+                "CVE-2015-3035"
+              ],
               "latest": "varies",
               "eol": false,
               "eolNote": "Check specific Archer model for version info"
             }
           },
-          "kevCves": ["CVE-2015-3035"],
+          "kevCves": [
+            "CVE-2015-3035"
+          ],
           "note": "CVE-2015-3035 affects multiple Archer models - verify specific model"
         }
       },
@@ -1294,7 +1588,9 @@
       "family": "legacy",
       "model": "Multiple Routers",
       "displayName": "TP-Link Routers (Multiple)",
-      "aliases": ["tplink routers"],
+      "aliases": [
+        "tplink routers"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "hardwareVersions": {
@@ -1304,13 +1600,19 @@
             "varies": {
               "branchName": "varies",
               "msv": "unknown",
-              "msvCves": ["CVE-2023-33538", "CVE-2025-9377"],
+              "msvCves": [
+                "CVE-2023-33538",
+                "CVE-2025-9377"
+              ],
               "latest": "varies",
               "eol": false,
               "eolNote": "Check specific model"
             }
           },
-          "kevCves": ["CVE-2023-33538", "CVE-2025-9377"],
+          "kevCves": [
+            "CVE-2023-33538",
+            "CVE-2025-9377"
+          ],
           "note": "Multiple CVEs affect various TP-Link models - verify specific model"
         }
       },
@@ -1322,7 +1624,11 @@
       "family": "dir",
       "model": "DIR-859",
       "displayName": "D-Link DIR-859",
-      "aliases": ["dir-859", "dir859", "dlink 859"],
+      "aliases": [
+        "dir-859",
+        "dir859",
+        "dlink 859"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -1336,13 +1642,19 @@
             "1.x": {
               "branchName": "1.x",
               "msv": "unknown",
-              "msvCves": ["CVE-2019-17621", "CVE-2024-0769"],
+              "msvCves": [
+                "CVE-2019-17621",
+                "CVE-2024-0769"
+              ],
               "latest": "1.06",
               "eol": true,
               "eolNote": "EOL - replace device or flash OpenWrt"
             }
           },
-          "kevCves": ["CVE-2019-17621", "CVE-2024-0769"],
+          "kevCves": [
+            "CVE-2019-17621",
+            "CVE-2024-0769"
+          ],
           "altFirmware": {
             "openwrt": {
               "status": "supported",
@@ -1367,7 +1679,11 @@
       "family": "dir",
       "model": "DIR-820L",
       "displayName": "D-Link DIR-820L",
-      "aliases": ["dir-820l", "dir820l", "dlink 820l"],
+      "aliases": [
+        "dir-820l",
+        "dir820l",
+        "dlink 820l"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2013,
@@ -1381,13 +1697,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2022-26258"],
+              "msvCves": [
+                "CVE-2022-26258"
+              ],
               "latest": "2.05",
               "eol": true,
               "eolNote": "EOL - replace device immediately"
             }
           },
-          "kevCves": ["CVE-2022-26258"],
+          "kevCves": [
+            "CVE-2022-26258"
+          ],
           "note": "EOL with unpatched KEV vulnerabilities"
         }
       },
@@ -1399,7 +1719,11 @@
       "family": "dir",
       "model": "DIR-820",
       "displayName": "D-Link DIR-820",
-      "aliases": ["dir-820", "dir820", "dlink 820"],
+      "aliases": [
+        "dir-820",
+        "dir820",
+        "dlink 820"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2013,
@@ -1413,13 +1737,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2023-25280"],
+              "msvCves": [
+                "CVE-2023-25280"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2023-25280"]
+          "kevCves": [
+            "CVE-2023-25280"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1430,7 +1758,11 @@
       "family": "dir",
       "model": "DIR-645",
       "displayName": "D-Link DIR-645",
-      "aliases": ["dir-645", "dir645", "dlink 645"],
+      "aliases": [
+        "dir-645",
+        "dir645",
+        "dlink 645"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2012,
@@ -1444,13 +1776,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2015-2051"],
+              "msvCves": [
+                "CVE-2015-2051"
+              ],
               "latest": "1.04",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2015-2051"]
+          "kevCves": [
+            "CVE-2015-2051"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1461,7 +1797,11 @@
       "family": "dir",
       "model": "DIR-605",
       "displayName": "D-Link DIR-605",
-      "aliases": ["dir-605", "dir605", "dlink 605"],
+      "aliases": [
+        "dir-605",
+        "dir605",
+        "dlink 605"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2010,
@@ -1475,13 +1815,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2021-40655"],
+              "msvCves": [
+                "CVE-2021-40655"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2021-40655"]
+          "kevCves": [
+            "CVE-2021-40655"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1492,7 +1836,11 @@
       "family": "dir",
       "model": "DIR-610",
       "displayName": "D-Link DIR-610",
-      "aliases": ["dir-610", "dir610", "dlink 610"],
+      "aliases": [
+        "dir-610",
+        "dir610",
+        "dlink 610"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2013,
@@ -1506,13 +1854,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2020-9377"],
+              "msvCves": [
+                "CVE-2020-9377"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2020-9377"]
+          "kevCves": [
+            "CVE-2020-9377"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1523,7 +1875,11 @@
       "family": "dir",
       "model": "DIR-825",
       "displayName": "D-Link DIR-825",
-      "aliases": ["dir-825", "dir825", "dlink 825"],
+      "aliases": [
+        "dir-825",
+        "dir825",
+        "dlink 825"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2009,
@@ -1537,13 +1893,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2020-29557"],
+              "msvCves": [
+                "CVE-2020-29557"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2020-29557"]
+          "kevCves": [
+            "CVE-2020-29557"
+          ]
         }
       },
       "defaultHwVersion": "r1"
@@ -1554,7 +1914,11 @@
       "family": "dir",
       "model": "DIR-300",
       "displayName": "D-Link DIR-300",
-      "aliases": ["dir-300", "dir300", "dlink 300"],
+      "aliases": [
+        "dir-300",
+        "dir300",
+        "dlink 300"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2007,
@@ -1568,13 +1932,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2011-4723"],
+              "msvCves": [
+                "CVE-2011-4723"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "Very old model - replace immediately"
             }
           },
-          "kevCves": ["CVE-2011-4723"],
+          "kevCves": [
+            "CVE-2011-4723"
+          ],
           "note": "Ancient model from 2007, long EOL"
         }
       },
@@ -1586,7 +1954,11 @@
       "family": "dir",
       "model": "DIR-600",
       "displayName": "D-Link DIR-600",
-      "aliases": ["dir-600", "dir600", "dlink 600"],
+      "aliases": [
+        "dir-600",
+        "dir600",
+        "dlink 600"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2009,
@@ -1600,13 +1972,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2014-100005"],
+              "msvCves": [
+                "CVE-2014-100005"
+              ],
               "latest": "2.17",
               "eol": true,
               "eolNote": "EOL since 2015 - replace immediately"
             }
           },
-          "kevCves": ["CVE-2014-100005"],
+          "kevCves": [
+            "CVE-2014-100005"
+          ],
           "note": "Very old model, long EOL, still being exploited in KEV"
         }
       },
@@ -1618,7 +1994,13 @@
       "family": "dir",
       "model": "DIR-1950",
       "displayName": "D-Link DIR-1950 AC1900 MU-MIMO WiFi Router",
-      "aliases": ["dir-1950", "dir1950", "dlink 1950", "ac1900 dir-1950", "d-link ac1900"],
+      "aliases": [
+        "dir-1950",
+        "dir1950",
+        "dlink 1950",
+        "ac1900 dir-1950",
+        "d-link ac1900"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -1635,7 +2017,9 @@
               "branchName": "1.x",
               "msv": "NO SAFE VERSION EXISTS",
               "msvDate": "2024-06-27",
-              "msvCves": ["CVE-2024-36755"],
+              "msvCves": [
+                "CVE-2024-36755"
+              ],
               "latest": "1.11B03",
               "latestDate": "2021-01-01",
               "downloadUrl": "https://support.dlink.com/productinfo.aspx?m=DIR-1950-US",
@@ -1661,7 +2045,11 @@
       "family": "dsl",
       "model": "DSL-2750B",
       "displayName": "D-Link DSL-2750B",
-      "aliases": ["dsl-2750b", "dsl2750b", "dlink 2750b"],
+      "aliases": [
+        "dsl-2750b",
+        "dsl2750b",
+        "dlink 2750b"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2012,
@@ -1675,13 +2063,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2016-20017"],
+              "msvCves": [
+                "CVE-2016-20017"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2016-20017"]
+          "kevCves": [
+            "CVE-2016-20017"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1692,7 +2084,11 @@
       "family": "dsl",
       "model": "DSL-2760U",
       "displayName": "D-Link DSL-2760U",
-      "aliases": ["dsl-2760u", "dsl2760u", "dlink 2760u"],
+      "aliases": [
+        "dsl-2760u",
+        "dsl2760u",
+        "dlink 2760u"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2011,
@@ -1706,13 +2102,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2013-5223"],
+              "msvCves": [
+                "CVE-2013-5223"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2013-5223"]
+          "kevCves": [
+            "CVE-2013-5223"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1723,7 +2123,11 @@
       "family": "dns",
       "model": "DNS-320",
       "displayName": "D-Link DNS-320",
-      "aliases": ["dns-320", "dns320", "dlink dns320"],
+      "aliases": [
+        "dns-320",
+        "dns320",
+        "dlink dns320"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2010,
@@ -1736,13 +2140,19 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2019-16057", "CVE-2020-25506"],
+              "msvCves": [
+                "CVE-2019-16057",
+                "CVE-2020-25506"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL NAS device - replace or isolate"
             }
           },
-          "kevCves": ["CVE-2019-16057", "CVE-2020-25506"],
+          "kevCves": [
+            "CVE-2019-16057",
+            "CVE-2020-25506"
+          ],
           "note": "NAS device with multiple KEV CVEs"
         }
       },
@@ -1754,7 +2164,11 @@
       "family": "dwl",
       "model": "DWL-2600AP",
       "displayName": "D-Link DWL-2600AP",
-      "aliases": ["dwl-2600ap", "dwl2600ap", "dlink 2600ap"],
+      "aliases": [
+        "dwl-2600ap",
+        "dwl2600ap",
+        "dlink 2600ap"
+      ],
       "category": "access-point",
       "targetMarket": "soho",
       "releaseYear": 2012,
@@ -1768,13 +2182,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2019-20500"],
+              "msvCves": [
+                "CVE-2019-20500"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2019-20500"]
+          "kevCves": [
+            "CVE-2019-20500"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1785,7 +2203,10 @@
       "family": "dir",
       "model": "Multiple Routers",
       "displayName": "D-Link Routers (Multiple)",
-      "aliases": ["dlink routers", "d-link routers"],
+      "aliases": [
+        "dlink routers",
+        "d-link routers"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "hardwareVersions": {
@@ -1795,13 +2216,23 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2018-6530", "CVE-2021-45382", "CVE-2019-16920", "CVE-2022-37055"],
+              "msvCves": [
+                "CVE-2018-6530",
+                "CVE-2021-45382",
+                "CVE-2019-16920",
+                "CVE-2022-37055"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "Multiple models affected - most EOL"
             }
           },
-          "kevCves": ["CVE-2018-6530", "CVE-2021-45382", "CVE-2019-16920", "CVE-2022-37055"],
+          "kevCves": [
+            "CVE-2018-6530",
+            "CVE-2021-45382",
+            "CVE-2019-16920",
+            "CVE-2022-37055"
+          ],
           "note": "Multiple CVEs affect various D-Link models - verify specific model"
         }
       },
@@ -1813,7 +2244,11 @@
       "family": "emg",
       "model": "EMG2926",
       "displayName": "Zyxel EMG2926",
-      "aliases": ["emg2926", "zyxel emg2926", "emg-2926"],
+      "aliases": [
+        "emg2926",
+        "zyxel emg2926",
+        "emg-2926"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2015,
@@ -1827,13 +2262,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2017-6884"],
+              "msvCves": [
+                "CVE-2017-6884"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2017-6884"]
+          "kevCves": [
+            "CVE-2017-6884"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1844,7 +2283,11 @@
       "family": "p660",
       "model": "P660HN-T1A",
       "displayName": "Zyxel P660HN-T1A",
-      "aliases": ["p660hn-t1a", "p660hn", "zyxel p660"],
+      "aliases": [
+        "p660hn-t1a",
+        "p660hn",
+        "zyxel p660"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2010,
@@ -1858,13 +2301,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2017-18368"],
+              "msvCves": [
+                "CVE-2017-18368"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2017-18368"]
+          "kevCves": [
+            "CVE-2017-18368"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -1875,7 +2322,11 @@
       "family": "vmg",
       "model": "DSL CPE Devices",
       "displayName": "Zyxel DSL CPE Devices",
-      "aliases": ["zyxel dsl", "zyxel cpe", "zyxel modem"],
+      "aliases": [
+        "zyxel dsl",
+        "zyxel cpe",
+        "zyxel modem"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "hardwareVersions": {
@@ -1885,13 +2336,19 @@
             "varies": {
               "branchName": "varies",
               "msv": "unknown",
-              "msvCves": ["CVE-2024-40890", "CVE-2024-40891"],
+              "msvCves": [
+                "CVE-2024-40890",
+                "CVE-2024-40891"
+              ],
               "latest": "varies",
               "eol": false,
               "eolNote": "Check specific model"
             }
           },
-          "kevCves": ["CVE-2024-40890", "CVE-2024-40891"],
+          "kevCves": [
+            "CVE-2024-40890",
+            "CVE-2024-40891"
+          ],
           "note": "Recent 2024 CVEs - check for firmware updates"
         }
       },
@@ -1903,7 +2360,11 @@
       "family": "usg",
       "model": "Multiple Firewalls",
       "displayName": "Zyxel Firewalls (Multiple)",
-      "aliases": ["zyxel firewall", "zyxel usg", "zyxel atp"],
+      "aliases": [
+        "zyxel firewall",
+        "zyxel usg",
+        "zyxel atp"
+      ],
       "category": "business-router",
       "targetMarket": "smb",
       "hardwareVersions": {
@@ -1913,13 +2374,25 @@
             "current": {
               "branchName": "current",
               "msv": "unknown",
-              "msvCves": ["CVE-2022-30525", "CVE-2023-28771", "CVE-2023-33009", "CVE-2023-33010", "CVE-2024-11667"],
+              "msvCves": [
+                "CVE-2022-30525",
+                "CVE-2023-28771",
+                "CVE-2023-33009",
+                "CVE-2023-33010",
+                "CVE-2024-11667"
+              ],
               "latest": "varies",
               "eol": false,
               "eolNote": "Active support - apply patches"
             }
           },
-          "kevCves": ["CVE-2022-30525", "CVE-2023-28771", "CVE-2023-33009", "CVE-2023-33010", "CVE-2024-11667"],
+          "kevCves": [
+            "CVE-2022-30525",
+            "CVE-2023-28771",
+            "CVE-2023-33009",
+            "CVE-2023-33010",
+            "CVE-2024-11667"
+          ],
           "note": "Multiple KEV CVEs - apply all security patches"
         }
       },
@@ -1931,7 +2404,11 @@
       "family": "routerboard",
       "model": "RouterOS",
       "displayName": "MikroTik RouterOS",
-      "aliases": ["routeros", "mikrotik router", "mikrotik routerboard"],
+      "aliases": [
+        "routeros",
+        "mikrotik router",
+        "mikrotik routerboard"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "cpePrefix": "cpe:2.3:o:mikrotik:routeros:",
@@ -1944,14 +2421,20 @@
               "branchName": "stable",
               "msv": "6.40.5",
               "msvDate": "2018-04-23",
-              "msvCves": ["CVE-2018-7445", "CVE-2018-14847"],
+              "msvCves": [
+                "CVE-2018-7445",
+                "CVE-2018-14847"
+              ],
               "latest": "7.16",
               "latestDate": "2024-10-01",
               "downloadUrl": "https://mikrotik.com/download",
               "eol": false
             }
           },
-          "kevCves": ["CVE-2018-7445", "CVE-2018-14847"],
+          "kevCves": [
+            "CVE-2018-7445",
+            "CVE-2018-14847"
+          ],
           "note": "Keep RouterOS updated - both CVEs are from 2018"
         }
       },
@@ -1963,7 +2446,11 @@
       "family": "vigor",
       "model": "Vigor Routers",
       "displayName": "DrayTek Vigor Routers",
-      "aliases": ["vigor router", "draytek vigor", "vigor"],
+      "aliases": [
+        "vigor router",
+        "draytek vigor",
+        "vigor"
+      ],
       "category": "business-router",
       "targetMarket": "smb",
       "cpePrefix": "cpe:2.3:h:draytek:vigor:",
@@ -1975,13 +2462,21 @@
             "current": {
               "branchName": "current",
               "msv": "unknown",
-              "msvCves": ["CVE-2020-8515", "CVE-2020-15415", "CVE-2024-12987"],
+              "msvCves": [
+                "CVE-2020-8515",
+                "CVE-2020-15415",
+                "CVE-2024-12987"
+              ],
               "latest": "varies",
               "eol": false,
               "eolNote": "Check specific model for version"
             }
           },
-          "kevCves": ["CVE-2020-8515", "CVE-2020-15415", "CVE-2024-12987"],
+          "kevCves": [
+            "CVE-2020-8515",
+            "CVE-2020-15415",
+            "CVE-2024-12987"
+          ],
           "note": "Multiple models affected - apply all patches"
         }
       },
@@ -1993,7 +2488,10 @@
       "family": "ac",
       "model": "AC11",
       "displayName": "Tenda AC11",
-      "aliases": ["ac11", "tenda ac11"],
+      "aliases": [
+        "ac11",
+        "tenda ac11"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -2006,13 +2504,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2021-31755"],
+              "msvCves": [
+                "CVE-2021-31755"
+              ],
               "latest": "unknown",
               "eol": false,
               "eolNote": "Check for firmware updates"
             }
           },
-          "kevCves": ["CVE-2021-31755"]
+          "kevCves": [
+            "CVE-2021-31755"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -2023,7 +2525,11 @@
       "family": "ac",
       "model": "AC15 (AC1900)",
       "displayName": "Tenda AC15 AC1900",
-      "aliases": ["ac15", "tenda ac15", "ac1900 tenda"],
+      "aliases": [
+        "ac15",
+        "tenda ac15",
+        "ac1900 tenda"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2017,
@@ -2036,13 +2542,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2020-10987"],
+              "msvCves": [
+                "CVE-2020-10987"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2020-10987"]
+          "kevCves": [
+            "CVE-2020-10987"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -2053,7 +2563,14 @@
       "family": "ac",
       "model": "AC7/AC9/AC10",
       "displayName": "Tenda AC7, AC9, AC10",
-      "aliases": ["tenda ac7", "tenda ac9", "tenda ac10", "ac7", "ac9", "ac10"],
+      "aliases": [
+        "tenda ac7",
+        "tenda ac9",
+        "tenda ac10",
+        "ac7",
+        "ac9",
+        "ac10"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "wifiStandard": "ac1200",
@@ -2064,13 +2581,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2018-14558"],
+              "msvCves": [
+                "CVE-2018-14558"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "EOL - replace device"
             }
           },
-          "kevCves": ["CVE-2018-14558"]
+          "kevCves": [
+            "CVE-2018-14558"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -2081,7 +2602,11 @@
       "family": "airos",
       "model": "AirOS",
       "displayName": "Ubiquiti AirOS",
-      "aliases": ["airos", "ubiquiti airos", "airmax"],
+      "aliases": [
+        "airos",
+        "ubiquiti airos",
+        "airmax"
+      ],
       "category": "access-point",
       "targetMarket": "prosumer",
       "cpePrefix": "cpe:2.3:o:ubiquiti:airos:",
@@ -2094,13 +2619,17 @@
               "branchName": "current",
               "msv": "5.5.3",
               "msvDate": "2011-02-14",
-              "msvCves": ["CVE-2010-5330"],
+              "msvCves": [
+                "CVE-2010-5330"
+              ],
               "latest": "varies",
               "eol": false,
               "eolNote": "Very old CVE - update to latest"
             }
           },
-          "kevCves": ["CVE-2010-5330"],
+          "kevCves": [
+            "CVE-2010-5330"
+          ],
           "note": "2010 CVE - any modern firmware is patched"
         }
       },
@@ -2112,7 +2641,12 @@
       "family": "archer",
       "model": "Archer BE550",
       "displayName": "TP-Link Archer BE550 WiFi 7",
-      "aliases": ["be550", "archer be550", "tplink be550", "wifi 7 tplink"],
+      "aliases": [
+        "be550",
+        "archer be550",
+        "tplink be550",
+        "wifi 7 tplink"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -2145,7 +2679,11 @@
       "family": "deco",
       "model": "Deco XE75",
       "displayName": "TP-Link Deco XE75 WiFi 6E",
-      "aliases": ["deco xe75", "xe75", "tplink mesh wifi 6e"],
+      "aliases": [
+        "deco xe75",
+        "xe75",
+        "tplink mesh wifi 6e"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2023,
@@ -2177,7 +2715,12 @@
       "family": "rt",
       "model": "RT-BE58U",
       "displayName": "ASUS RT-BE58U WiFi 7",
-      "aliases": ["rt-be58u", "rtbe58u", "asus be58u", "asus wifi 7"],
+      "aliases": [
+        "rt-be58u",
+        "rtbe58u",
+        "asus be58u",
+        "asus wifi 7"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -2210,7 +2753,12 @@
       "family": "rog",
       "model": "ROG Rapture GT-BE98 Pro",
       "displayName": "ASUS ROG Rapture GT-BE98 Pro WiFi 7",
-      "aliases": ["gt-be98 pro", "rog rapture be98", "asus rog wifi 7", "gt-be98"],
+      "aliases": [
+        "gt-be98 pro",
+        "rog rapture be98",
+        "asus rog wifi 7",
+        "gt-be98"
+      ],
       "category": "gaming-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -2243,7 +2791,12 @@
       "family": "rt",
       "model": "RT-AX86U",
       "displayName": "ASUS RT-AX86U",
-      "aliases": ["rt-ax86u", "rtax86u", "asus ax86u", "ax86u"],
+      "aliases": [
+        "rt-ax86u",
+        "rtax86u",
+        "asus ax86u",
+        "ax86u"
+      ],
       "category": "gaming-router",
       "targetMarket": "prosumer",
       "releaseYear": 2020,
@@ -2259,14 +2812,19 @@
               "branchName": "3.0.0.4.x",
               "msv": "3.0.0.4.386_52041",
               "msvDate": "2023-09-01",
-              "msvCves": ["CVE-2023-39780", "CVE-2024-12912"],
+              "msvCves": [
+                "CVE-2023-39780",
+                "CVE-2024-12912"
+              ],
               "latest": "3.0.0.4.388_24198",
               "latestDate": "2025-08-15",
               "downloadUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-wifi-routers/rt-ax86u/helpdesk_bios/",
               "eol": false
             }
           },
-          "kevCves": ["CVE-2023-39780"],
+          "kevCves": [
+            "CVE-2023-39780"
+          ],
           "altFirmware": {
             "ddwrt": {
               "status": "supported",
@@ -2291,7 +2849,11 @@
       "family": "nighthawk",
       "model": "RAX50",
       "displayName": "NETGEAR Nighthawk RAX50 AX5400",
-      "aliases": ["rax50", "nighthawk ax5400", "netgear ax5400"],
+      "aliases": [
+        "rax50",
+        "nighthawk ax5400",
+        "netgear ax5400"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -2325,7 +2887,12 @@
       "family": "orbi",
       "model": "Orbi 370 (RBE973)",
       "displayName": "NETGEAR Orbi 370 WiFi 7",
-      "aliases": ["orbi 370", "rbe973", "netgear wifi 7 mesh", "orbi wifi 7"],
+      "aliases": [
+        "orbi 370",
+        "rbe973",
+        "netgear wifi 7 mesh",
+        "orbi wifi 7"
+      ],
       "category": "mesh",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -2358,7 +2925,14 @@
       "family": "orbi",
       "model": "Orbi RBK852",
       "displayName": "NETGEAR Orbi WiFi 6 AX6000 (RBK852)",
-      "aliases": ["rbk852", "orbi ax6000", "orbi wifi 6", "rbr850", "rbs850", "orbi 850"],
+      "aliases": [
+        "rbk852",
+        "orbi ax6000",
+        "orbi wifi 6",
+        "rbr850",
+        "rbs850",
+        "orbi 850"
+      ],
       "category": "mesh",
       "targetMarket": "prosumer",
       "releaseYear": 2020,
@@ -2374,7 +2948,9 @@
               "branchName": "7.x",
               "msv": "7.2.6.21",
               "msvDate": "2024-11-15",
-              "msvCves": ["PSV-2021-0183"],
+              "msvCves": [
+                "PSV-2021-0183"
+              ],
               "latest": "7.2.8.5",
               "latestDate": "2026-01-10",
               "downloadUrl": "https://www.netgear.com/support/product/RBK852.aspx#download",
@@ -2385,7 +2961,9 @@
               "branchName": "4.x",
               "msv": "4.6.7.13",
               "msvDate": "2024-03-15",
-              "msvCves": ["PSV-2021-0131"],
+              "msvCves": [
+                "PSV-2021-0131"
+              ],
               "latest": "4.6.14.3",
               "latestDate": "2024-06-20",
               "downloadUrl": "https://www.netgear.com/support/product/RBK852.aspx#download",
@@ -2405,7 +2983,14 @@
       "family": "orbi",
       "model": "Orbi RBK50",
       "displayName": "NETGEAR Orbi AC3000 (RBK50)",
-      "aliases": ["rbk50", "orbi ac3000", "orbi original", "rbr50", "rbs50", "orbi 50"],
+      "aliases": [
+        "rbk50",
+        "orbi ac3000",
+        "orbi original",
+        "rbr50",
+        "rbs50",
+        "orbi 50"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -2422,7 +3007,12 @@
               "branchName": "2.x",
               "msv": "2.7.2.104",
               "msvDate": "2021-04-15",
-              "msvCves": ["CVE-2021-27252", "CVE-2021-27251", "CVE-2021-27253", "CVE-2021-27254"],
+              "msvCves": [
+                "CVE-2021-27252",
+                "CVE-2021-27251",
+                "CVE-2021-27253",
+                "CVE-2021-27254"
+              ],
               "latest": "2.7.5.4",
               "latestDate": "2023-08-10",
               "downloadUrl": "https://www.netgear.com/support/product/RBK50.aspx#download",
@@ -2442,7 +3032,11 @@
       "family": "velop",
       "model": "Velop MX5300",
       "displayName": "Linksys Velop MX5300 WiFi 6",
-      "aliases": ["mx5300", "velop mx5300", "linksys wifi 6 mesh"],
+      "aliases": [
+        "mx5300",
+        "velop mx5300",
+        "linksys wifi 6 mesh"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -2474,7 +3068,13 @@
       "family": "velop",
       "model": "Velop MX4200",
       "displayName": "Linksys Velop MX4200 WiFi 6 AX4200 Mesh",
-      "aliases": ["mx4200", "velop mx4200", "ax4200", "linksys ax4200", "velop ax4200"],
+      "aliases": [
+        "mx4200",
+        "velop mx4200",
+        "ax4200",
+        "linksys ax4200",
+        "velop ax4200"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -2489,7 +3089,9 @@
               "branchName": "1.x",
               "msv": "1.1.8.192419",
               "msvDate": "2020-01-01",
-              "msvCves": ["Auth-Bypass"],
+              "msvCves": [
+                "Auth-Bypass"
+              ],
               "latest": "1.1.13",
               "latestDate": "2024-01-01",
               "downloadUrl": "https://support.linksys.com/kb/article/426-en/",
@@ -2525,7 +3127,11 @@
       "family": "hydra",
       "model": "Hydra Pro 6E (MR7500)",
       "displayName": "Linksys Hydra Pro 6E WiFi 6E",
-      "aliases": ["hydra pro 6e", "mr7500", "linksys wifi 6e"],
+      "aliases": [
+        "hydra pro 6e",
+        "mr7500",
+        "linksys wifi 6e"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2022,
@@ -2558,7 +3164,16 @@
       "family": "atlas",
       "model": "Atlas Max 6E (MX8500)",
       "displayName": "Linksys Atlas Max 6E AXE8400 Tri-Band Mesh",
-      "aliases": ["atlas max 6e", "mx8500", "mx8501", "mx8502", "mx8503", "axe8400", "linksys 6e mesh", "atlas max"],
+      "aliases": [
+        "atlas max 6e",
+        "mx8500",
+        "mx8501",
+        "mx8502",
+        "mx8503",
+        "axe8400",
+        "linksys 6e mesh",
+        "atlas max"
+      ],
       "category": "mesh",
       "targetMarket": "prosumer",
       "releaseYear": 2021,
@@ -2605,7 +3220,13 @@
       "family": "mr",
       "model": "MR9600",
       "displayName": "Linksys Max-Stream MR9600 WiFi 6",
-      "aliases": ["mr9600", "linksys mr9600", "max-stream mr9600", "linksys ax6000", "ax6000 dual-band"],
+      "aliases": [
+        "mr9600",
+        "linksys mr9600",
+        "max-stream mr9600",
+        "linksys ax6000",
+        "ax6000 dual-band"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2020,
@@ -2621,7 +3242,9 @@
               "branchName": "2.x",
               "msv": "2.0.5",
               "msvDate": "2022-02-15",
-              "msvCves": ["CVE-2022-24372"],
+              "msvCves": [
+                "CVE-2022-24372"
+              ],
               "latest": "2.0.12",
               "latestDate": "2025-03-10",
               "downloadUrl": "https://support.linksys.com/kb/article/111-en/",
@@ -2649,7 +3272,12 @@
       "family": "mr",
       "model": "MR6350",
       "displayName": "Linksys Max-Stream MR6350 WiFi 5",
-      "aliases": ["mr6350", "linksys mr6350", "max-stream mr6350", "linksys ac1300"],
+      "aliases": [
+        "mr6350",
+        "linksys mr6350",
+        "max-stream mr6350",
+        "linksys ac1300"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -2664,7 +3292,9 @@
               "branchName": "1.x",
               "msv": "1.1.3.207098",
               "msvDate": "2022-03-31",
-              "msvCves": ["FragAttacks"],
+              "msvCves": [
+                "FragAttacks"
+              ],
               "latest": "1.1.3.210129",
               "latestDate": "2022-05-19",
               "downloadUrl": "https://support.linksys.com/kb/article/578-en/",
@@ -2684,7 +3314,12 @@
       "family": "mr",
       "model": "MR8300",
       "displayName": "Linksys Max-Stream MR8300 WiFi 5",
-      "aliases": ["mr8300", "linksys mr8300", "max-stream mr8300", "linksys ac2200"],
+      "aliases": [
+        "mr8300",
+        "linksys mr8300",
+        "max-stream mr8300",
+        "linksys ac2200"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -2699,7 +3334,9 @@
               "branchName": "1.x",
               "msv": "1.1.10.208973",
               "msvDate": "2022-10-01",
-              "msvCves": ["CVE-2022-38132"],
+              "msvCves": [
+                "CVE-2022-38132"
+              ],
               "latest": "1.1.10.210370",
               "latestDate": "2022-10-01",
               "downloadUrl": "https://www.linksys.com/support/article?articleNum=316557",
@@ -2719,7 +3356,12 @@
       "family": "xfi",
       "model": "XB7",
       "displayName": "Xfinity xFi Gateway XB7",
-      "aliases": ["xb7", "xfinity xb7", "comcast xb7", "xfi gateway"],
+      "aliases": [
+        "xb7",
+        "xfinity xb7",
+        "comcast xb7",
+        "xfi gateway"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -2758,7 +3400,12 @@
       "family": "xfi",
       "model": "XB8",
       "displayName": "Xfinity xFi Gateway XB8",
-      "aliases": ["xb8", "xfinity xb8", "comcast xb8", "xfi advanced gateway"],
+      "aliases": [
+        "xb8",
+        "xfinity xb8",
+        "comcast xb8",
+        "xfi advanced gateway"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2022,
@@ -2797,7 +3444,12 @@
       "family": "fios",
       "model": "Fios Quantum Gateway G1100",
       "displayName": "Verizon Fios Quantum Gateway G1100",
-      "aliases": ["g1100", "fios g1100", "verizon g1100", "quantum gateway"],
+      "aliases": [
+        "g1100",
+        "fios g1100",
+        "verizon g1100",
+        "quantum gateway"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2015,
@@ -2812,7 +3464,9 @@
               "branchName": "legacy",
               "msv": "02.02.00.13",
               "msvDate": "2019-08-15",
-              "msvCves": ["CVE-2019-3914"],
+              "msvCves": [
+                "CVE-2019-3914"
+              ],
               "latest": "02.02.00.13",
               "eol": true,
               "eolNote": "Upgrade to G3100 recommended"
@@ -2840,7 +3494,12 @@
       "family": "fios",
       "model": "Fios Home Router G3100",
       "displayName": "Verizon Fios Home Router G3100",
-      "aliases": ["g3100", "fios g3100", "verizon g3100", "fios router"],
+      "aliases": [
+        "g3100",
+        "fios g3100",
+        "verizon g3100",
+        "fios router"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -2854,7 +3513,9 @@
               "branchName": "current",
               "msv": "3.2.0.0",
               "msvDate": "2021-06-01",
-              "msvCves": ["CVE-2021-20090"],
+              "msvCves": [
+                "CVE-2021-20090"
+              ],
               "latest": "3.3.5.1",
               "latestDate": "2025-06-15",
               "eol": false
@@ -2882,7 +3543,12 @@
       "family": "gateway",
       "model": "BGW210-700",
       "displayName": "AT&T BGW210-700 Gateway",
-      "aliases": ["bgw210", "att bgw210", "bgw210-700", "att gateway"],
+      "aliases": [
+        "bgw210",
+        "att bgw210",
+        "bgw210-700",
+        "att gateway"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -2922,7 +3588,13 @@
       "family": "gateway",
       "model": "BGW320-500/505",
       "displayName": "AT&T BGW320 WiFi 6 Gateway",
-      "aliases": ["bgw320", "att bgw320", "bgw320-500", "bgw320-505", "att wifi 6 gateway"],
+      "aliases": [
+        "bgw320",
+        "att bgw320",
+        "bgw320-500",
+        "bgw320-505",
+        "att wifi 6 gateway"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -2976,7 +3648,14 @@
       "family": "gateway",
       "model": "BGW620-700",
       "displayName": "AT&T All-Fi Pro Gateway BGW620 WiFi 7",
-      "aliases": ["bgw620", "att bgw620", "bgw620-700", "all-fi pro", "att wifi 7 gateway", "all-fi hub"],
+      "aliases": [
+        "bgw620",
+        "att bgw620",
+        "bgw620-700",
+        "all-fi pro",
+        "att wifi 7 gateway",
+        "all-fi hub"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2024,
@@ -3021,7 +3700,11 @@
       "family": "eero",
       "model": "eero Pro 6E",
       "displayName": "Amazon eero Pro 6E",
-      "aliases": ["eero pro 6e", "eero 6e", "amazon eero"],
+      "aliases": [
+        "eero pro 6e",
+        "eero 6e",
+        "amazon eero"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2022,
@@ -3050,7 +3733,11 @@
       "family": "nest",
       "model": "Nest WiFi Pro",
       "displayName": "Google Nest WiFi Pro WiFi 6E",
-      "aliases": ["nest wifi pro", "google wifi 6e", "nest wifi"],
+      "aliases": [
+        "nest wifi pro",
+        "google wifi 6e",
+        "nest wifi"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2022,
@@ -3079,7 +3766,12 @@
       "family": "nest",
       "model": "Google WiFi (2016)",
       "displayName": "Google WiFi Original (2016)",
-      "aliases": ["google wifi", "ga00157", "google wifi 2016", "google wifi point"],
+      "aliases": [
+        "google wifi",
+        "ga00157",
+        "google wifi 2016",
+        "google wifi point"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -3109,7 +3801,13 @@
       "family": "airport",
       "model": "AirPort Extreme",
       "displayName": "Apple AirPort Extreme - DISCONTINUED",
-      "aliases": ["airport extreme", "me918ll", "airport", "apple airport", "a1521"],
+      "aliases": [
+        "airport extreme",
+        "me918ll",
+        "airport",
+        "apple airport",
+        "a1521"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2013,
@@ -3124,7 +3822,11 @@
               "branchName": "7.x",
               "msv": "7.9.1",
               "msvDate": "2019-05-30",
-              "msvCves": ["CVE-2019-8572", "CVE-2019-8575", "CVE-2019-8580"],
+              "msvCves": [
+                "CVE-2019-8572",
+                "CVE-2019-8575",
+                "CVE-2019-8580"
+              ],
               "latest": "7.9.1",
               "latestDate": "2019-05-30",
               "eol": true,
@@ -3143,7 +3845,12 @@
       "family": "router",
       "model": "Starlink Router Gen 2",
       "displayName": "Starlink WiFi Router Gen 2",
-      "aliases": ["starlink router", "starlink gen 2", "starlink wifi", "dishy router"],
+      "aliases": [
+        "starlink router",
+        "starlink gen 2",
+        "starlink wifi",
+        "dishy router"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2021,
@@ -3156,7 +3863,9 @@
               "branchName": "auto",
               "msv": "2023.48.0",
               "msvDate": "2023-12-01",
-              "msvCves": ["CVE-2023-49965"],
+              "msvCves": [
+                "CVE-2023-49965"
+              ],
               "latest": "auto-updated",
               "eol": false,
               "eolNote": "Auto-updated by SpaceX. CVE-2023-49965 XSS patched December 2023."
@@ -3174,7 +3883,12 @@
       "family": "router",
       "model": "Starlink Router Gen 3",
       "displayName": "Starlink Standard Kit Router Gen 3",
-      "aliases": ["starlink gen 3", "starlink standard kit", "uta-232", "utr-232"],
+      "aliases": [
+        "starlink gen 3",
+        "starlink standard kit",
+        "uta-232",
+        "utr-232"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2023,
@@ -3187,7 +3901,9 @@
               "branchName": "auto",
               "msv": "2023.48.0",
               "msvDate": "2023-12-01",
-              "msvCves": ["CVE-2023-49965"],
+              "msvCves": [
+                "CVE-2023-49965"
+              ],
               "latest": "auto-updated",
               "eol": false,
               "eolNote": "✓ AUTO-UPDATED by SpaceX. No user action required for security patches."
@@ -3205,7 +3921,13 @@
       "family": "eero",
       "model": "eero (2019)",
       "displayName": "Amazon eero WiFi 5 (2019)",
-      "aliases": ["eero", "j010111", "eero basic", "eero wifi 5", "eero 2019"],
+      "aliases": [
+        "eero",
+        "j010111",
+        "eero basic",
+        "eero wifi 5",
+        "eero 2019"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -3234,7 +3956,12 @@
       "family": "eero",
       "model": "eero 6",
       "displayName": "Amazon eero 6 WiFi 6",
-      "aliases": ["eero 6", "m110311", "eero ax1800", "eero wifi 6"],
+      "aliases": [
+        "eero 6",
+        "m110311",
+        "eero ax1800",
+        "eero wifi 6"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -3263,7 +3990,13 @@
       "family": "legacy",
       "model": "C7000",
       "displayName": "NETGEAR Nighthawk C7000 Cable Modem Router",
-      "aliases": ["c7000", "netgear c7000", "c7000-100nas", "nighthawk c7000", "cable modem router"],
+      "aliases": [
+        "c7000",
+        "netgear c7000",
+        "c7000-100nas",
+        "nighthawk c7000",
+        "cable modem router"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2015,
@@ -3276,7 +4009,10 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "V1.01.14",
-              "msvCves": ["CVE-2017-7494", "FragAttacks"],
+              "msvCves": [
+                "CVE-2017-7494",
+                "FragAttacks"
+              ],
               "latest": "V1.01.14",
               "latestDate": "2021-07-01",
               "eol": false,
@@ -3295,7 +4031,12 @@
       "family": "deco",
       "model": "Deco X55",
       "displayName": "TP-Link Deco X55 WiFi 6 Mesh",
-      "aliases": ["deco x55", "tplink deco x55", "deco ax3000", "x55"],
+      "aliases": [
+        "deco x55",
+        "tplink deco x55",
+        "deco ax3000",
+        "x55"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2022,
@@ -3327,7 +4068,12 @@
       "family": "n",
       "model": "N750 DB",
       "displayName": "Belkin N750 DB Dual-Band N+ Router",
-      "aliases": ["n750", "belkin n750", "f9k1103", "n750 db"],
+      "aliases": [
+        "n750",
+        "belkin n750",
+        "f9k1103",
+        "n750 db"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2012,
@@ -3341,7 +4087,9 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2014-1486"],
+              "msvCves": [
+                "CVE-2014-1486"
+              ],
               "latest": "1.10.22",
               "eol": true,
               "eolNote": "No longer supported - replace router"
@@ -3358,7 +4106,11 @@
       "family": "n",
       "model": "N450 DB",
       "displayName": "Belkin N450 DB WiFi Dual-Band N Router",
-      "aliases": ["n450", "belkin n450", "f9k1105"],
+      "aliases": [
+        "n450",
+        "belkin n450",
+        "f9k1105"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2013,
@@ -3388,7 +4140,11 @@
       "family": "n",
       "model": "N600 DB",
       "displayName": "Belkin N600 DB WiFi Dual-Band N+ Router",
-      "aliases": ["n600", "belkin n600", "f9k1102"],
+      "aliases": [
+        "n600",
+        "belkin n600",
+        "f9k1102"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2011,
@@ -3402,7 +4158,12 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2015-5987", "CVE-2015-5988", "CVE-2015-5989", "CVE-2015-5990"],
+              "msvCves": [
+                "CVE-2015-5987",
+                "CVE-2015-5988",
+                "CVE-2015-5989",
+                "CVE-2015-5990"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "Multiple vulnerabilities - replace immediately"
@@ -3419,7 +4180,11 @@
       "family": "n",
       "model": "N300",
       "displayName": "Belkin N300 WiFi Router",
-      "aliases": ["n300", "belkin n300", "f9k1002"],
+      "aliases": [
+        "n300",
+        "belkin n300",
+        "f9k1002"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2010,
@@ -3449,7 +4214,11 @@
       "family": "ac",
       "model": "AC1200 DB",
       "displayName": "Belkin AC1200 DB WiFi Dual-Band AC+ Router",
-      "aliases": ["ac1200", "belkin ac1200", "f9k1113"],
+      "aliases": [
+        "ac1200",
+        "belkin ac1200",
+        "f9k1113"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2015,
@@ -3479,7 +4248,11 @@
       "family": "ac",
       "model": "AC1900 DB",
       "displayName": "Belkin AC1900 WiFi Dual-Band AC+ Router",
-      "aliases": ["ac1900", "belkin ac1900", "f9k1124"],
+      "aliases": [
+        "ac1900",
+        "belkin ac1900",
+        "f9k1124"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -3509,7 +4282,11 @@
       "family": "range",
       "model": "F9K1122",
       "displayName": "Belkin N600 Dual-Band WiFi Range Extender",
-      "aliases": ["f9k1122", "belkin range extender", "n600 extender"],
+      "aliases": [
+        "f9k1122",
+        "belkin range extender",
+        "n600 extender"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2014,
@@ -3523,7 +4300,9 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2018-6831"],
+              "msvCves": [
+                "CVE-2018-6831"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "Command injection vulnerability - replace device"
@@ -3540,7 +4319,11 @@
       "family": "range",
       "model": "F9K1015",
       "displayName": "Belkin N300 WiFi Range Extender",
-      "aliases": ["f9k1015", "belkin n300 extender", "n300 range extender"],
+      "aliases": [
+        "f9k1015",
+        "belkin n300 extender",
+        "n300 range extender"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2013,
@@ -3570,7 +4353,12 @@
       "family": "surfboard",
       "model": "SBG6580",
       "displayName": "ARRIS/Motorola SBG6580 SURFboard Cable Modem WiFi Router",
-      "aliases": ["sbg6580", "motorola sbg6580", "surfboard 6580", "arris sbg6580"],
+      "aliases": [
+        "sbg6580",
+        "motorola sbg6580",
+        "surfboard 6580",
+        "arris sbg6580"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2012,
@@ -3584,7 +4372,9 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2015-0964"],
+              "msvCves": [
+                "CVE-2015-0964"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "DOCSIS 3.0 only - ISP may have retired"
@@ -3601,7 +4391,12 @@
       "family": "surfboard",
       "model": "SBG7580-AC",
       "displayName": "ARRIS SURFboard SBG7580-AC Cable Modem WiFi Router",
-      "aliases": ["sbg7580", "sbg7580-ac", "arris sbg7580", "surfboard 7580"],
+      "aliases": [
+        "sbg7580",
+        "sbg7580-ac",
+        "arris sbg7580",
+        "surfboard 7580"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -3630,7 +4425,11 @@
       "family": "surfboard",
       "model": "SBG8300",
       "displayName": "ARRIS SURFboard SBG8300 DOCSIS 3.1 Cable Modem WiFi Router",
-      "aliases": ["sbg8300", "arris sbg8300", "surfboard 8300"],
+      "aliases": [
+        "sbg8300",
+        "arris sbg8300",
+        "surfboard 8300"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -3659,7 +4458,12 @@
       "family": "nvg",
       "model": "NVG589",
       "displayName": "ARRIS NVG589 AT&T U-verse Gateway",
-      "aliases": ["nvg589", "arris nvg589", "att nvg589", "uverse gateway"],
+      "aliases": [
+        "nvg589",
+        "arris nvg589",
+        "att nvg589",
+        "uverse gateway"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2015,
@@ -3699,7 +4503,11 @@
       "family": "nvg",
       "model": "NVG599",
       "displayName": "ARRIS NVG599 AT&T U-verse Gateway",
-      "aliases": ["nvg599", "arris nvg599", "att nvg599"],
+      "aliases": [
+        "nvg599",
+        "arris nvg599",
+        "att nvg599"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2016,
@@ -3739,7 +4547,12 @@
       "family": "airstation",
       "model": "WZR-HP-G300NH",
       "displayName": "Buffalo AirStation Nfiniti WZR-HP-G300NH",
-      "aliases": ["wzr-hp-g300nh", "buffalo wzr-hp-g300nh", "g300nh", "airstation g300"],
+      "aliases": [
+        "wzr-hp-g300nh",
+        "buffalo wzr-hp-g300nh",
+        "g300nh",
+        "airstation g300"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2010,
@@ -3782,7 +4595,11 @@
       "family": "airstation",
       "model": "WSR-3200AX4S",
       "displayName": "Buffalo AirStation WSR-3200AX4S WiFi 6 Router",
-      "aliases": ["wsr-3200ax4s", "buffalo wsr-3200ax4s", "airstation ax4s"],
+      "aliases": [
+        "wsr-3200ax4s",
+        "buffalo wsr-3200ax4s",
+        "airstation ax4s"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2021,
@@ -3810,7 +4627,11 @@
       "family": "airstation",
       "model": "WZR-1750DHP",
       "displayName": "Buffalo AirStation WZR-1750DHP AC Router",
-      "aliases": ["wzr-1750dhp", "buffalo wzr-1750dhp", "airstation 1750"],
+      "aliases": [
+        "wzr-1750dhp",
+        "buffalo wzr-1750dhp",
+        "airstation 1750"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2013,
@@ -3824,7 +4645,9 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2021-20090"],
+              "msvCves": [
+                "CVE-2021-20090"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "CVE-2021-20090 path traversal - replace or use alt firmware"
@@ -3848,7 +4671,12 @@
       "family": "mi424wr",
       "model": "MI424WR",
       "displayName": "Actiontec MI424WR Verizon FiOS Router",
-      "aliases": ["mi424wr", "actiontec mi424wr", "verizon fios router", "mi424wr-gen3"],
+      "aliases": [
+        "mi424wr",
+        "actiontec mi424wr",
+        "verizon fios router",
+        "mi424wr-gen3"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2010,
@@ -3862,7 +4690,10 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2014-0357", "CVE-2014-0358"],
+              "msvCves": [
+                "CVE-2014-0357",
+                "CVE-2014-0358"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "CSRF vulnerabilities - Verizon has replaced with G1100/G3100"
@@ -3889,7 +4720,12 @@
       "family": "c-series",
       "model": "C1000A",
       "displayName": "Actiontec C1000A CenturyLink DSL Modem Router",
-      "aliases": ["c1000a", "actiontec c1000a", "centurylink c1000a", "pk5000z"],
+      "aliases": [
+        "c1000a",
+        "actiontec c1000a",
+        "centurylink c1000a",
+        "pk5000z"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2012,
@@ -3929,7 +4765,11 @@
       "family": "c-series",
       "model": "C2000A",
       "displayName": "Actiontec C2000A CenturyLink VDSL Modem Router",
-      "aliases": ["c2000a", "actiontec c2000a", "centurylink c2000a"],
+      "aliases": [
+        "c2000a",
+        "actiontec c2000a",
+        "centurylink c2000a"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2014,
@@ -3969,7 +4809,12 @@
       "family": "t-series",
       "model": "T3200",
       "displayName": "Actiontec T3200 CenturyLink Fiber Gateway",
-      "aliases": ["t3200", "actiontec t3200", "centurylink t3200", "centurylink fiber"],
+      "aliases": [
+        "t3200",
+        "actiontec t3200",
+        "centurylink t3200",
+        "centurylink fiber"
+      ],
       "category": "isp-gateway",
       "targetMarket": "consumer",
       "releaseYear": 2017,
@@ -4007,7 +4852,12 @@
       "family": "hg",
       "model": "HG532",
       "displayName": "Huawei HG532 Home Gateway",
-      "aliases": ["hg532", "huawei hg532", "hg532e", "hg532s"],
+      "aliases": [
+        "hg532",
+        "huawei hg532",
+        "hg532e",
+        "hg532s"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2012,
@@ -4021,13 +4871,17 @@
             "legacy": {
               "branchName": "legacy",
               "msv": "unknown",
-              "msvCves": ["CVE-2017-17215"],
+              "msvCves": [
+                "CVE-2017-17215"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "CVE-2017-17215 CRITICAL RCE - Mirai botnet target - REPLACE IMMEDIATELY"
             }
           },
-          "kevCves": ["CVE-2017-17215"]
+          "kevCves": [
+            "CVE-2017-17215"
+          ]
         }
       },
       "defaultHwVersion": "default"
@@ -4038,7 +4892,12 @@
       "family": "hg",
       "model": "HG8245",
       "displayName": "Huawei HG8245 GPON ONT",
-      "aliases": ["hg8245", "huawei hg8245", "hg8245h", "hg8245q"],
+      "aliases": [
+        "hg8245",
+        "huawei hg8245",
+        "hg8245h",
+        "hg8245q"
+      ],
       "category": "modem-router",
       "targetMarket": "consumer",
       "releaseYear": 2014,
@@ -4068,7 +4927,11 @@
       "family": "ws",
       "model": "WS5200",
       "displayName": "Huawei WS5200 WiFi Router",
-      "aliases": ["ws5200", "huawei ws5200", "ws5200 v2"],
+      "aliases": [
+        "ws5200",
+        "huawei ws5200",
+        "ws5200 v2"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2018,
@@ -4096,7 +4959,12 @@
       "family": "ws",
       "model": "WS7100",
       "displayName": "Huawei WiFi AX2 (WS7100)",
-      "aliases": ["ws7100", "huawei ws7100", "huawei wifi ax2", "wifi ax2"],
+      "aliases": [
+        "ws7100",
+        "huawei ws7100",
+        "huawei wifi ax2",
+        "wifi ax2"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -4124,7 +4992,12 @@
       "family": "ax",
       "model": "AX3",
       "displayName": "Huawei WiFi AX3 (Quad-core)",
-      "aliases": ["ax3", "huawei ax3", "huawei wifi ax3", "wifi ax3 quad"],
+      "aliases": [
+        "ax3",
+        "huawei ax3",
+        "huawei wifi ax3",
+        "wifi ax3 quad"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -4152,7 +5025,12 @@
       "family": "archer",
       "model": "Archer AX11000",
       "displayName": "TP-Link Archer AX11000 Tri-Band WiFi 6 Gaming Router",
-      "aliases": ["ax11000", "archer ax11000", "tplink ax11000", "tp-link ax11000"],
+      "aliases": [
+        "ax11000",
+        "archer ax11000",
+        "tplink ax11000",
+        "tp-link ax11000"
+      ],
       "category": "gaming-router",
       "targetMarket": "prosumer",
       "releaseYear": 2019,
@@ -4167,7 +5045,9 @@
               "branchName": "1.x",
               "msv": "1.0.0 Build 20230523",
               "msvDate": "2023-05-23",
-              "msvCves": ["CVE-2023-40357"],
+              "msvCves": [
+                "CVE-2023-40357"
+              ],
               "latest": "1.2.7 Build 20240126",
               "latestDate": "2024-01-26",
               "downloadUrl": "https://www.tp-link.com/us/support/download/archer-ax11000/",
@@ -4185,7 +5065,12 @@
       "family": "archer",
       "model": "Archer AXE75",
       "displayName": "TP-Link Archer AXE75 WiFi 6E Tri-Band Router",
-      "aliases": ["axe75", "archer axe75", "tplink axe75", "axe5400"],
+      "aliases": [
+        "axe75",
+        "archer axe75",
+        "tplink axe75",
+        "axe5400"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2022,
@@ -4216,7 +5101,12 @@
       "family": "archer",
       "model": "Archer GE800",
       "displayName": "TP-Link Archer GE800 WiFi 7 Gaming Router",
-      "aliases": ["ge800", "archer ge800", "tplink ge800", "be19000 gaming"],
+      "aliases": [
+        "ge800",
+        "archer ge800",
+        "tplink ge800",
+        "be19000 gaming"
+      ],
       "category": "gaming-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4247,7 +5137,11 @@
       "family": "archer",
       "model": "Archer BE9700",
       "displayName": "TP-Link Archer BE9700 WiFi 7 Router",
-      "aliases": ["be9700", "archer be9700", "tplink be9700"],
+      "aliases": [
+        "be9700",
+        "archer be9700",
+        "tplink be9700"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4278,7 +5172,13 @@
       "family": "archer",
       "model": "Archer BE700",
       "displayName": "TP-Link Archer BE700 WiFi 7 BE15000 Router",
-      "aliases": ["be700", "archer be700", "tplink be700", "be15000", "archer be15000"],
+      "aliases": [
+        "be700",
+        "archer be700",
+        "tplink be700",
+        "be15000",
+        "archer be15000"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4309,7 +5209,12 @@
       "family": "archer",
       "model": "Archer BE700 Pro",
       "displayName": "TP-Link Archer BE700 Pro WiFi 7 BE15000 Router",
-      "aliases": ["be700 pro", "archer be700 pro", "tplink be700 pro", "be15000 pro"],
+      "aliases": [
+        "be700 pro",
+        "archer be700 pro",
+        "tplink be700 pro",
+        "be15000 pro"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4340,7 +5245,11 @@
       "family": "archer",
       "model": "Archer BE3600",
       "displayName": "TP-Link Archer BE3600 WiFi 7 Budget Router",
-      "aliases": ["be3600", "archer be3600", "tplink be3600"],
+      "aliases": [
+        "be3600",
+        "archer be3600",
+        "tplink be3600"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2024,
@@ -4371,7 +5280,12 @@
       "family": "rt",
       "model": "RT-BE96U",
       "displayName": "ASUS RT-BE96U WiFi 7 Flagship Router",
-      "aliases": ["rt-be96u", "asus be96u", "be96u", "asus wifi 7"],
+      "aliases": [
+        "rt-be96u",
+        "asus be96u",
+        "be96u",
+        "asus wifi 7"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4402,7 +5316,11 @@
       "family": "rt",
       "model": "RT-BE88U",
       "displayName": "ASUS RT-BE88U WiFi 7 Dual-Band Router",
-      "aliases": ["rt-be88u", "asus be88u", "be88u"],
+      "aliases": [
+        "rt-be88u",
+        "asus be88u",
+        "be88u"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4433,7 +5351,11 @@
       "family": "rt",
       "model": "RT-AX86U Pro",
       "displayName": "ASUS RT-AX86U Pro WiFi 6 Gaming Router",
-      "aliases": ["rt-ax86u pro", "asus ax86u pro", "ax86u pro"],
+      "aliases": [
+        "rt-ax86u pro",
+        "asus ax86u pro",
+        "ax86u pro"
+      ],
       "category": "gaming-router",
       "targetMarket": "prosumer",
       "releaseYear": 2023,
@@ -4464,7 +5386,12 @@
       "family": "nighthawk",
       "model": "RS700S",
       "displayName": "NETGEAR Nighthawk RS700S WiFi 7 Router",
-      "aliases": ["rs700s", "nighthawk rs700s", "netgear wifi 7", "be19000"],
+      "aliases": [
+        "rs700s",
+        "nighthawk rs700s",
+        "netgear wifi 7",
+        "be19000"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4495,7 +5422,11 @@
       "family": "nighthawk",
       "model": "RS90",
       "displayName": "NETGEAR Nighthawk RS90 WiFi 7 Dual-Band Router",
-      "aliases": ["rs90", "nighthawk rs90", "be3600"],
+      "aliases": [
+        "rs90",
+        "nighthawk rs90",
+        "be3600"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2024,
@@ -4526,7 +5457,12 @@
       "family": "unifi",
       "model": "Dream Router 7",
       "displayName": "Ubiquiti UniFi Dream Router 7 WiFi 7",
-      "aliases": ["dream router 7", "udr7", "unifi dream router", "ubiquiti wifi 7"],
+      "aliases": [
+        "dream router 7",
+        "udr7",
+        "unifi dream router",
+        "ubiquiti wifi 7"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
@@ -4556,7 +5492,11 @@
       "family": "ac",
       "model": "AC3000",
       "displayName": "Wavlink AC3000 Gigabit Router - CRITICAL: DO NOT USE",
-      "aliases": ["ac3000", "wavlink ac3000", "wavlink gigabit"],
+      "aliases": [
+        "ac3000",
+        "wavlink ac3000",
+        "wavlink gigabit"
+      ],
       "category": "wifi-router",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -4569,7 +5509,14 @@
             "all": {
               "branchName": "all",
               "msv": "NO SAFE VERSION EXISTS",
-              "msvCves": ["CVE-2024-39367", "CVE-2024-39756", "CVE-2024-37184", "CVE-2024-21797", "CVE-2024-39370", "CVE-2024-37186"],
+              "msvCves": [
+                "CVE-2024-39367",
+                "CVE-2024-39756",
+                "CVE-2024-37184",
+                "CVE-2024-21797",
+                "CVE-2024-39370",
+                "CVE-2024-37186"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "CRITICAL: 63 CVEs disclosed Jan 2025. Vendor REFUSES to patch. Remote root access via WAN. REPLACE IMMEDIATELY."
@@ -4587,7 +5534,11 @@
       "family": "ac",
       "model": "AC1200",
       "displayName": "Wavlink AC1200 Router/Extender - CRITICAL: DO NOT USE",
-      "aliases": ["wavlink ac1200", "ac1200 extender", "m32a3"],
+      "aliases": [
+        "wavlink ac1200",
+        "ac1200 extender",
+        "m32a3"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -4600,7 +5551,9 @@
             "all": {
               "branchName": "all",
               "msv": "NO SAFE VERSION EXISTS",
-              "msvCves": ["CVE-2024-48705"],
+              "msvCves": [
+                "CVE-2024-48705"
+              ],
               "latest": "M32A3_V1410_240222",
               "eol": true,
               "eolNote": "CRITICAL: CVE-2024-48705 command injection. No patch available. REPLACE IMMEDIATELY."
@@ -4618,7 +5571,11 @@
       "family": "wn",
       "model": "WN530H4",
       "displayName": "Wavlink WN530H4 Range Extender - CRITICAL: DO NOT USE",
-      "aliases": ["wn530h4", "wavlink wn530h4", "530h4"],
+      "aliases": [
+        "wn530h4",
+        "wavlink wn530h4",
+        "530h4"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -4631,7 +5588,10 @@
             "all": {
               "branchName": "all",
               "msv": "NO SAFE VERSION EXISTS",
-              "msvCves": ["CVE-2024-10194", "CVE-2024-10429"],
+              "msvCves": [
+                "CVE-2024-10194",
+                "CVE-2024-10429"
+              ],
               "latest": "20221028",
               "eol": true,
               "eolNote": "CRITICAL: Stack buffer overflow + command injection. Remote code execution without auth. REPLACE IMMEDIATELY."
@@ -4649,7 +5609,11 @@
       "family": "wn",
       "model": "WN530HG4",
       "displayName": "Wavlink WN530HG4 Range Extender - CRITICAL: DO NOT USE",
-      "aliases": ["wn530hg4", "wavlink wn530hg4", "530hg4"],
+      "aliases": [
+        "wn530hg4",
+        "wavlink wn530hg4",
+        "530hg4"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -4662,7 +5626,10 @@
             "all": {
               "branchName": "all",
               "msv": "NO SAFE VERSION EXISTS",
-              "msvCves": ["CVE-2024-10194", "CVE-2024-10429"],
+              "msvCves": [
+                "CVE-2024-10194",
+                "CVE-2024-10429"
+              ],
               "latest": "20221028",
               "eol": true,
               "eolNote": "CRITICAL: Stack buffer overflow + command injection. Remote code execution without auth. REPLACE IMMEDIATELY."
@@ -4680,7 +5647,12 @@
       "family": "wn",
       "model": "WN572HG3",
       "displayName": "Wavlink WN572HG3 Outdoor Extender - CRITICAL: DO NOT USE",
-      "aliases": ["wn572hg3", "wavlink wn572hg3", "572hg3", "wavlink outdoor"],
+      "aliases": [
+        "wn572hg3",
+        "wavlink wn572hg3",
+        "572hg3",
+        "wavlink outdoor"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2020,
@@ -4693,7 +5665,10 @@
             "all": {
               "branchName": "all",
               "msv": "NO SAFE VERSION EXISTS",
-              "msvCves": ["CVE-2024-10194", "CVE-2024-10429"],
+              "msvCves": [
+                "CVE-2024-10194",
+                "CVE-2024-10429"
+              ],
               "latest": "20221028",
               "eol": true,
               "eolNote": "CRITICAL: Stack buffer overflow + command injection. Outdoor model - higher exposure risk. REPLACE IMMEDIATELY."
@@ -4711,7 +5686,12 @@
       "family": "wn",
       "model": "WL-WN578W2",
       "displayName": "Wavlink WL-WN578W2 Range Extender - CRITICAL: DO NOT USE",
-      "aliases": ["wn578w2", "wl-wn578w2", "wavlink wn578w2", "578w2"],
+      "aliases": [
+        "wn578w2",
+        "wl-wn578w2",
+        "wavlink wn578w2",
+        "578w2"
+      ],
       "category": "range-extender",
       "targetMarket": "consumer",
       "releaseYear": 2019,
@@ -4724,7 +5704,9 @@
             "all": {
               "branchName": "all",
               "msv": "NO SAFE VERSION EXISTS",
-              "msvCves": ["CVE-2025-10323"],
+              "msvCves": [
+                "CVE-2025-10323"
+              ],
               "latest": "unknown",
               "eol": true,
               "eolNote": "CRITICAL: CVE-2025-10323 command injection (January 2025). Remote exploitation. REPLACE IMMEDIATELY."
@@ -4742,7 +5724,14 @@
       "family": "gigaspire",
       "model": "GigaSpire BLAST u4m (GM1028)",
       "displayName": "Calix GigaSpire Mesh BLAST u4m WiFi 6",
-      "aliases": ["gigaspire u4m", "gm1028", "calix u4m", "gigaspire mesh", "blast u4m", "100-05494"],
+      "aliases": [
+        "gigaspire u4m",
+        "gm1028",
+        "calix u4m",
+        "gigaspire mesh",
+        "blast u4m",
+        "100-05494"
+      ],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2021,
@@ -4785,7 +5774,14 @@
       "family": "router",
       "model": "BE7000",
       "displayName": "Xiaomi Router BE7000 WiFi 7",
-      "aliases": ["be7000", "xiaomi be7000", "mi router be7000", "xiaomi wifi 7", "router 7000", "rc06"],
+      "aliases": [
+        "be7000",
+        "xiaomi be7000",
+        "mi router be7000",
+        "xiaomi wifi 7",
+        "router 7000",
+        "rc06"
+      ],
       "category": "wifi-router",
       "targetMarket": "prosumer",
       "releaseYear": 2024,
