@@ -917,7 +917,73 @@ const isCollect = args.includes("--collect");
 const isThin = args.includes("--thin");
 const groupIdx = args.indexOf("--group");
 const groupId = groupIdx >= 0 ? parseInt(args[groupIdx + 1]) : 0;
+const throughIdx = args.indexOf("--through");
+const throughId = throughIdx >= 0 ? parseInt(args[throughIdx + 1]) : 0;
 const mode: AttackMode = isThin ? "thin" : "brute8";
+
+/** Wait for hashcat to finish on BIGRED, polling every 30s. Returns potfile line count. */
+async function waitForCompletion(config: BigRedConfig, groupId: number, mode: AttackMode): Promise<number> {
+  const groupName = `group-${groupId}`;
+  const logFile = `${config.workDir}/hashcat-${mode}-g${groupId}.log`;
+  const POLL_INTERVAL = 30_000;
+  let notRunningCount = 0;
+  let sshErrors = 0;
+  const MAX_SSH_ERRORS = 10;
+
+  const plan: Brute8Plan | null = existsSync(PLAN_FILE) ? JSON.parse(readFileSync(PLAN_FILE, "utf-8")) : null;
+  const group = plan?.[mode]?.groups.find((g: any) => g.id === groupId);
+  const startTime = Date.now();
+  let prevPotCount = 0;
+  let prevPollTime = 0;
+  let crackRate = 0;
+
+  console.log(`\n  Waiting for group ${groupId} ${ATTACKS[mode].name} to complete...`);
+
+  while (true) {
+    await Bun.sleep(POLL_INTERVAL);
+    try {
+      const hcRunning = parseInt(sshCmd(config, `pgrep -c hashcat 2>/dev/null || echo 0`, 15_000));
+      const potCount = parseInt(sshCmd(config, `wc -l < ${config.workDir}/potfiles/${groupName}.pot 2>/dev/null || echo 0`, 15_000).trim());
+      const progress = parseProgress(config, logFile);
+      sshErrors = 0;
+
+      // Crack rate
+      const now = Date.now();
+      if (prevPollTime > 0 && potCount > prevPotCount) {
+        const deltaMin = (now - prevPollTime) / 60_000;
+        if (deltaMin > 0) crackRate = (potCount - prevPotCount) / deltaMin;
+      }
+      prevPotCount = potCount;
+      prevPollTime = now;
+
+      const elapsed = fmtElapsed((now - startTime) / 1000);
+      const pctStr = progress?.pct ? ` ${progress.pct}` : "";
+      const speedStr = progress?.speed ? ` @ ${progress.speed}` : "";
+      const etaStr = progress?.eta ? ` ETA ${progress.eta}` : "";
+      const rateStr = crackRate > 0 ? ` ${fmt(Math.round(crackRate))}/min` : "";
+
+      if (hcRunning > 0) {
+        notRunningCount = 0;
+        process.stdout.write(`\r  [${elapsed}] Group ${groupId}:${pctStr}${speedStr}${etaStr} | ${fmt(potCount)} cracks${rateStr}     `);
+      } else {
+        notRunningCount++;
+        if (notRunningCount >= 2) {
+          console.log(`\n  Group ${groupId} ${ATTACKS[mode].name} completed. ${fmt(potCount)} cracks.`);
+          return potCount;
+        }
+        process.stdout.write(`\r  [${elapsed}] Group ${groupId}: hashcat not running (confirming ${notRunningCount}/2)...     `);
+      }
+    } catch (e) {
+      sshErrors++;
+      const msg = (e as Error).message?.split("\n")[0]?.slice(0, 80) ?? "unknown";
+      process.stdout.write(`\r  SSH error (${sshErrors}/${MAX_SSH_ERRORS}): ${msg}     `);
+      if (sshErrors >= MAX_SSH_ERRORS) {
+        console.log(`\n  ${MAX_SSH_ERRORS} consecutive SSH failures. Aborting wait.`);
+        process.exit(1);
+      }
+    }
+  }
+}
 
 if (isPlan) {
   console.log("Scanning glass directory...");
@@ -934,8 +1000,44 @@ if (isPlan) {
   writeFileSync(PLAN_FILE, JSON.stringify(plan, null, 2) + "\n");
   console.log(`Plan saved: ${PLAN_FILE}\n`);
 } else if (isRun) {
-  if (!groupId) { console.error("Usage: --run [--thin] --group N"); process.exit(1); }
-  runGroup(groupId, mode);
+  if (!groupId) { console.error("Usage: --run [--thin] --group N [--through M]"); process.exit(1); }
+  const lastGroup = throughId > groupId ? throughId : groupId;
+
+  for (let gid = groupId; gid <= lastGroup; gid++) {
+    console.log(`\n${"═".repeat(60)}`);
+    console.log(` GROUP ${gid} / ${lastGroup} — ${ATTACKS[mode].name}`);
+    console.log("═".repeat(60));
+
+    // Skip groups that are already completed
+    const state = loadState();
+    const gs = getGroupState(state, gid);
+    if (gs[mode] === "completed") {
+      console.log(`  Group ${gid} ${mode} already completed. Skipping.`);
+      continue;
+    }
+
+    // If group is already running, skip launch but still wait+collect
+    if (gs[mode] === "running") {
+      console.log(`  Group ${gid} ${mode} already running. Waiting for completion...`);
+    } else {
+      runGroup(gid, mode);
+    }
+
+    // Wait for completion then auto-collect (for --through or single group with --through)
+    if (gid < lastGroup || throughId > 0) {
+      const config = loadConfig();
+      await waitForCompletion(config, gid, mode);
+      console.log(`\n  Auto-collecting group ${gid}...`);
+      collectGroup(gid, mode);
+      console.log();
+    }
+  }
+
+  if (lastGroup > groupId) {
+    console.log(`\n${"═".repeat(60)}`);
+    console.log(` ALL GROUPS ${groupId}-${lastGroup} COMPLETE`);
+    console.log("═".repeat(60));
+  }
 } else if (isStatus) {
   await checkStatus(groupId || undefined);
 } else if (isCollect) {
@@ -944,10 +1046,12 @@ if (isPlan) {
 } else {
   console.log("Brute8Planner — Two-phase 8-char brute force on combined GLASS\n");
   console.log("Usage:");
-  console.log("  --plan                        Calculate optimal grouping for both phases");
-  console.log("  --run --thin --group N         Phase 1: mask-lud8 (62^8, ~hours)");
-  console.log("  --collect --thin --group N     Collect thin cracks, update glass");
-  console.log("  --run --group N               Phase 2: brute-8 (95^8, ~days)");
-  console.log("  --collect --group N           Collect brute8 cracks, update glass");
-  console.log("  --status [--group N]           Live progress dashboard (auto-detects group)");
+  console.log("  --plan                              Calculate optimal grouping for both phases");
+  console.log("  --run --thin --group N               Phase 1: mask-lud8 (62^8, ~hours)");
+  console.log("  --run --thin --group N --through M   Phase 1: groups N through M (auto-collect)");
+  console.log("  --collect --thin --group N           Collect thin cracks, update glass");
+  console.log("  --run --group N                     Phase 2: brute-8 (95^8, ~days)");
+  console.log("  --run --group N --through M          Phase 2: groups N through M (auto-collect)");
+  console.log("  --collect --group N                 Collect brute8 cracks, update glass");
+  console.log("  --status [--group N]                 Live progress dashboard (auto-detects group)");
 }
