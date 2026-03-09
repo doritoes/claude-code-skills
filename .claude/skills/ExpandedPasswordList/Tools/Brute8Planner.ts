@@ -114,23 +114,39 @@ function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-/** Parse hashcat log Started/Stopped lines to get total run duration in seconds. */
+/** Parse hashcat log Started/Stopped lines to get total run duration in seconds.
+ *  Retries up to 3 times with 5s delay — log may not be fully flushed immediately after hashcat exits. */
 function parseLogDuration(config: BigRedConfig, mode: AttackMode, groupId: number): number {
   const logFile = `${config.workDir}/hashcat-${mode}-g${groupId}.log`;
-  try {
-    // grep for Started/Stopped lines — these appear in hashcat's final summary
-    // Started: may not be at line start (preceded by prompt text), so don't anchor with ^
-    const lines = sshCmd(config, `grep -E '(^Started|^Stopped|=> Started)' ${logFile} 2>/dev/null | tail -2`, 15_000);
-    const startMatch = lines.match(/Started[.:]+\s*(.+)/);
-    const stopMatch = lines.match(/Stopped[.:]+\s*(.+)/);
-    if (startMatch && stopMatch) {
-      const started = new Date(startMatch[1].trim());
-      const stopped = new Date(stopMatch[1].trim());
-      if (!isNaN(started.getTime()) && !isNaN(stopped.getTime())) {
-        return Math.max(1, Math.round((stopped.getTime() - started.getTime()) / 1000));
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 5_000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // grep for Started/Stopped lines — these appear in hashcat's final summary
+      // Started: may not be at line start (preceded by prompt text like "=> ")
+      const lines = sshCmd(config, `grep -E '(^Started|^Stopped|=> Started|=> Stopped)' ${logFile} 2>/dev/null | tail -2`, 15_000);
+      const startMatch = lines.match(/Started[.:]+\s*(.+)/);
+      const stopMatch = lines.match(/Stopped[.:]+\s*(.+)/);
+      if (startMatch && stopMatch) {
+        const started = new Date(startMatch[1].trim());
+        const stopped = new Date(stopMatch[1].trim());
+        if (!isNaN(started.getTime()) && !isNaN(stopped.getTime())) {
+          return Math.max(1, Math.round((stopped.getTime() - started.getTime()) / 1000));
+        }
+      }
+      // Lines found but couldn't parse — retry after delay (log may be partially flushed)
+      if (attempt < MAX_RETRIES) {
+        const start = Date.now();
+        while (Date.now() - start < RETRY_DELAY_MS) {} // busy-wait (sync context)
+      }
+    } catch {
+      if (attempt < MAX_RETRIES) {
+        const start = Date.now();
+        while (Date.now() - start < RETRY_DELAY_MS) {}
       }
     }
-  } catch {}
+  }
   return 0;
 }
 
