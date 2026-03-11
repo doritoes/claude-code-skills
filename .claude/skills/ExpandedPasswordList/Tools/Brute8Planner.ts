@@ -118,34 +118,23 @@ function sleepSync(ms: number): void {
  *  Retries up to 3 times with 5s delay — log may not be fully flushed immediately after hashcat exits. */
 function parseLogDuration(config: BigRedConfig, mode: AttackMode, groupId: number): number {
   const logFile = `${config.workDir}/hashcat-${mode}-g${groupId}.log`;
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 5_000;
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      // grep for Started/Stopped lines — these appear in hashcat's final summary
-      // Started: may not be at line start (preceded by prompt text like "=> ")
-      const lines = sshCmd(config, `grep -E '(^Started|^Stopped|=> Started|=> Stopped)' ${logFile} 2>/dev/null | tail -2`, 15_000);
-      const startMatch = lines.match(/Started[.:]+\s*(.+)/);
-      const stopMatch = lines.match(/Stopped[.:]+\s*(.+)/);
-      if (startMatch && stopMatch) {
-        const started = new Date(startMatch[1].trim());
-        const stopped = new Date(stopMatch[1].trim());
-        if (!isNaN(started.getTime()) && !isNaN(stopped.getTime())) {
-          return Math.max(1, Math.round((stopped.getTime() - started.getTime()) / 1000));
-        }
+  try {
+    const lines = sshCmd(config, `tail -5 ${logFile} 2>/dev/null | grep -E '(^Started|^Stopped|=> Started|=> Stopped)'`, 15_000);
+    const startMatch = lines.match(/Started[.:]+\s*(.+)/);
+    const stopMatch = lines.match(/Stopped[.:]+\s*(.+)/);
+    if (startMatch && stopMatch) {
+      const started = new Date(startMatch[1].trim());
+      const stopped = new Date(stopMatch[1].trim());
+      if (!isNaN(started.getTime()) && !isNaN(stopped.getTime())) {
+        return Math.max(1, Math.round((stopped.getTime() - started.getTime()) / 1000));
       }
-      // Lines found but couldn't parse — retry after delay (log may be partially flushed)
-      if (attempt < MAX_RETRIES) {
-        const start = Date.now();
-        while (Date.now() - start < RETRY_DELAY_MS) {} // busy-wait (sync context)
-      }
-    } catch {
-      if (attempt < MAX_RETRIES) {
-        const start = Date.now();
-        while (Date.now() - start < RETRY_DELAY_MS) {}
-      }
+      console.error(`  parseLogDuration: parsed dates invalid — Started="${startMatch[1]}", Stopped="${stopMatch[1]}"`);
+    } else {
+      console.error(`  parseLogDuration: grep returned "${lines.slice(0, 200)}" — no Started/Stopped match`);
     }
+  } catch (e) {
+    console.error(`  parseLogDuration: SSH failed — ${(e as Error).message.slice(0, 200)}`);
   }
   return 0;
 }
@@ -710,16 +699,17 @@ async function checkStatus(targetGroupId?: number): Promise<void> {
   // Poll loop
   let notRunningCount = 0;
   let sshErrors = 0;
-  const MAX_SSH_ERRORS = 5;
   let lastProgress = progress;
   while (true) {
-    await Bun.sleep(POLL_INTERVAL);
+    const sleepMs = sshErrors === 0 ? POLL_INTERVAL : Math.min(POLL_INTERVAL * (2 ** sshErrors), 300_000);
+    await Bun.sleep(sleepMs);
     try {
       const hcRunning = parseInt(sshRetry(`pgrep -c hashcat 2>/dev/null || echo 0`));
       potCount = parseInt(sshRetry(`wc -l < ${config.workDir}/potfiles/${groupName}.pot 2>/dev/null || echo 0`).trim());
       const prog = parseProgress(config, logFile);
       lastProgress = prog ?? lastProgress;
-      sshErrors = 0; // reset on success
+      if (sshErrors > 0) process.stdout.write(render(potCount, true, prog, `SSH recovered after ${sshErrors} failures`));
+      sshErrors = 0;
 
       if (hcRunning > 0) {
         notRunningCount = 0;
@@ -734,11 +724,8 @@ async function checkStatus(targetGroupId?: number): Promise<void> {
     } catch (e) {
       sshErrors++;
       const msg = (e as Error).message?.split("\n")[0]?.slice(0, 120) ?? "unknown";
-      process.stdout.write(render(potCount, true, lastProgress, `SSH error (${sshErrors}/${MAX_SSH_ERRORS}): ${msg}`));
-      if (sshErrors >= MAX_SSH_ERRORS) {
-        console.log(`\n  ${MAX_SSH_ERRORS} consecutive SSH failures. Exiting.`);
-        break;
-      }
+      const backoffSec = Math.min(POLL_INTERVAL * (2 ** sshErrors), 300_000) / 1000;
+      process.stdout.write(render(potCount, true, lastProgress, `SSH error (${sshErrors}, retry ${backoffSec}s): ${msg}`));
     }
   }
 }
@@ -941,10 +928,10 @@ const mode: AttackMode = isThin ? "thin" : "brute8";
 async function waitForCompletion(config: BigRedConfig, groupId: number, mode: AttackMode): Promise<number> {
   const groupName = `group-${groupId}`;
   const logFile = `${config.workDir}/hashcat-${mode}-g${groupId}.log`;
-  const POLL_INTERVAL = 30_000;
+  const BASE_POLL = 30_000;
+  const MAX_BACKOFF = 300_000; // 5 min max between polls during SSH issues
   let notRunningCount = 0;
   let sshErrors = 0;
-  const MAX_SSH_ERRORS = 10;
 
   const plan: Brute8Plan | null = existsSync(PLAN_FILE) ? JSON.parse(readFileSync(PLAN_FILE, "utf-8")) : null;
   const group = plan?.[mode]?.groups.find((g: any) => g.id === groupId);
@@ -953,14 +940,31 @@ async function waitForCompletion(config: BigRedConfig, groupId: number, mode: At
   let prevPollTime = 0;
   let crackRate = 0;
 
+  // Retry wrapper — absorbs single SSH failures (matches --status behavior)
+  function sshRetry(cmd: string, timeout = 15_000): string {
+    try {
+      return sshCmd(config, cmd, timeout);
+    } catch {
+      const start = Date.now();
+      while (Date.now() - start < 2000) {}
+      return sshCmd(config, cmd, timeout);
+    }
+  }
+
   console.log(`\n  Waiting for group ${groupId} ${ATTACKS[mode].name} to complete...`);
 
   while (true) {
-    await Bun.sleep(POLL_INTERVAL);
+    // Backoff: 30s normal, 60s/120s/300s during SSH failures
+    const sleepMs = sshErrors === 0 ? BASE_POLL : Math.min(BASE_POLL * (2 ** sshErrors), MAX_BACKOFF);
+    await Bun.sleep(sleepMs);
     try {
-      const hcRunning = parseInt(sshCmd(config, `pgrep -c hashcat 2>/dev/null || echo 0`, 15_000));
-      const potCount = parseInt(sshCmd(config, `wc -l < ${config.workDir}/potfiles/${groupName}.pot 2>/dev/null || echo 0`, 15_000).trim());
+      const hcRunning = parseInt(sshRetry(`pgrep -c hashcat 2>/dev/null || echo 0`));
+      const potCount = parseInt(sshRetry(`wc -l < ${config.workDir}/potfiles/${groupName}.pot 2>/dev/null || echo 0`).trim());
       const progress = parseProgress(config, logFile);
+
+      if (sshErrors > 0) {
+        console.log(`\n  SSH recovered after ${sshErrors} failures.`);
+      }
       sshErrors = 0;
 
       // Crack rate
@@ -992,11 +996,9 @@ async function waitForCompletion(config: BigRedConfig, groupId: number, mode: At
     } catch (e) {
       sshErrors++;
       const msg = (e as Error).message?.split("\n")[0]?.slice(0, 80) ?? "unknown";
-      process.stdout.write(`\r  SSH error (${sshErrors}/${MAX_SSH_ERRORS}): ${msg}     `);
-      if (sshErrors >= MAX_SSH_ERRORS) {
-        console.log(`\n  ${MAX_SSH_ERRORS} consecutive SSH failures. Aborting wait.`);
-        process.exit(1);
-      }
+      const backoffSec = Math.min(BASE_POLL * (2 ** sshErrors), MAX_BACKOFF) / 1000;
+      process.stdout.write(`\r  SSH error (${sshErrors}, next retry ${backoffSec}s): ${msg}     `);
+      // Never abort — hashcat runs independently in screen, just keep trying
     }
   }
 }

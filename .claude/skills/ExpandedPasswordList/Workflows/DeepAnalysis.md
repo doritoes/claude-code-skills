@@ -99,4 +99,31 @@ Based on findings, typical follow-up:
 2. **Cohort priorities**: Expand cohorts with highest diamond attribution
 3. **New attacks**: Design combinator/mask attacks for uncovered 9+ patterns
 4. **Rule analysis frequency**: If feedback plateau confirmed, run deep rule analysis every 10 batches
-5. **BETA.txt curation**: If plateau + quality problem, prune low-performing roots
+5. **BETA.txt curation**: Run BetaCurator to exclude dead roots from BETA.txt
+
+## BETA.txt Curation (BetaCurator)
+
+When `--beta` shows high dead-root counts (>30% of roots with 0 cracks), run BetaCurator to generate an exclusion list. This speeds up all BETA-based feedback attacks without modifying cohort source files.
+
+```bash
+# Dry run — shows cohort health table, exclusion breakdown, estimated speedup
+bun Tools/BetaCurator.ts
+
+# Apply — writes beta-exclusions.txt, rebuilds BETA.txt
+bun Tools/BetaCurator.ts --execute
+
+# Sync to BIGRED after executing
+bun Tools/BigRedSync.ts --sync-attack-files
+```
+
+**Key design decisions:**
+- **Substring match, not prefix match** — roots are found anywhere in the password, accounting for combinator (suffix), reverse hybrid (prefix digits + root), and prepend rules
+- **Roots < 4 chars are exempt** — too short for substring matching to measure, kept by default
+- **Cohort files untouched** — exclusions only affect BETA.txt (cohort words still in nocap-plus.txt)
+- **DiamondFeedback respects exclusions** — subsequent BETA.txt rebuilds automatically subtract `beta-exclusions.txt`
+- **Re-runnable** — as more batches complete, excluded roots that start producing cracks get re-included
+
+**Typical results (215 batches, 17.3M diamonds):**
+- Name cohorts: 3-6% dead (healthy, keep)
+- Phrase cohorts: 53-55% dead (markov 29K, spanish 4K, french 3K)
+- BETA.txt: 80K → 43K (46% reduction, ~46% faster feedback attacks)

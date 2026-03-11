@@ -1007,6 +1007,15 @@ async function analyzeBetaRoots(batchNum?: number): Promise<void> {
     console.log(`  Top 10% of roots (${formatNum(top10pctIdx)}) produce ${pct(top10cracks, totalAttributed)} of attributions`);
     console.log(`  Bottom 50% of roots (${formatNum(betaSet.size - bottom50pctStart)}) produce ${pct(bottom50cracks, totalAttributed)} of attributions`);
   }
+
+  // Curation suggestion
+  if (rootsWithZero > 0) {
+    const deadPct = ((rootsWithZero / betaSet.size) * 100).toFixed(0);
+    console.log(`\n  ── CURATION SUGGESTION ──`);
+    console.log(`  ${formatNum(rootsWithZero)} roots (${deadPct}%) produced 0 cracks across ${formatNum(totalDiamonds)} diamonds.`);
+    console.log(`  Run: bun Tools/BetaCurator.ts              (dry run — preview changes)`);
+    console.log(`  Run: bun Tools/BetaCurator.ts --execute    (demote dead roots, shrink BETA.txt)`);
+  }
 }
 
 // =============================================================================
