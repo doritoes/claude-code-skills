@@ -184,8 +184,7 @@ function formatText(report: CTIReport): string {
       `(${YELLOW}+${report.kevDelta.newEntries.length}${RESET} this period)`
   );
   if (report.kevDelta.newEntries.length > 0) {
-    const showEntries = report.kevDelta.newEntries.slice(0, 5);
-    for (const entry of showEntries) {
+    for (const entry of report.kevDelta.newEntries) {
       const vendor = entry.affectedProducts[0] || "Unknown";
       const ransomTag = entry.ransomwareAssociated ? ` ${RED}[RANSOMWARE]${RESET}` : "";
       lines.push(
@@ -195,16 +194,13 @@ function formatText(report: CTIReport): string {
         `       ${DIM}${truncateText(entry.title, 56)}${RESET}`
       );
     }
-    if (report.kevDelta.newEntries.length > 5) {
-      lines.push(`  ${DIM}... +${report.kevDelta.newEntries.length - 5} more${RESET}`);
-    }
   }
   lines.push("");
 
   // EPSS Spikes — with product context
   if (report.epssSpikes.length > 0) {
     lines.push(`${BOLD}EPSS Spikes:${RESET}`);
-    for (const spike of report.epssSpikes.slice(0, 3)) {
+    for (const spike of report.epssSpikes.slice(0, 5)) {
       const scoreColor = spike.currentScore > 0.5 ? RED : YELLOW;
       lines.push(
         `  ${BOLD}${spike.cve}${RESET}  ${(spike.previousScore * 100).toFixed(1)}% → ` +

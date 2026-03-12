@@ -4078,6 +4078,10 @@ async function main(): Promise<void> {
     console.error(`Error: ${(error as Error).message}`);
     process.exit(1);
   }
+
+  // Ensure clean exit — child process handles (e.g. from failed AppThreat
+  // update) can keep the event loop open on Windows even after all work is done
+  process.exit(0);
 }
 
 main();
