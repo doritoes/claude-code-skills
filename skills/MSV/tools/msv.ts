@@ -81,6 +81,8 @@ import {
   listModelsByVendor,
   getCatalogStats,
   formatRouterResult,
+  checkCatalogStaleness,
+  resetCatalog,
   type RouterQuery,
 } from "./RouterClient";
 import { RouterCatalogUpdater } from "./RouterCatalogUpdater";
@@ -227,19 +229,39 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
   let bestTier = 99; // lower = better; 99 = no match
   let bestLen = Infinity; // shorter displayName = more specific match
 
+  // Helper: for short strings (< 4 chars), require word-boundary match to prevent
+  // false positives like "nta" matching inside "documentation" or "git" inside "github cli"
+  const substringMatch = (haystack: string, needle: string): boolean => {
+    if (!haystack.includes(needle)) return false;
+    if (needle.length < 4) {
+      // Require word boundary: needle must be surrounded by non-alphanumeric or start/end
+      const regex = new RegExp(`(?:^|[^a-z0-9])${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^a-z0-9]|$)`);
+      return regex.test(haystack);
+    }
+    return true;
+  };
+
   for (const query of [normalized, ...(versionStripped !== normalized ? [versionStripped] : [])]) {
     for (const [key, mapping] of Object.entries(catalog)) {
+      // Check excludePatterns — if the input matches any exclude, skip this candidate
+      if (mapping.excludePatterns?.length) {
+        const excluded = mapping.excludePatterns.some((pattern: string) => {
+          try { return new RegExp(pattern, "i").test(input); } catch { return false; }
+        });
+        if (excluded) continue;
+      }
+
       let tier = 99;
-      if (key.includes(query) || query.includes(key)) {
+      if (substringMatch(key, query) || substringMatch(query, key)) {
         tier = 1; // id contains query or query contains id
-      } else if (mapping.displayName.toLowerCase().includes(query)) {
+      } else if (substringMatch(mapping.displayName.toLowerCase(), query)) {
         tier = 2; // displayName contains query
       } else if (mapping.aliases.some((a) => {
         const al = a.toLowerCase();
-        return al.includes(query) || query.includes(al);
+        return substringMatch(al, query) || substringMatch(query, al);
       })) {
         tier = 3; // alias substring match (bidirectional)
-      } else if (mapping.product.toLowerCase().includes(query)) {
+      } else if (substringMatch(mapping.product.toLowerCase(), query)) {
         tier = 4; // product field
       }
 
@@ -247,6 +269,18 @@ function resolveSoftware(input: string, config: Config): SoftwareMapping | null 
         bestMatch = mapping;
         bestTier = tier;
         bestLen = mapping.displayName.length;
+      }
+    }
+  }
+
+  // If the match is a parent entry with variants, check if a more specific variant matches
+  if (bestMatch?.variants?.length) {
+    for (const variantId of bestMatch.variants) {
+      const variant = catalog[variantId];
+      if (!variant) continue;
+      // Check if input matches a variant alias more specifically
+      if (variant.aliases.some((a) => substringMatch(normalized, a.toLowerCase()))) {
+        return variant;
       }
     }
   }
@@ -2821,6 +2855,27 @@ OPTIONS:
   --json               Force JSON input parsing
   --list               Force direct list parsing
 
+ROUTER FIRMWARE:
+  Query minimum safe firmware versions for consumer/SOHO routers.
+  Covers 79+ models from NETGEAR, TP-Link, ASUS, D-Link, Linksys, Ubiquiti.
+
+  Subcommands:
+    router query <model>   Look up MSV for a specific router model
+    router vendors         List supported router vendors
+    router models <vendor> List models for a vendor
+    router stats           Show router catalog statistics
+    router update          Update router catalog from CISA KEV
+
+  Options:
+    --firmware <ver>       Check if your firmware version is safe
+
+  Examples:
+    msv router query "TP-Link Archer AX21"
+    msv router query "NETGEAR R7000" --firmware 1.0.11.116
+    msv router vendors
+    msv router models tp-link
+    msv router stats
+
 EXAMPLES:
   msv query "Google Chrome"
   msv query edge --version 131.0.2903.86   # Check if your version is safe
@@ -2838,6 +2893,8 @@ EXAMPLES:
   msv warm high                                  # Pre-fetch high+ priority MSVs
   msv scan                                       # Detect installed versions
   msv scan --format json                         # Output as JSON
+  msv router query "TP-Link Archer AX21"         # Router firmware MSV
+  msv router query "NETGEAR R7000" --firmware 1.0.11.116
   msv stats
   msv list monitoring
   msv list remote_access
@@ -3442,6 +3499,40 @@ async function cmdRouter(
 
       const result = await queryRouter(query);
 
+      // Auto-refresh the queried model if catalog is stale (>30 days)
+      const stalenessWarning = await checkCatalogStaleness();
+      if (stalenessWarning && result.success && result.model) {
+        console.log(`\n${stalenessWarning}`);
+        console.log(`Refreshing ${result.model.displayName} from NVD...`);
+        try {
+          const cacheDir = resolve(
+            dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")),
+            "../.cache"
+          );
+          const autoUpdater = new RouterCatalogUpdater(cacheDir, { verbose: false });
+          const updateResult = await autoUpdater.updateModel(result.model);
+          if (updateResult.updated) {
+            const summary = await autoUpdater.updateCatalog({
+              dryRun: false,
+              modelsToUpdate: [result.model.id],
+            });
+            resetCatalog();
+            const freshResult = await queryRouter(query);
+            console.log(`Updated. (was ${updateResult.previousMsv} -> ${updateResult.newMsv})\n`);
+            if (options.format === "json") {
+              console.log(JSON.stringify(freshResult, null, 2));
+            } else {
+              console.log(formatRouterResult(freshResult));
+            }
+            break;
+          } else {
+            console.log("No changes found.\n");
+          }
+        } catch (e) {
+          console.log(`Auto-refresh failed: ${(e as Error).message}. Using cached data.\n`);
+        }
+      }
+
       if (options.format === "json") {
         console.log(JSON.stringify(result, null, 2));
       } else {
@@ -3506,10 +3597,14 @@ async function cmdRouter(
 
     case "stats": {
       const stats = await getCatalogStats();
+      const statsWarning = await checkCatalogStaleness();
 
       if (options.format === "json") {
         console.log(JSON.stringify(stats, null, 2));
       } else {
+        if (statsWarning) {
+          console.log(`\n${statsWarning}`);
+        }
         console.log("\n=== Router Catalog Statistics ===\n");
         console.log(`Catalog Version: ${stats.version}`);
         console.log(`Last Updated: ${stats.lastUpdated}`);
@@ -3983,6 +4078,10 @@ async function main(): Promise<void> {
     console.error(`Error: ${(error as Error).message}`);
     process.exit(1);
   }
+
+  // Ensure clean exit — child process handles (e.g. from failed AppThreat
+  // update) can keep the event loop open on Windows even after all work is done
+  process.exit(0);
 }
 
 main();
