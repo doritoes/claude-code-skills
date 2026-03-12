@@ -1,10 +1,14 @@
 /**
  * CitrixAdvisoryFetcher.ts - Citrix Security Advisory Fetcher
  *
- * Fetches security advisories from Citrix support portal via HTML scraping.
- * Source: https://support.citrix.com/s/topic/0TO4z0000001GYdGAM/security-bulletin
+ * Fetches security advisories from Citrix support portal using:
+ * 1. Sitemap discovery (sitemap_1.xml + sitemap_2.xml) to find security bulletins
+ * 2. Server-rendered /external/article/ pages for parsing (not the broken SPA)
  *
- * No API key required. Parses CVE data from security bulletin pages.
+ * Parses JSON-LD metadata, embedded flexDetails JS objects, and HTML sections
+ * for CVEs, severity, affected products, and fixed versions.
+ *
+ * No API key required.
  *
  * @author PAI (Personal AI Infrastructure)
  * @license MIT
@@ -17,9 +21,22 @@ import { resolve } from "node:path";
 // Constants
 // =============================================================================
 
-const CITRIX_SECURITY_BASE = "https://support.citrix.com";
-const CITRIX_SECURITY_LIST = "https://support.citrix.com/s/topic/0TO4z0000001GYdGAM/security-bulletin";
+const CITRIX_BASE = "https://support.citrix.com";
+const SITEMAP_INDEX = `${CITRIX_BASE}/sitemap.xml`;
 const REQUEST_TIMEOUT_MS = 30000;
+const MAX_CONCURRENT_FETCHES = 5;
+const MAX_BULLETINS_TO_FETCH = 100; // Safety cap on individual article fetches
+
+// Security-related slug keywords for sitemap filtering
+const SECURITY_SLUG_KEYWORDS = [
+  "security-bulletin",
+  "security-advisory",
+  "security-update",
+  "security-patch",
+  "security-hotfix",
+  "cve-",
+  "vulnerability",
+];
 
 // =============================================================================
 // Types
@@ -47,6 +64,11 @@ export interface CitrixAdvisoryResult {
 interface CacheEntry {
   data: CitrixAdvisoryResult;
   expiresAt: string;
+}
+
+interface SitemapUrl {
+  loc: string;
+  ctxId: string;
 }
 
 // =============================================================================
@@ -84,7 +106,7 @@ export class CitrixAdvisoryFetcher {
   }
 
   /**
-   * Fetch Citrix security bulletins
+   * Fetch Citrix security bulletins via sitemap discovery + article parsing
    */
   async fetch(): Promise<CitrixAdvisoryResult> {
     const cacheKey = `citrix-${this.product}`;
@@ -102,21 +124,11 @@ export class CitrixAdvisoryFetcher {
       }
     }
 
-    // Fetch the security bulletin listing page
-    const response = await fetch(CITRIX_SECURITY_LIST, {
-      headers: {
-        "Accept": "text/html",
-        "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
-      },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    // Phase 1: Discover security bulletin URLs from sitemap
+    const bulletinUrls = await this.discoverBulletins();
 
-    if (!response.ok) {
-      throw new Error(`Citrix advisory fetch error: ${response.status} ${response.statusText}`);
-    }
-
-    const html = await response.text();
-    const vulnerabilities = this.parseSecurityBulletins(html);
+    // Phase 2: Fetch and parse individual bulletins
+    const vulnerabilities = await this.fetchBulletins(bulletinUrls);
 
     // Filter by product if specified
     const filteredVulns = this.product === "all"
@@ -130,7 +142,7 @@ export class CitrixAdvisoryFetcher {
       vulnerabilities: filteredVulns,
       msvByProduct,
       lastUpdated: new Date().toISOString(),
-      source: CITRIX_SECURITY_LIST,
+      source: SITEMAP_INDEX,
     };
 
     // Cache result
@@ -143,59 +155,88 @@ export class CitrixAdvisoryFetcher {
     return result;
   }
 
+  // ===========================================================================
+  // Phase 1: Sitemap Discovery
+  // ===========================================================================
+
   /**
-   * Parse security bulletins from HTML
+   * Discover security bulletin URLs from Citrix sitemaps
    */
-  private parseSecurityBulletins(html: string): CitrixVulnerability[] {
+  private async discoverBulletins(): Promise<SitemapUrl[]> {
+    // Fetch sitemap index to get child sitemap URLs
+    const indexXml = await this.fetchText(SITEMAP_INDEX);
+    const sitemapUrls = this.extractSitemapUrls(indexXml);
+
+    // Fetch all child sitemaps
+    const allUrls: SitemapUrl[] = [];
+    for (const sitemapUrl of sitemapUrls) {
+      try {
+        const xml = await this.fetchText(sitemapUrl);
+        const urls = this.extractArticleUrls(xml);
+        allUrls.push(...urls);
+      } catch (err) {
+        // Skip broken sitemaps
+      }
+    }
+
+    // Filter to security-related articles by slug keywords
+    const securityUrls = allUrls.filter(u => {
+      const slug = u.loc.toLowerCase();
+      return SECURITY_SLUG_KEYWORDS.some(kw => slug.includes(kw));
+    });
+
+    // Cap to prevent excessive fetching
+    return securityUrls.slice(0, MAX_BULLETINS_TO_FETCH);
+  }
+
+  /**
+   * Extract child sitemap URLs from sitemap index XML
+   */
+  private extractSitemapUrls(xml: string): string[] {
+    const urls: string[] = [];
+    const pattern = /<loc>\s*(https?:\/\/[^<]+sitemap[^<]*\.xml)\s*<\/loc>/gi;
+    let match;
+    while ((match = pattern.exec(xml)) !== null) {
+      urls.push(match[1].trim());
+    }
+    return urls;
+  }
+
+  /**
+   * Extract article URLs and CTX IDs from a sitemap XML
+   */
+  private extractArticleUrls(xml: string): SitemapUrl[] {
+    const urls: SitemapUrl[] = [];
+    const pattern = /<loc>\s*(https?:\/\/[^<]*\/external\/article\/(CTX\d+)\/[^<]*)\s*<\/loc>/gi;
+    let match;
+    while ((match = pattern.exec(xml)) !== null) {
+      urls.push({ loc: match[1].trim(), ctxId: match[2] });
+    }
+    return urls;
+  }
+
+  // ===========================================================================
+  // Phase 2: Article Parsing
+  // ===========================================================================
+
+  /**
+   * Fetch and parse individual security bulletins with concurrency control
+   */
+  private async fetchBulletins(urls: SitemapUrl[]): Promise<CitrixVulnerability[]> {
     const vulns: CitrixVulnerability[] = [];
 
-    // Extract CTX bulletin IDs and their context
-    const ctxPattern = /CTX\d{6}/g;
-    const ctxMatches = [...new Set(html.match(ctxPattern) || [])];
+    // Process in batches for concurrency control
+    for (let i = 0; i < urls.length; i += MAX_CONCURRENT_FETCHES) {
+      const batch = urls.slice(i, i + MAX_CONCURRENT_FETCHES);
+      const results = await Promise.allSettled(
+        batch.map(u => this.parseBulletin(u))
+      );
 
-    for (const bulletinId of ctxMatches) {
-      // Find context around this bulletin ID
-      const idx = html.indexOf(bulletinId);
-      if (idx === -1) continue;
-
-      const contextStart = Math.max(0, idx - 500);
-      const contextEnd = Math.min(html.length, idx + 1500);
-      const context = html.slice(contextStart, contextEnd);
-
-      // Extract CVEs
-      const cvePattern = /CVE-\d{4}-\d+/gi;
-      const cveMatches = context.match(cvePattern) || [];
-      const cveIds = [...new Set(cveMatches.map(c => c.toUpperCase()))];
-
-      // Extract title (look for text near the bulletin ID)
-      const title = this.extractTitle(context, bulletinId);
-
-      // Extract severity
-      const severity = this.extractSeverity(context);
-
-      // Extract affected products
-      const affectedProducts = this.extractProducts(context);
-
-      // Extract fixed versions
-      const fixedVersions = this.extractVersions(context);
-
-      // Extract date
-      const publishedDate = this.extractDate(context);
-
-      // Extract CVSS score
-      const cvssScore = this.extractCvssScore(context);
-
-      vulns.push({
-        bulletinId,
-        title,
-        severity,
-        cveIds,
-        affectedProducts,
-        fixedVersions,
-        publishedDate,
-        url: `${CITRIX_SECURITY_BASE}/external/article/${bulletinId}`,
-        cvssScore,
-      });
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          vulns.push(result.value);
+        }
+      }
     }
 
     // Sort by published date descending
@@ -209,34 +250,109 @@ export class CitrixAdvisoryFetcher {
   }
 
   /**
-   * Extract title from context
+   * Parse a single security bulletin page
    */
-  private extractTitle(context: string, bulletinId: string): string {
-    // Look for common title patterns
-    const titlePatterns = [
-      /Security (?:Bulletin|Advisory)[^<]*?for[^<]*?([^<]+)/i,
-      /NetScaler[^<]*?Security[^<]*?Bulletin[^<]*?for[^<]*?CVE/i,
-      />([^<]*?Security[^<]*?(?:Bulletin|Update|Advisory)[^<]*)</i,
-    ];
+  private async parseBulletin(url: SitemapUrl): Promise<CitrixVulnerability | null> {
+    try {
+      const html = await this.fetchText(url.loc);
 
-    for (const pattern of titlePatterns) {
-      const match = context.match(pattern);
-      if (match) {
-        return match[1]?.trim() || `Citrix Security Bulletin ${bulletinId}`;
+      // Extract CVE IDs from full page
+      const cvePattern = /CVE-\d{4}-\d{4,7}/gi;
+      const cveMatches = html.match(cvePattern) || [];
+      const cveIds = [...new Set(cveMatches.map(c => c.toUpperCase()))];
+
+      // Extract title from JSON-LD or <h1>/<h2>
+      const title = this.extractTitle(html, url.ctxId);
+
+      // Extract severity from flexDetails kbFlexMapValueList
+      const severity = this.extractSeverity(html);
+
+      // Extract published date from JSON-LD or #date_time
+      const publishedDate = this.extractDate(html);
+
+      // Extract affected products from title, body, and JSON-LD
+      const affectedProducts = this.extractProducts(html);
+
+      // Extract fixed versions from description/resolution sections
+      const fixedVersions = this.extractFixedVersions(html);
+
+      // Extract CVSS score if present in body text
+      const cvssScore = this.extractCvssScore(html);
+
+      // Skip non-security bulletins that slipped through slug filter
+      const titleLower = title.toLowerCase();
+
+      // Exclude known non-vulnerability article types
+      if (titleLower.includes("validation report") ||
+          titleLower.includes("applying security hotfixes") ||
+          titleLower.includes("how to") ||
+          titleLower.includes("mitigating")) {
+        return null;
       }
-    }
 
-    return `Citrix Security Bulletin ${bulletinId}`;
+      // Require: "Security Bulletin/Advisory" in title OR has CVEs + "security" keyword
+      const isSecurityBulletin =
+        titleLower.includes("security bulletin") ||
+        titleLower.includes("security advisory") ||
+        titleLower.includes("security update") ||
+        html.includes('"articleTypeName":"Security Bulletin"') ||
+        (cveIds.length > 0 && titleLower.includes("security")) ||
+        (cveIds.length > 0 && titleLower.includes("vulnerability"));
+
+      if (!isSecurityBulletin) return null;
+
+      return {
+        bulletinId: url.ctxId,
+        title,
+        severity,
+        cveIds,
+        affectedProducts,
+        fixedVersions,
+        publishedDate,
+        url: url.loc,
+        cvssScore,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
-   * Extract severity from context
+   * Extract title from JSON-LD or HTML headings
    */
-  private extractSeverity(context: string): CitrixVulnerability["severity"] {
-    const lower = context.toLowerCase();
+  private extractTitle(html: string, ctxId: string): string {
+    // Try JSON-LD first
+    const jsonLd = this.extractJsonLd(html);
+    if (jsonLd?.headline) return jsonLd.headline;
 
-    // Check for CVSS score first
-    const cvssMatch = context.match(/cvss[^0-9]*(\d+\.?\d*)/i);
+    // Try <h1> or <h2 class="wolken-h3">
+    const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+    if (h1Match) return h1Match[1].trim();
+
+    const h2Match = html.match(/<h2[^>]*class="wolken-h3"[^>]*>([^<]+)<\/h2>/i);
+    if (h2Match) return h2Match[1].trim();
+
+    return `Citrix Security Bulletin ${ctxId}`;
+  }
+
+  /**
+   * Extract severity from flexDetails embedded JS or body text
+   */
+  private extractSeverity(html: string): CitrixVulnerability["severity"] {
+    // flexDetails is inside JSON.parse('...') — the attributeName and lovName are
+    // separated by flexAttributeLOVList array, so use a broader pattern
+    // Look for: "attributeName":"Severity" ... "lovName":"Critical" (with LOV list in between)
+    const flexMatch = html.match(/"attributeName"\s*:\s*"Severity"[\s\S]*?"lovName"\s*:\s*"([^"]+)"/i);
+    if (flexMatch) {
+      const sev = flexMatch[1].toLowerCase();
+      if (sev.includes("critical")) return "critical";
+      if (sev.includes("high")) return "high";
+      if (sev.includes("medium") || sev.includes("moderate")) return "medium";
+      if (sev.includes("low")) return "low";
+    }
+
+    // Fallback: CVSS score in body text (e.g., "CVSSv4 8.4")
+    const cvssMatch = html.match(/CVSS[v\d.]*\s*(?:score[:\s]*)?\s*(\d+\.\d+)/i);
     if (cvssMatch) {
       const score = parseFloat(cvssMatch[1]);
       if (score >= 9.0) return "critical";
@@ -245,133 +361,236 @@ export class CitrixAdvisoryFetcher {
       return "low";
     }
 
-    // Fall back to text-based severity
-    if (lower.includes("critical")) return "critical";
-    if (lower.includes("high")) return "high";
-    if (lower.includes("medium") || lower.includes("moderate")) return "medium";
-    if (lower.includes("low")) return "low";
+    // Fallback: text patterns in body
+    const lower = html.toLowerCase();
+    if (lower.includes("severity: critical") || lower.includes("severity:critical")) return "critical";
+    if (lower.includes("severity: high") || lower.includes("severity:high")) return "high";
+    if (lower.includes("severity: medium") || lower.includes("severity:medium")) return "medium";
+    if (lower.includes("severity: low") || lower.includes("severity:low")) return "low";
 
     return "medium";
   }
 
   /**
-   * Extract affected products from context
+   * Extract published date from JSON-LD or JS var d = '...' literal
    */
-  private extractProducts(context: string): string[] {
-    const products: string[] = [];
-
-    // Check for known Citrix product names
-    const productPatterns = [
-      /NetScaler\s*(?:ADC|Gateway)?/gi,
-      /Citrix\s*(?:ADC|Gateway|Hypervisor|Workspace|Virtual\s*Apps)/gi,
-      /XenServer/gi,
-      /XenApp/gi,
-      /XenDesktop/gi,
-      /StoreFront/gi,
-      /ShareFile/gi,
-      /SD-WAN/gi,
-      /Provisioning\s*Services?/gi,
-    ];
-
-    for (const pattern of productPatterns) {
-      const matches = context.match(pattern);
-      if (matches) {
-        for (const match of matches) {
-          const normalized = match.trim();
-          if (!products.includes(normalized)) {
-            products.push(normalized);
-          }
-        }
-      }
+  private extractDate(html: string): string {
+    // Try JSON-LD first (most reliable)
+    const jsonLd = this.extractJsonLd(html);
+    if (jsonLd?.datePublished) {
+      return this.parseFlexDate(jsonLd.datePublished);
     }
 
-    return products;
+    // #date_time is empty in source HTML — date is set by JS: var d = 'MM-DD-YYYY HH:mm'
+    const jsDateMatch = html.match(/var\s+d\s*=\s*'(\d{1,2}-\d{1,2}-\d{4}[^']*)'/);
+    if (jsDateMatch) {
+      return this.parseFlexDate(jsDateMatch[1]);
+    }
+
+    // Changelog table in #additionalInfo often has ISO dates (YYYY-MM-DD)
+    const changelogMatch = html.match(/id="additionalInfo"[\s\S]*?(\d{4}-\d{2}-\d{2})/);
+    if (changelogMatch) {
+      return changelogMatch[1];
+    }
+
+    // Last resort: use a far-past sentinel so unknown dates sort to the bottom
+    return "1970-01-01";
   }
 
   /**
-   * Extract version numbers from context
+   * Parse Citrix date formats (MM-DD-YYYY, MM-DD-YYYY HH:MM) to YYYY-MM-DD
    */
-  private extractVersions(context: string): string[] {
-    const versions: string[] = [];
-
-    // Common Citrix version patterns
-    const versionPatterns = [
-      /\b(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)\b/g,
-      /version\s*(\d+\.\d+(?:\.\d+)?)/gi,
-      /build\s*(\d+\.\d+(?:\.\d+)?)/gi,
-    ];
-
-    for (const pattern of versionPatterns) {
-      const matches = context.matchAll(pattern);
-      for (const match of matches) {
-        const version = match[1];
-        // Filter out common false positives
-        if (this.isValidVersion(version) && !versions.includes(version)) {
-          versions.push(version);
-        }
-      }
+  private parseFlexDate(dateStr: string): string {
+    // MM-DD-YYYY or MM-DD-YYYY HH:MM
+    const mdyMatch = dateStr.match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (mdyMatch) {
+      const [, month, day, year] = mdyMatch;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
 
-    // Sort versions
-    versions.sort((a, b) => this.compareVersions(a, b));
-
-    return versions;
-  }
-
-  /**
-   * Check if a version string is valid
-   */
-  private isValidVersion(version: string): boolean {
-    // Filter out years, CVE numbers, etc.
-    const parts = version.split(".");
-    if (parts.length < 2) return false;
-
-    const major = parseInt(parts[0], 10);
-    // Citrix versions are typically 10-15.x or 1000+ build numbers
-    if (major >= 2020 && major <= 2030) return false; // Likely a year
-    if (major > 1000 && parts.length === 1) return false; // Likely a standalone number
-
-    return true;
-  }
-
-  /**
-   * Extract date from context
-   */
-  private extractDate(context: string): string {
-    const datePatterns = [
-      /(\d{4}-\d{2}-\d{2})/,
-      /(\d{1,2}\/\d{1,2}\/\d{4})/,
-      /((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})/i,
-      /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})/i,
-    ];
-
-    for (const pattern of datePatterns) {
-      const match = context.match(pattern);
-      if (match) {
-        try {
-          const date = new Date(match[1]);
-          if (!isNaN(date.getTime())) {
-            return date.toISOString().split("T")[0];
-          }
-        } catch {
-          // Continue to next pattern
-        }
-      }
+    // ISO format passthrough
+    if (dateStr.match(/\d{4}-\d{2}-\d{2}/)) {
+      return dateStr.split("T")[0];
     }
+
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+    } catch {}
 
     return new Date().toISOString().split("T")[0];
   }
 
   /**
-   * Extract CVSS score from context
+   * Extract affected products from JSON-LD name field and headline only.
+   * Avoids full-body regex which picks up every mention (changelog, links, etc.)
    */
-  private extractCvssScore(context: string): number | undefined {
-    const cvssMatch = context.match(/cvss[^0-9]*(\d+\.?\d*)/i);
-    if (cvssMatch) {
-      return parseFloat(cvssMatch[1]);
+  private extractProducts(html: string): string[] {
+    const products = new Set<string>();
+
+    // JSON-LD name field (array of product names) — most reliable
+    const jsonLd = this.extractJsonLd(html);
+    if (jsonLd?.name) {
+      const names = Array.isArray(jsonLd.name) ? jsonLd.name : [jsonLd.name];
+      for (const n of names) {
+        if (typeof n === "string" && n.length > 0) {
+          products.add(n);
+        }
+      }
     }
+
+    // JSON-LD keywords (e.g., ["Security Bulletin", "NetScaler"])
+    // Filter out support portal categories that aren't product names
+    const KEYWORD_BLOCKLIST = new Set([
+      "security bulletin", "security advisory", "security update",
+      "problem solution", "reference", "customer service article",
+      "how to", "known issue", "alert",
+    ]);
+    if (jsonLd?.keywords) {
+      const kws = Array.isArray(jsonLd.keywords) ? jsonLd.keywords : [];
+      for (const kw of kws) {
+        if (typeof kw === "string" && kw.length > 0 && !KEYWORD_BLOCKLIST.has(kw.toLowerCase())) {
+          products.add(kw);
+        }
+      }
+    }
+
+    // Extract from headline/title only (not full body)
+    const headline = jsonLd?.headline || "";
+    const productPatterns = [
+      /NetScaler\s*(?:ADC|Gateway|Console|Agent)?/gi,
+      /Citrix\s*(?:ADC|Gateway|Hypervisor|Workspace\s*App|Virtual\s*Apps\s*and\s*Desktops?|SD-WAN|Secure\s*Access\s*Client|Session\s*Recording)/gi,
+      /XenServer/gi,
+      /StoreFront/gi,
+      /ShareFile/gi,
+    ];
+
+    for (const pattern of productPatterns) {
+      const matches = headline.match(pattern);
+      if (matches) {
+        for (const m of matches) {
+          products.add(m.trim());
+        }
+      }
+    }
+
+    return [...products];
+  }
+
+  /**
+   * Extract fixed versions from description and introduction sections.
+   * Note: There is NO #resolution section on Citrix pages — only
+   * #description, #introduction, #environment, #additionalInfo.
+   */
+  private extractFixedVersions(html: string): string[] {
+    const versions = new Set<string>();
+
+    // Extract content from description and introduction sections
+    const sectionPattern = /id="(?:description|introduction)"[\s\S]*?<div[^>]*class="article-detail-card-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
+    let sectionMatch;
+    const sectionText: string[] = [];
+    while ((sectionMatch = sectionPattern.exec(html)) !== null) {
+      sectionText.push(sectionMatch[1]);
+    }
+
+    const text = sectionText.join("\n");
+
+    if (text.length > 0) {
+      // Look for version patterns near "fix" / "upgrade" / "later" context
+      const fixedPatterns = [
+        // "NetScaler ADC 14.1-29.72 and later" or "upgrade to 13.1-55.36"
+        /(?:upgrade\s+to|fixed\s+in|later\s+than|and\s+later|or\s+later)[^\d]{0,30}(\d+\.\d+(?:\.\d+)*(?:-\d+(?:\.\d+)*)?)(?=\s|<|$|,|;)/gi,
+        /(\d+\.\d+(?:\.\d+)*(?:-\d+(?:\.\d+)*)?)(?:\s+and\s+later|\s+or\s+later)/gi,
+        // Table cells with version numbers after a "Fixed" header row
+        /(?:fixed|remediated|patched)[^<]*<\/(?:td|th|p)>[\s\S]*?<(?:td|p)[^>]*>\s*(\d+\.\d+(?:\.\d+)*(?:-\d+(?:\.\d+)*)?)(?=\s|<)/gi,
+      ];
+
+      for (const pattern of fixedPatterns) {
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+          const v = match[1];
+          if (this.isValidVersion(v)) {
+            versions.add(v);
+          }
+        }
+      }
+    }
+
+    // Fallback: search broader body for explicit fix patterns (no greedy version scraping)
+    if (versions.size === 0) {
+      const fixedPatterns = [
+        /(?:fixed\s+in|upgrade\s+to|updated?\s+to|patched\s+in|remediated\s+in)\s+(?:version\s+)?(\d+\.\d+(?:\.\d+)*(?:-\d+(?:\.\d+)*)?)(?=\s|<|$|,)/gi,
+        /(\d+\.\d+(?:\.\d+)*(?:-\d+(?:\.\d+)*)?)(?:\s+and\s+later|\s+or\s+later)/gi,
+      ];
+
+      for (const pattern of fixedPatterns) {
+        let match;
+        while ((match = pattern.exec(html)) !== null) {
+          const v = match[1];
+          if (this.isValidVersion(v)) {
+            versions.add(v);
+          }
+        }
+      }
+    }
+
+    return [...versions].sort((a, b) => this.compareVersions(a, b));
+  }
+
+  /**
+   * Extract CVSS score from body text
+   */
+  private extractCvssScore(html: string): number | undefined {
+    // Look for CVSS score patterns
+    const patterns = [
+      /CVSS[^0-9]*?(\d+\.\d+)/i,
+      /score[^0-9]*?(\d+\.\d+)\s*(?:\/\s*10)?/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        const score = parseFloat(match[1]);
+        if (score >= 0 && score <= 10) return score;
+      }
+    }
+
     return undefined;
   }
+
+  /**
+   * Extract JSON-LD metadata from page
+   */
+  private extractJsonLd(html: string): any | null {
+    const match = html.match(/<script\s+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/i);
+    if (!match) return null;
+
+    try {
+      return JSON.parse(match[1]);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Check if a version string is valid (not a year, CVE number, etc.)
+   */
+  private isValidVersion(version: string): boolean {
+    const parts = version.split(/[.-]/);
+    if (parts.length < 2) return false;
+
+    const major = parseInt(parts[0], 10);
+    // Filter out years
+    if (major >= 2020 && major <= 2030 && parts.length <= 2) return false;
+    // Filter out very small numbers that are likely noise
+    if (major === 0 && parts.length === 2) return false;
+
+    return true;
+  }
+
+  // ===========================================================================
+  // Filtering and MSV Calculation
+  // ===========================================================================
 
   /**
    * Filter vulnerabilities by product
@@ -396,6 +615,7 @@ export class CitrixAdvisoryFetcher {
     for (const vuln of vulns) {
       for (const product of vuln.affectedProducts) {
         const productKey = this.normalizeProductName(product);
+        if (!productKey) continue; // Skip empty product names
         for (const version of vuln.fixedVersions) {
           if (!productVersions.has(productKey)) {
             productVersions.set(productKey, []);
@@ -410,42 +630,6 @@ export class CitrixAdvisoryFetcher {
       versions.sort((a, b) => this.compareVersions(a, b));
       if (versions.length > 0) {
         msv[product] = versions[versions.length - 1];
-      }
-    }
-
-    // Fallback: If no versions found from scraping, use known latest versions
-    // These are updated manually based on Citrix release cycles
-    if (Object.keys(msv).length === 0) {
-      const knownLatest: Record<string, Record<string, string>> = {
-        netscaler: {
-          "netscaler_adc_14": "14.1-29.72",
-          "netscaler_adc_13": "13.1-55.36",
-        },
-        adc: {
-          "netscaler_adc_14": "14.1-29.72",
-          "netscaler_adc_13": "13.1-55.36",
-        },
-        netscaler_gateway: {
-          "gateway_14": "14.1-29.72",
-          "gateway_13": "13.1-55.36",
-        },
-        xenserver: {
-          "xenserver_8": "8.2.3",
-        },
-        citrix_workspace: {
-          "workspace_app_2409": "24.9.0",
-        },
-        all: {
-          "netscaler_adc_14": "14.1-29.72",
-          "netscaler_adc_13": "13.1-55.36",
-          "gateway_14": "14.1-29.72",
-          "xenserver_8": "8.2.3",
-        },
-      };
-
-      const productVersionMap = knownLatest[this.product] || knownLatest.all || {};
-      for (const [key, version] of Object.entries(productVersionMap)) {
-        msv[key] = version;
       }
     }
 
@@ -465,13 +649,14 @@ export class CitrixAdvisoryFetcher {
   }
 
   /**
-   * Compare version strings
+   * Compare version strings (handles Citrix format like 14.1-29.72)
    */
   private compareVersions(a: string, b: string): number {
     if (!a || !b) return 0;
 
-    const partsA = a.split(".").map(p => parseInt(p, 10) || 0);
-    const partsB = b.split(".").map(p => parseInt(p, 10) || 0);
+    // Split on . and - to handle versions like 14.1-29.72
+    const partsA = a.split(/[.-]/).map(p => parseInt(p, 10) || 0);
+    const partsB = b.split(/[.-]/).map(p => parseInt(p, 10) || 0);
     const maxLen = Math.max(partsA.length, partsB.length);
 
     for (let i = 0; i < maxLen; i++) {
@@ -480,6 +665,29 @@ export class CitrixAdvisoryFetcher {
       if (partA !== partB) return partA - partB;
     }
     return 0;
+  }
+
+  // ===========================================================================
+  // HTTP Helpers
+  // ===========================================================================
+
+  /**
+   * Fetch a URL and return text content
+   */
+  private async fetchText(url: string): Promise<string> {
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "text/html, application/xml, text/xml",
+        "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Citrix fetch error: ${response.status} ${response.statusText} (${url})`);
+    }
+
+    return response.text();
   }
 }
 
@@ -508,9 +716,13 @@ if (import.meta.main) {
 
     if (result.vulnerabilities.length > 0) {
       console.log("\nRecent bulletins:");
-      for (const vuln of result.vulnerabilities.slice(0, 5)) {
-        console.log(`  ${vuln.bulletinId}: ${vuln.title.slice(0, 60)}...`);
+      for (const vuln of result.vulnerabilities.slice(0, 10)) {
+        console.log(`  ${vuln.bulletinId}: ${vuln.title.slice(0, 80)}${vuln.title.length > 80 ? "..." : ""}`);
         console.log(`    Severity: ${vuln.severity}, CVEs: ${vuln.cveIds.join(", ") || "N/A"}`);
+        console.log(`    Products: ${vuln.affectedProducts.join(", ") || "N/A"}`);
+        if (vuln.fixedVersions.length > 0) {
+          console.log(`    Fixed in: ${vuln.fixedVersions.join(", ")}`);
+        }
       }
     }
   } catch (error) {

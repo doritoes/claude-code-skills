@@ -61,6 +61,8 @@ interface AtlassianApiResponse {
   resources?: AtlassianApiCve[];
   // Legacy format
   data?: AtlassianApiCve[];
+  next_page_id?: string;
+  total_count?: number;
   meta?: {
     total?: number;
     page?: number;
@@ -139,24 +141,36 @@ export class AtlassianAdvisoryFetcher {
       }
     }
 
-    // Fetch fresh data - API no longer supports pagination parameters
+    // Fetch all pages — API returns 25 CVEs per page with next_page_id cursor
     const allVulns: AtlassianVulnerability[] = [];
+    const MAX_PAGES = 30; // Safety cap
+    let nextPageId: string | undefined;
+    let pageCount = 0;
 
-    const response = await fetch(ATLASSIAN_CVE_API, {
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
-      },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    do {
+      const url = nextPageId
+        ? `${ATLASSIAN_CVE_API}?page_id=${encodeURIComponent(nextPageId)}`
+        : ATLASSIAN_CVE_API;
 
-    if (!response.ok) {
-      throw new Error(`Atlassian advisory fetch error: ${response.status} ${response.statusText}`);
-    }
+      const response = await fetch(url, {
+        headers: {
+          "Accept": "application/json",
+          "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
+        },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
 
-    const rawData = await response.json() as AtlassianApiResponse;
-    const vulns = this.parseVulnerabilities(rawData);
-    allVulns.push(...vulns);
+      if (!response.ok) {
+        throw new Error(`Atlassian advisory fetch error: ${response.status} ${response.statusText}`);
+      }
+
+      const rawData = await response.json() as AtlassianApiResponse;
+      const vulns = this.parseVulnerabilities(rawData);
+      allVulns.push(...vulns);
+
+      nextPageId = rawData.next_page_id;
+      pageCount++;
+    } while (nextPageId && pageCount < MAX_PAGES);
 
     // Filter by product if specified
     const filteredVulns = this.product === "all"
