@@ -15,9 +15,11 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { CisaKevClient, type KevEntry, type KevCatalog } from "./CisaKevClient";
 import { EpssClient } from "./EpssClient";
+import { VulnCheckClient, type VulnCheckKevEntry, type VulnCheckKevCatalog } from "./VulnCheckClient";
 import type {
   IntelItem,
   KevDelta,
+  VulnCheckKevDelta,
   EpssSpike,
   IntelPriority,
   CTIUserProfile,
@@ -62,13 +64,22 @@ export class IntelligenceAggregator {
   private dataDir: string;
   private kevClient: CisaKevClient;
   private epssClient: EpssClient;
+  private vulnCheckClient: VulnCheckClient | null = null;
   private softwareCatalog: SoftwareCatalog | null = null;
   private industryMappings: IndustryMappingsCatalog | null = null;
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, vulnCheckApiKey?: string) {
     this.dataDir = dataDir;
     this.kevClient = new CisaKevClient(dataDir);
     this.epssClient = new EpssClient(dataDir);
+
+    if (vulnCheckApiKey) {
+      const cacheDir = resolve(dataDir, "cache");
+      this.vulnCheckClient = new VulnCheckClient(
+        { apiKey: vulnCheckApiKey, timeout: 60000 },
+        cacheDir
+      );
+    }
 
     // Ensure data directory exists
     if (!existsSync(dataDir)) {
@@ -372,6 +383,83 @@ export class IntelligenceAggregator {
   }
 
   // ===========================================================================
+  // VulnCheck KEV Integration
+  // ===========================================================================
+
+  /**
+   * Get VulnCheck KEV delta — entries NOT in CISA KEV (early warning)
+   * Returns null if VulnCheck API key is not configured.
+   */
+  async getVulnCheckKevDelta(periodDays: number): Promise<VulnCheckKevDelta | null> {
+    if (!this.vulnCheckClient) return null;
+
+    try {
+      const [vcCatalog, cisaCatalog] = await Promise.all([
+        this.vulnCheckClient.fetchKevCatalog(),
+        this.kevClient.fetchCatalog(),
+      ]);
+
+      // Build CISA CVE set for fast lookup
+      const cisaCveSet = new Set(cisaCatalog.vulnerabilities.map((v) => v.cveID));
+
+      // All VulnCheck-only entries (all time)
+      const allVcOnly = vcCatalog.entries.filter((entry) => {
+        const cves = Array.isArray(entry.cve) ? entry.cve : [entry.cve];
+        return cves.every((cve) => !cisaCveSet.has(cve));
+      });
+
+      // VulnCheck-only entries added this period
+      const periodStart = new Date();
+      periodStart.setDate(periodStart.getDate() - periodDays);
+      const periodStartStr = periodStart.toISOString().split("T")[0];
+
+      const recentVcOnly = allVcOnly.filter((entry) => {
+        const dateAdded = entry.date_added?.split("T")[0] || "";
+        return dateAdded >= periodStartStr;
+      });
+
+      // Convert to IntelItems
+      const vulncheckOnlyEntries = recentVcOnly
+        .map((entry) => this.vcKevEntryToIntelItem(entry))
+        .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
+
+      return {
+        vulncheckOnlyEntries,
+        totalVulnCheckKev: vcCatalog.count,
+        totalCisaKev: cisaCatalog.count,
+        totalVulnCheckOnly: allVcOnly.length,
+      };
+    } catch (error) {
+      // Log but don't fail the report if VulnCheck is unavailable
+      console.error(`\x1b[33mVulnCheck KEV fetch failed: ${(error as Error).message}\x1b[0m`);
+      return null;
+    }
+  }
+
+  /**
+   * Convert VulnCheck KEV entry to IntelItem
+   */
+  private vcKevEntryToIntelItem(entry: VulnCheckKevEntry): IntelItem {
+    const cves = Array.isArray(entry.cve) ? entry.cve : [entry.cve];
+    const primaryCve = cves[0] || "UNKNOWN";
+    const hasExploitDb = entry.vulncheck_xdb && entry.vulncheck_xdb.length > 0;
+    const hasExploitEvidence = entry.vulncheck_reported_exploitation && entry.vulncheck_reported_exploitation.length > 0;
+
+    return {
+      id: primaryCve,
+      title: entry.vulnerabilityName || entry.description || `${entry.vendorProject || entry.vendor} ${entry.product} Vulnerability`,
+      description: entry.shortDescription || entry.description || "",
+      priority: entry.knownRansomwareCampaignUse === "Known" ? "CRITICAL" : "HIGH",
+      dateAdded: entry.date_added?.split("T")[0] || "",
+      affectedProducts: [entry.product],
+      source: "VULNCHECK",
+      exploitationStatus: hasExploitEvidence ? "ACTIVE" : hasExploitDb ? "POC_AVAILABLE" : "ACTIVE",
+      ransomwareAssociated: entry.knownRansomwareCampaignUse === "Known",
+      remediation: entry.required_action,
+    };
+  }
+
+  // ===========================================================================
   // Critical Zero-Days
   // ===========================================================================
 
@@ -443,6 +531,25 @@ export class IntelligenceAggregator {
           timestamp,
           isCurrent: age < staleThresholdHours,
         });
+      }
+    }
+
+    // VulnCheck KEV cache
+    const vcKevCachePath = resolve(this.dataDir, "cache", "vulncheck-kev-catalog.json");
+    if (existsSync(vcKevCachePath)) {
+      try {
+        const cache = JSON.parse(readFileSync(vcKevCachePath, "utf-8"));
+        const timestamp = cache.lastUpdated;
+        if (timestamp) {
+          const age = (now.getTime() - new Date(timestamp).getTime()) / (1000 * 60 * 60);
+          validations.push({
+            source: "VulnCheck KEV",
+            timestamp,
+            isCurrent: age < staleThresholdHours,
+          });
+        }
+      } catch {
+        // Cache corrupted
       }
     }
 

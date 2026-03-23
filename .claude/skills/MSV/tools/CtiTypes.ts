@@ -110,6 +110,20 @@ export interface KevDelta {
 }
 
 /**
+ * VulnCheck KEV entries not yet in CISA KEV (early warning)
+ */
+export interface VulnCheckKevDelta {
+  /** Entries in VulnCheck KEV but NOT in CISA KEV, added this period */
+  vulncheckOnlyEntries: IntelItem[];
+  /** Total VulnCheck KEV count */
+  totalVulnCheckKev: number;
+  /** Total CISA KEV count (for comparison) */
+  totalCisaKev: number;
+  /** Number of VulnCheck-only entries (all time, not just this period) */
+  totalVulnCheckOnly: number;
+}
+
+/**
  * EPSS spike detection
  */
 export interface EpssSpike {
@@ -203,6 +217,7 @@ export interface CTIReport {
 
   // Section 2: Exploitation Trends
   kevDelta: KevDelta;
+  vulnCheckKevDelta?: VulnCheckKevDelta;
   epssSpikes: EpssSpike[];
   ransomwareCampaigns: IntelItem[];
 

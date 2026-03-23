@@ -3682,6 +3682,7 @@ interface CtiOptions {
   region?: string;
   output?: string;
   forceRefresh?: boolean;
+  vulncheckApiKey?: string;
 }
 
 /**
@@ -3692,7 +3693,7 @@ async function cmdCti(
   options: CtiOptions
 ): Promise<void> {
   const config = getConfig();
-  const generator = new CtiReportGenerator(config.dataDir);
+  const generator = new CtiReportGenerator(config.dataDir, options.vulncheckApiKey);
 
   switch (subcommand) {
     case "report": {
@@ -4067,6 +4068,7 @@ async function main(): Promise<void> {
           region: ctiRegion,
           output: ctiOutput,
           forceRefresh: options.forceRefresh,
+          vulncheckApiKey: config.vulncheckApiKey,
         });
         break;
 

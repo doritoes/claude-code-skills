@@ -17,6 +17,7 @@ import type {
   IntelItem,
   EpssSpike,
   InventoryStatus,
+  VulnCheckKevDelta,
   CTIOutputFormat,
 } from "./CtiTypes";
 
@@ -227,6 +228,46 @@ function formatText(report: CTIReport): string {
   lines.push("");
 
   // ─────────────────────────────────────────────────────────────────
+  // Section 2b: VulnCheck Early Warning (entries not yet in CISA KEV)
+  // ─────────────────────────────────────────────────────────────────
+  if (report.vulnCheckKevDelta) {
+    const vc = report.vulnCheckKevDelta;
+    lines.push(`${BOLD}${MAGENTA}▌ VULNCHECK EARLY WARNING${RESET}`);
+    lines.push(`${DIM}${"─".repeat(50)}${RESET}`);
+    lines.push(
+      `${DIM}VulnCheck KEV tracks ${BOLD}${vc.totalVulnCheckKev}${RESET}${DIM} exploited vulns ` +
+        `(${BOLD}${vc.totalVulnCheckOnly}${RESET}${DIM} not yet in CISA's ${vc.totalCisaKev})${RESET}`
+    );
+    lines.push("");
+
+    if (vc.vulncheckOnlyEntries.length === 0) {
+      lines.push(`${GREEN}No new VulnCheck-only entries this period.${RESET}`);
+    } else {
+      lines.push(
+        `${MAGENTA}${BOLD}${vc.vulncheckOnlyEntries.length}${RESET} new this period ` +
+          `${DIM}(not in CISA KEV):${RESET}`
+      );
+      for (const entry of vc.vulncheckOnlyEntries.slice(0, 10)) {
+        const vendor = entry.affectedProducts[0] || "Unknown";
+        const ransomTag = entry.ransomwareAssociated ? ` ${RED}[RANSOMWARE]${RESET}` : "";
+        const exploitTag = entry.exploitationStatus === "POC_AVAILABLE"
+          ? ` ${YELLOW}[PoC]${RESET}`
+          : "";
+        lines.push(
+          `  ${MAGENTA}VC${RESET}   ${BOLD}${entry.id}${RESET} ${vendor}${ransomTag}${exploitTag}`
+        );
+        lines.push(
+          `       ${DIM}${truncateText(entry.title, 56)}${RESET}`
+        );
+      }
+      if (vc.vulncheckOnlyEntries.length > 10) {
+        lines.push(`${DIM}  ... and ${vc.vulncheckOnlyEntries.length - 10} more${RESET}`);
+      }
+    }
+    lines.push("");
+  }
+
+  // ─────────────────────────────────────────────────────────────────
   // Section 3: Software Inventory (if customized)
   // ─────────────────────────────────────────────────────────────────
   if (report.inventoryStatus && report.inventoryStatus.length > 0) {
@@ -388,6 +429,36 @@ function formatMarkdown(report: CTIReport): string {
     lines.push(`**Ransomware-Linked CVEs:** ${report.ransomwareCampaigns.length}`);
   }
   lines.push("");
+
+  // VulnCheck Early Warning
+  if (report.vulnCheckKevDelta) {
+    const vc = report.vulnCheckKevDelta;
+    lines.push("## VulnCheck Early Warning");
+    lines.push("");
+    lines.push(`VulnCheck KEV tracks **${vc.totalVulnCheckKev}** exploited vulnerabilities (**${vc.totalVulnCheckOnly}** not yet in CISA's ${vc.totalCisaKev}).`);
+    lines.push("");
+
+    if (vc.vulncheckOnlyEntries.length > 0) {
+      lines.push(`**${vc.vulncheckOnlyEntries.length} new this period** (not in CISA KEV):`);
+      lines.push("");
+      lines.push("| CVE | Product | Description | Ransomware | Exploit |");
+      lines.push("|-----|---------|-------------|------------|---------|");
+      for (const entry of vc.vulncheckOnlyEntries.slice(0, 15)) {
+        const product = entry.affectedProducts[0] || "-";
+        const desc = entry.title.length > 45 ? entry.title.slice(0, 42) + "..." : entry.title;
+        const ransomware = entry.ransomwareAssociated ? "Yes" : "No";
+        const exploit = entry.exploitationStatus === "POC_AVAILABLE" ? "PoC" : "Active";
+        lines.push(`| ${entry.id} | ${product} | ${desc} | ${ransomware} | ${exploit} |`);
+      }
+      if (vc.vulncheckOnlyEntries.length > 15) {
+        lines.push("");
+        lines.push(`_... and ${vc.vulncheckOnlyEntries.length - 15} more_`);
+      }
+    } else {
+      lines.push("_No new VulnCheck-only entries this period._");
+    }
+    lines.push("");
+  }
 
   // Software Inventory (if provided)
   if (report.inventoryStatus && report.inventoryStatus.length > 0) {
