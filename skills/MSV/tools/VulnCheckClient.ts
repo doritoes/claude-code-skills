@@ -76,12 +76,27 @@ interface VulnCheckApiCve {
 }
 
 export interface VulnCheckKevEntry {
-  cve: string;
+  cve: string | string[];
   date_added: string;
   due_date?: string;
+  dueDate?: string;
   vendor: string;
+  vendorProject?: string;
   product: string;
   description: string;
+  vulnerabilityName?: string;
+  shortDescription?: string;
+  required_action?: string;
+  knownRansomwareCampaignUse?: string;
+  cisa_date_added?: string;
+  vulncheck_xdb?: { xdb_id: string; url?: string; exploit_type?: string }[];
+  vulncheck_reported_exploitation?: { url?: string; date_added?: string }[];
+}
+
+export interface VulnCheckKevCatalog {
+  entries: VulnCheckKevEntry[];
+  count: number;
+  lastUpdated: string;
 }
 
 export interface ExploitData {
@@ -320,6 +335,111 @@ export class VulnCheckClient {
     _product: string
   ): Promise<VulnCheckCve[]> {
     return [];
+  }
+
+  /**
+   * Fetch recent VulnCheck KEV entries via index endpoint with date filtering.
+   * Uses date range to avoid paginating the full 4,600+ entry catalog.
+   * Caches for 4 hours.
+   */
+  async fetchKevCatalog(forceRefresh?: boolean): Promise<VulnCheckKevCatalog> {
+    const cachePath = resolve(this.cacheDir, "vulncheck-kev-catalog.json");
+    const CATALOG_CACHE_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+    // Check cache
+    if (!forceRefresh && existsSync(cachePath)) {
+      try {
+        const cached: CacheFile<{ entries: VulnCheckKevEntry[]; totalDocuments: number }> = JSON.parse(
+          readFileSync(cachePath, "utf-8")
+        );
+        if (new Date(cached.expiresAt) > new Date()) {
+          return {
+            entries: cached.data.entries,
+            count: cached.data.totalDocuments,
+            lastUpdated: cached.lastUpdated,
+          };
+        }
+      } catch {
+        // Cache corrupted, re-fetch
+      }
+    }
+
+    // Fetch recent entries (last 45 days) via index endpoint with date filter
+    // This covers weekly/monthly report periods with margin
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 45);
+    const startDateStr = startDate.toISOString().split("T")[0];
+
+    const allEntries: VulnCheckKevEntry[] = [];
+    let totalDocuments = 0;
+    let cursor: string | undefined = undefined;
+    const PAGE_LIMIT = 300;
+
+    // Paginate through results (max 6 pages per cursor session)
+    for (let page = 0; page < 6; page++) {
+      const params = new URLSearchParams({
+        limit: String(PAGE_LIMIT),
+        sort: "date_added",
+        order: "desc",
+        lastModStartDate: startDateStr,
+      });
+      if (cursor) {
+        params.set("cursor", cursor);
+      } else if (page === 0) {
+        params.set("start_cursor", "true");
+      }
+
+      const url = `${BASE_URL}/index/vulncheck-kev?${params.toString()}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `VulnCheck KEV index error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`
+        );
+      }
+
+      const result = await response.json() as {
+        _meta: { total_documents: number; next_cursor?: string; total_pages: number; page: number };
+        data: VulnCheckKevEntry[];
+      };
+
+      if (page === 0) {
+        totalDocuments = result._meta.total_documents;
+      }
+
+      if (result.data && result.data.length > 0) {
+        allEntries.push(...result.data);
+      }
+
+      // Check if more pages
+      if (!result._meta.next_cursor || result.data.length < PAGE_LIMIT) {
+        break;
+      }
+      cursor = result._meta.next_cursor;
+    }
+
+    // Cache the result
+    const cacheData: CacheFile<{ entries: VulnCheckKevEntry[]; totalDocuments: number }> = {
+      version: 1,
+      lastUpdated: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + CATALOG_CACHE_MS).toISOString(),
+      source: `${BASE_URL}/index/vulncheck-kev`,
+      data: { entries: allEntries, totalDocuments },
+    };
+    writeFileSync(cachePath, JSON.stringify(cacheData));
+
+    return {
+      entries: allEntries,
+      count: totalDocuments,
+      lastUpdated: cacheData.lastUpdated,
+    };
   }
 
   /**

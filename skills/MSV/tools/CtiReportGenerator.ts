@@ -25,6 +25,7 @@ import type {
   ReportFooter,
   IntelItem,
   ReportPeriod,
+  VulnCheckKevDelta,
 } from "./CtiTypes";
 
 // =============================================================================
@@ -41,9 +42,9 @@ export class CtiReportGenerator {
   private dataDir: string;
   private aggregator: IntelligenceAggregator;
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, vulnCheckApiKey?: string) {
     this.dataDir = dataDir;
-    this.aggregator = new IntelligenceAggregator(dataDir);
+    this.aggregator = new IntelligenceAggregator(dataDir, vulnCheckApiKey);
   }
 
   /**
@@ -58,9 +59,10 @@ export class CtiReportGenerator {
     periodStart.setDate(periodStart.getDate() - periodDays);
 
     // Gather intelligence data
-    const [kevDelta, criticalZeroDays, ransomwareCampaigns, epssSpikes, dataValidation] =
+    const [kevDelta, vulnCheckKevDelta, criticalZeroDays, ransomwareCampaigns, epssSpikes, dataValidation] =
       await Promise.all([
         this.aggregator.getKevDelta(periodDays),
+        this.aggregator.getVulnCheckKevDelta(periodDays),
         this.aggregator.getCriticalZeroDays(periodDays),
         this.aggregator.getRansomwareCampaigns(periodDays),
         this.aggregator.detectEpssSpikes(0.1, 7),
@@ -94,7 +96,8 @@ export class CtiReportGenerator {
       ransomwareCampaigns,
       epssSpikes,
       inventoryStatus,
-      profile
+      profile,
+      vulnCheckKevDelta
     );
 
     // Generate footer
@@ -118,6 +121,7 @@ export class CtiReportGenerator {
 
       criticalZeroDays,
       kevDelta,
+      vulnCheckKevDelta: vulnCheckKevDelta || undefined,
       epssSpikes,
       ransomwareCampaigns,
 
@@ -227,7 +231,8 @@ export class CtiReportGenerator {
     ransomwareCampaigns: IntelItem[],
     epssSpikes: { cve: string; changePercent: number }[],
     inventoryStatus?: { compliant: boolean; software: string }[],
-    profile?: CTIUserProfile
+    profile?: CTIUserProfile,
+    vulnCheckKevDelta?: VulnCheckKevDelta | null
   ): BLUFSection {
     const actionItems: string[] = [];
     const summaryParts: string[] = [];
@@ -236,6 +241,13 @@ export class CtiReportGenerator {
     if (kevDelta.newEntries.length > 0) {
       summaryParts.push(
         `${kevDelta.newEntries.length} new vulnerabilities added to CISA KEV catalog`
+      );
+    }
+
+    // VulnCheck early warning
+    if (vulnCheckKevDelta && vulnCheckKevDelta.vulncheckOnlyEntries.length > 0) {
+      summaryParts.push(
+        `${vulnCheckKevDelta.vulncheckOnlyEntries.length} additional exploited vulnerabilities tracked by VulnCheck (not yet in CISA KEV)`
       );
     }
 
