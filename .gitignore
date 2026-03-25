@@ -21,3 +21,6 @@ tfplan
 custom_passwords.txt
 custom_passwords.meta.json
 
+# ExpandedPasswordList (private, not published)
+.claude/skills/ExpandedPasswordList/
+
