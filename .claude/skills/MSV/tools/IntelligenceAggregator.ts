@@ -468,31 +468,49 @@ export class IntelligenceAggregator {
    * Defined as: KEV entries with active exploitation + high EPSS
    */
   async getCriticalZeroDays(periodDays: number): Promise<IntelItem[]> {
-    const kevDelta = await this.getKevDelta(periodDays);
+    const [kevDelta, vcKevDelta] = await Promise.all([
+      this.getKevDelta(periodDays),
+      this.getVulnCheckKevDelta(periodDays),
+    ]);
 
-    // Get EPSS scores for new KEV entries (limit to 30 for EPSS batch limit)
-    const cves = kevDelta.newEntries.slice(0, 30).map((e) => e.id);
+    // Merge CISA KEV entries + VulnCheck-only entries (deduplicated by CVE ID)
+    const seenIds = new Set<string>();
+    const mergedEntries: IntelItem[] = [];
+    for (const e of kevDelta.newEntries) {
+      if (!seenIds.has(e.id)) { seenIds.add(e.id); mergedEntries.push(e); }
+    }
+    if (vcKevDelta) {
+      for (const e of vcKevDelta.vulncheckOnlyEntries) {
+        if (!seenIds.has(e.id)) { seenIds.add(e.id); mergedEntries.push(e); }
+      }
+    }
+
+    // Get EPSS scores for merged entries (limit to 30 for EPSS batch limit)
+    const cves = mergedEntries.slice(0, 30).map((e) => e.id);
     const epssScores = cves.length > 0 ? await this.epssClient.getScores(cves) : [];
     const epssMap = new Map(epssScores.map((s) => [s.cve, s.epss]));
 
     const currentYear = new Date().getFullYear();
 
     // Enrich with EPSS scores, CVE year, and zero-day classification
-    const enriched = kevDelta.newEntries.map((item) => {
+    const enriched = mergedEntries.map((item) => {
       // Extract year from CVE ID (e.g., CVE-2026-12345 -> 2026)
       const yearMatch = item.id.match(/^CVE-(\d{4})-/);
       const cveYear = yearMatch ? parseInt(yearMatch[1]) : undefined;
 
       // Zero-day classification:
       // 1. No patch available (remediation suggests mitigations, not patching)
+      //    OR source is VulnCheck with active exploitation (not yet in CISA KEV = early warning)
       // 2. Recently published CVE (within ~1 year of current date)
       const remediation = (item.remediation || "").toLowerCase();
       const hasNoPatch = remediation.includes("mitigat") ||
                          remediation.includes("discontinue") ||
                          remediation.includes("no patch") ||
-                         remediation.includes("workaround");
+                         remediation.includes("workaround") ||
+                         remediation === ""; // VulnCheck entries may have no required_action
+      const isVulnCheckOnly = item.source === "VULNCHECK";
       const isRecentCve = cveYear !== undefined && (currentYear - cveYear) <= 1;
-      const isZeroDay = hasNoPatch && isRecentCve;
+      const isZeroDay = (hasNoPatch || isVulnCheckOnly) && isRecentCve;
 
       return {
         ...item,

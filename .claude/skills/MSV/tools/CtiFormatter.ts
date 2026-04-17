@@ -167,6 +167,7 @@ function formatText(report: CTIReport): string {
       lines.push(`${RED}${BOLD}  ZERO-DAY (no patch available)${RESET}`);
       for (const zd of zeroDays) {
         const tags: string[] = [];
+        if (zd.source === "VULNCHECK") tags.push(`${YELLOW}VULNCHECK EARLY-WARNING${RESET}`);
         if (zd.ransomwareAssociated) tags.push(`${RED}RANSOMWARE${RESET}`);
         if (zd.epssScore && zd.epssScore > 0.5) {
           tags.push(`${YELLOW}EPSS:${(zd.epssScore * 100).toFixed(1)}%${RESET}`);
