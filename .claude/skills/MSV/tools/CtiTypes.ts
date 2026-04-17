@@ -96,6 +96,10 @@ export interface IntelItem {
   cvssScore?: number;
   /** Remediation guidance */
   remediation?: string;
+  /** True zero-day: no patch available AND recently published CVE */
+  isZeroDay?: boolean;
+  /** Year extracted from CVE ID (e.g., 2026 from CVE-2026-12345) */
+  cveYear?: number;
 }
 
 /**

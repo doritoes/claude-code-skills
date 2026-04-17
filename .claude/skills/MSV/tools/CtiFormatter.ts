@@ -150,25 +150,58 @@ function formatText(report: CTIReport): string {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // Section 1: Critical Zero-Days
+  // Section 1: Active Exploitation — Priority Threats
+  // Split into true zero-days vs newly-tracked KEV entries
   // ─────────────────────────────────────────────────────────────────
-  lines.push(`${BOLD}${CYAN}▌ CRITICAL ZERO-DAYS${RESET}`);
+  lines.push(`${BOLD}${CYAN}▌ ACTIVE EXPLOITATION — Priority Threats${RESET}`);
   lines.push(`${DIM}${"─".repeat(50)}${RESET}`);
 
   if (report.criticalZeroDays.length === 0) {
-    lines.push(`${GREEN}No critical zero-days identified in this period.${RESET}`);
+    lines.push(`${GREEN}No priority threats identified in this period.${RESET}`);
   } else {
-    for (const zeroDay of report.criticalZeroDays) {
-      const priorityColor = zeroDay.priority === "CRITICAL" ? RED : YELLOW;
-      const tags: string[] = [];
-      if (zeroDay.ransomwareAssociated) tags.push(`${RED}RANSOMWARE${RESET}`);
-      if (zeroDay.epssScore && zeroDay.epssScore > 0.5) {
-        tags.push(`${YELLOW}EPSS:${(zeroDay.epssScore * 100).toFixed(1)}%${RESET}`);
+    const zeroDays = report.criticalZeroDays.filter((item) => item.isZeroDay);
+    const otherThreats = report.criticalZeroDays.filter((item) => !item.isZeroDay);
+
+    // True zero-days first (no patch, recent CVE)
+    if (zeroDays.length > 0) {
+      lines.push(`${RED}${BOLD}  ZERO-DAY (no patch available)${RESET}`);
+      for (const zd of zeroDays) {
+        const tags: string[] = [];
+        if (zd.ransomwareAssociated) tags.push(`${RED}RANSOMWARE${RESET}`);
+        if (zd.epssScore && zd.epssScore > 0.5) {
+          tags.push(`${YELLOW}EPSS:${(zd.epssScore * 100).toFixed(1)}%${RESET}`);
+        }
+        const tagStr = tags.length > 0 ? ` [${tags.join(", ")}]` : "";
+        lines.push(
+          `${RED}●${RESET} ${BOLD}${zd.id}${RESET} - ${zd.title}${tagStr}`
+        );
       }
-      const tagStr = tags.length > 0 ? ` [${tags.join(", ")}]` : "";
-      lines.push(
-        `${priorityColor}●${RESET} ${BOLD}${zeroDay.id}${RESET} - ${zeroDay.title}${tagStr}`
-      );
+      lines.push("");
+    }
+
+    // Other active exploitation (patched but actively exploited, newly added to KEV)
+    if (otherThreats.length > 0) {
+      lines.push(`${YELLOW}${BOLD}  ACTIVELY EXPLOITED (patch available)${RESET}`);
+      for (const item of otherThreats) {
+        const priorityColor = item.priority === "CRITICAL" ? RED : YELLOW;
+        const tags: string[] = [];
+        if (item.ransomwareAssociated) tags.push(`${RED}RANSOMWARE${RESET}`);
+        if (item.epssScore && item.epssScore > 0.5) {
+          tags.push(`${YELLOW}EPSS:${(item.epssScore * 100).toFixed(1)}%${RESET}`);
+        }
+        // Show CVE age for context
+        if (item.cveYear) {
+          const currentYear = new Date().getFullYear();
+          const age = currentYear - item.cveYear;
+          if (age > 2) {
+            tags.push(`${DIM}CVE:${item.cveYear}${RESET}`);
+          }
+        }
+        const tagStr = tags.length > 0 ? ` [${tags.join(", ")}]` : "";
+        lines.push(
+          `${priorityColor}●${RESET} ${BOLD}${item.id}${RESET} - ${item.title}${tagStr}`
+        );
+      }
     }
   }
   lines.push("");
@@ -369,20 +402,43 @@ function formatMarkdown(report: CTIReport): string {
     lines.push("");
   }
 
-  // Critical Zero-Days
-  lines.push("## Critical Zero-Days");
+  // Active Exploitation — Priority Threats
+  lines.push("## Active Exploitation — Priority Threats");
   lines.push("");
   if (report.criticalZeroDays.length === 0) {
-    lines.push("_No critical zero-days identified in this period._");
+    lines.push("_No priority threats identified in this period._");
   } else {
-    lines.push("| CVE | Title | Priority | Ransomware | EPSS |");
-    lines.push("|-----|-------|----------|------------|------|");
-    for (const zd of report.criticalZeroDays.slice(0, 10)) {
-      const epss = zd.epssScore ? `${(zd.epssScore * 100).toFixed(1)}%` : "-";
-      const ransomware = zd.ransomwareAssociated ? "Yes" : "No";
-      lines.push(
-        `| ${zd.id} | ${zd.title.slice(0, 40)} | ${zd.priority} | ${ransomware} | ${epss} |`
-      );
+    const zeroDays = report.criticalZeroDays.filter((item) => item.isZeroDay);
+    const otherThreats = report.criticalZeroDays.filter((item) => !item.isZeroDay);
+
+    if (zeroDays.length > 0) {
+      lines.push("### Zero-Day (no patch available)");
+      lines.push("");
+      lines.push("| CVE | Title | Priority | Ransomware | EPSS |");
+      lines.push("|-----|-------|----------|------------|------|");
+      for (const zd of zeroDays) {
+        const epss = zd.epssScore ? `${(zd.epssScore * 100).toFixed(1)}%` : "-";
+        const ransomware = zd.ransomwareAssociated ? "Yes" : "No";
+        lines.push(
+          `| ${zd.id} | ${zd.title.slice(0, 40)} | ${zd.priority} | ${ransomware} | ${epss} |`
+        );
+      }
+      lines.push("");
+    }
+
+    if (otherThreats.length > 0) {
+      lines.push("### Actively Exploited (patch available)");
+      lines.push("");
+      lines.push("| CVE | Title | Priority | CVE Year | Ransomware | EPSS |");
+      lines.push("|-----|-------|----------|----------|------------|------|");
+      for (const item of otherThreats.slice(0, 10)) {
+        const epss = item.epssScore ? `${(item.epssScore * 100).toFixed(1)}%` : "-";
+        const ransomware = item.ransomwareAssociated ? "Yes" : "No";
+        const year = item.cveYear ? String(item.cveYear) : "-";
+        lines.push(
+          `| ${item.id} | ${item.title.slice(0, 40)} | ${item.priority} | ${year} | ${ransomware} | ${epss} |`
+        );
+      }
     }
   }
   lines.push("");

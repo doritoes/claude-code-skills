@@ -475,17 +475,42 @@ export class IntelligenceAggregator {
     const epssScores = cves.length > 0 ? await this.epssClient.getScores(cves) : [];
     const epssMap = new Map(epssScores.map((s) => [s.cve, s.epss]));
 
-    // Enrich with EPSS scores
-    const enriched = kevDelta.newEntries.map((item) => ({
-      ...item,
-      epssScore: epssMap.get(item.id),
-      priority: this.calculatePriority(item, epssMap.get(item.id)),
-    }));
+    const currentYear = new Date().getFullYear();
 
-    // Filter to critical priority and sort
+    // Enrich with EPSS scores, CVE year, and zero-day classification
+    const enriched = kevDelta.newEntries.map((item) => {
+      // Extract year from CVE ID (e.g., CVE-2026-12345 -> 2026)
+      const yearMatch = item.id.match(/^CVE-(\d{4})-/);
+      const cveYear = yearMatch ? parseInt(yearMatch[1]) : undefined;
+
+      // Zero-day classification:
+      // 1. No patch available (remediation suggests mitigations, not patching)
+      // 2. Recently published CVE (within ~1 year of current date)
+      const remediation = (item.remediation || "").toLowerCase();
+      const hasNoPatch = remediation.includes("mitigat") ||
+                         remediation.includes("discontinue") ||
+                         remediation.includes("no patch") ||
+                         remediation.includes("workaround");
+      const isRecentCve = cveYear !== undefined && (currentYear - cveYear) <= 1;
+      const isZeroDay = hasNoPatch && isRecentCve;
+
+      return {
+        ...item,
+        epssScore: epssMap.get(item.id),
+        priority: this.calculatePriority(item, epssMap.get(item.id)),
+        isZeroDay,
+        cveYear,
+      };
+    });
+
+    // Filter to critical priority and sort: zero-days first, then by priority
     return enriched
       .filter((item) => item.priority === "CRITICAL" || item.priority === "HIGH")
       .sort((a, b) => {
+        // Zero-days always first
+        if (a.isZeroDay && !b.isZeroDay) return -1;
+        if (!a.isZeroDay && b.isZeroDay) return 1;
+        // Then by priority
         const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
         return priorityOrder[a.priority] - priorityOrder[b.priority];
       });

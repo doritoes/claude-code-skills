@@ -251,35 +251,33 @@ export class CtiReportGenerator {
       );
     }
 
-    // Critical zero-days
+    // Active exploitation — use isZeroDay classification from aggregator
     if (criticalZeroDays.length > 0) {
-      const critical = criticalZeroDays.filter((z) => z.priority === "CRITICAL");
-      if (critical.length > 0) {
-        summaryParts.push(`${critical.length} critical zero-days with active exploitation`);
-        // Format action items with product context
-        for (const item of critical.slice(0, 3)) {
+      const trueZeroDays = criticalZeroDays.filter((z) => z.isZeroDay);
+      const activelyExploited = criticalZeroDays.filter((z) => !z.isZeroDay && z.priority === "CRITICAL");
+
+      if (trueZeroDays.length > 0) {
+        summaryParts.push(`${trueZeroDays.length} zero-day${trueZeroDays.length > 1 ? "s" : ""} with no patch available`);
+        for (const item of trueZeroDays.slice(0, 3)) {
           const products = item.affectedProducts.length > 0
             ? item.affectedProducts.slice(0, 2).join(", ")
             : "affected systems";
-          // Determine if this is a zero-day (no patch) vs patchable
-          const remediation = item.remediation?.toLowerCase() || "";
-          const isZeroDay = remediation.includes("mitigat") ||
-                           remediation.includes("discontinue") ||
-                           remediation.includes("no patch") ||
-                           remediation.includes("workaround");
+          const remediationText = item.remediation || "Apply vendor mitigations or disable service";
+          actionItems.push(
+            `IMMEDIATE: ZERO-DAY - ${products} - ${item.id}: ${remediationText}`
+          );
+        }
+      }
 
-          if (isZeroDay) {
-            // Zero-day: recommend mitigation, include full guidance
-            const remediationText = item.remediation || "Apply vendor mitigations or disable service";
-            actionItems.push(
-              `IMMEDIATE: ZERO-DAY - ${products} - ${item.id}: ${remediationText}`
-            );
-          } else {
-            // Patchable: recommend patching
-            actionItems.push(
-              `IMMEDIATE: Patch ${products} - ${item.id} (${item.title})`
-            );
-          }
+      if (activelyExploited.length > 0) {
+        summaryParts.push(`${activelyExploited.length} critical actively exploited vulnerabilities (patch available)`);
+        for (const item of activelyExploited.slice(0, 3)) {
+          const products = item.affectedProducts.length > 0
+            ? item.affectedProducts.slice(0, 2).join(", ")
+            : "affected systems";
+          actionItems.push(
+            `IMMEDIATE: Patch ${products} - ${item.id} (${item.title})`
+          );
         }
       }
     }
