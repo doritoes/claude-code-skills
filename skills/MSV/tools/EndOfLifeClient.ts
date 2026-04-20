@@ -222,7 +222,7 @@ export class EndOfLifeClient {
 
       if (!response.ok) {
         if (response.status === 404) {
-          this.logger.warn(`Product not found on endoflife.date: ${eolProductName}`);
+          this.logger.debug(`Product not found on endoflife.date: ${eolProductName}`);
           return null;
         }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

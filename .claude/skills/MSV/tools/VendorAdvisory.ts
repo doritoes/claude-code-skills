@@ -369,8 +369,13 @@ export class ChromeAdvisoryFetcher extends VendorAdvisoryFetcher {
 // =============================================================================
 
 export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
+  // Trust Center moved to a Next.js/Builder.io stack in early 2026 — __NEXT_DATA__
+  // is no longer emitted. The vendor-published RSS feed is the only stable machine-
+  // readable source; per-CVE pages still render affected/fixed versions in plain HTML.
+  private readonly rssUrl = "https://www.solarwinds.com/shared-content/rss-feed/solarwinds-cve-rss-feed.xml";
   private readonly trustCenterUrl = "https://www.solarwinds.com/trust-center/security-advisories";
   private readonly product: string;
+  private static readonly MAX_CONCURRENT_PAGE_FETCHES = 5;
 
   // SolarWinds product name patterns for matching headlines and fixedVersion text
   private static readonly PRODUCT_PATTERNS: Record<string, string[]> = {
@@ -404,105 +409,153 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
 
-    // Fetch the Trust Center page — it embeds __NEXT_DATA__ with structured advisory data
-    const response = await fetch(this.trustCenterUrl, {
+    // Phase 1: pull the vendor RSS feed for a complete CVE list
+    const rssResponse = await fetch(this.rssUrl, {
       headers: { "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-
-    if (!response.ok) {
-      throw new Error(`SolarWinds advisory error: fetch failed (${response.status})`);
+    if (!rssResponse.ok) {
+      throw new Error(`SolarWinds RSS fetch failed (${rssResponse.status} ${rssResponse.statusText})`);
     }
+    const rssXml = await rssResponse.text();
+    const rssItems = this.parseRssItems(rssXml);
 
-    const html = await response.text();
+    // Phase 2: narrow to the requested product by title before hitting N detail pages
+    const productItems = this.filterRssByProduct(rssItems);
 
-    // Extract __NEXT_DATA__ JSON blob (contains structured advisory data from ContentStack CMS)
-    const nextDataMatch = html.match(/__NEXT_DATA__"\s*type="application\/json">(.+?)<\/script>/);
-    if (!nextDataMatch) {
-      throw new Error("SolarWinds: __NEXT_DATA__ not found in page");
-    }
+    // Phase 3: scrape per-CVE pages for affected/fixed version data
+    const advisories = await this.fetchAdvisoryDetails(productItems);
 
-    let pagesData: any[];
-    try {
-      const nextData = JSON.parse(nextDataMatch[1]);
-      pagesData = nextData?.props?.pageProps?.pagesData;
-      if (!Array.isArray(pagesData)) {
-        throw new Error("pagesData not found");
-      }
-    } catch (e) {
-      throw new Error(`SolarWinds: failed to parse advisory data: ${(e as Error).message}`);
-    }
-
-    // Parse all advisories from structured data
-    const allAdvisories = this.parseAdvisories(pagesData);
-
-    // Filter for requested product
-    const productAdvisories = this.filterByProduct(allAdvisories);
-
-    // Calculate branch MSVs from fixed versions
-    const branches = this.calculateBranchMsv(productAdvisories);
+    const branches = this.calculateBranchMsv(advisories);
 
     const result: VendorAdvisoryResult = {
       vendor: "solarwinds",
       product: this.product,
-      advisories: productAdvisories,
+      advisories,
       branches,
       fetchedAt: new Date().toISOString(),
-      source: this.trustCenterUrl,
+      source: this.rssUrl,
     };
 
     this.setCache(cacheKey, result);
     return result;
   }
 
-  /** Recursively extract text from ContentStack rich-text doc nodes */
-  private extractDocText(node: any): string {
-    if (!node) return "";
-    if (typeof node === "string") return node;
-    if (typeof node.text === "string") return node.text;
-    if (Array.isArray(node.children)) {
-      return node.children.map((c: any) => this.extractDocText(c)).join("").trim();
+  private parseRssItems(xml: string): Array<{ title: string; link: string; description: string; pubDate: string; cveId: string }> {
+    const items: Array<{ title: string; link: string; description: string; pubDate: string; cveId: string }> = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+    let match;
+    while ((match = itemRegex.exec(xml)) !== null) {
+      const block = match[1];
+      const title = this.decodeXml(block.match(/<title>([\s\S]*?)<\/title>/)?.[1]?.trim() || "");
+      const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || "").trim();
+      const description = this.decodeXml(block.match(/<description>([\s\S]*?)<\/description>/)?.[1]?.trim() || "");
+      const pubDate = (block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || "").trim();
+      const cveMatch = link.match(/cve-\d{4}-\d+/i);
+      if (!cveMatch) continue;
+      items.push({ title, link, description, pubDate, cveId: cveMatch[0].toUpperCase() });
     }
-    if (Array.isArray(node)) {
-      return node.map((c: any) => this.extractDocText(c)).join("").trim();
-    }
-    return "";
+    return items;
   }
 
-  private parseAdvisories(pagesData: any[]): SecurityAdvisory[] {
-    const advisories: SecurityAdvisory[] = [];
+  private decodeXml(s: string): string {
+    return s
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+  }
 
-    for (const page of pagesData) {
-      const headline = page.headline || "";
-      const cveText = this.extractDocText(page.advisoryId);
-      const fixedText = this.extractDocText(page.fixedVersion);
-      const severityStr = page.severity || "";
-      const date = page.firstPublished || "";
-
-      // Extract CVE ID from doc text (e.g., "CVE-2025-40552")
-      const cveMatch = cveText.match(/CVE-\d{4}-\d+/i);
-      if (!cveMatch) continue;
-      const cveId = cveMatch[0].toUpperCase();
-
-      // Extract version from fixedVersion text (e.g., "SolarWinds Web Help Desk 2026.1")
-      const fixedVersions = this.extractVersionFromFixedText(fixedText);
-
-      // Parse severity from "9.8 Critical" format
-      const severity = this.parseSeverity(severityStr);
-
-      advisories.push({
-        id: cveId,
-        title: headline,
-        severity,
-        affectedVersions: [],
-        fixedVersions,
-        cveIds: [cveId],
-        publishedDate: date || new Date().toISOString().split("T")[0],
-        url: `https://www.solarwinds.com/${page.url || `trust-center/security-advisories/${cveId.toLowerCase()}`}`,
-      });
+  private filterRssByProduct(items: ReturnType<SolarWindsAdvisoryFetcher["parseRssItems"]>): ReturnType<SolarWindsAdvisoryFetcher["parseRssItems"]> {
+    const patterns = SolarWindsAdvisoryFetcher.PRODUCT_PATTERNS[this.product];
+    if (!patterns) {
+      const fallback = this.product.replace(/_/g, " ").toLowerCase();
+      return items.filter(item => item.title.toLowerCase().includes(fallback));
     }
 
+    const orionModules = [
+      "orion_platform", "network_performance_monitor", "server_and_application_monitor",
+      "network_configuration_manager", "netflow_traffic_analyzer", "ip_address_manager",
+      "virtualization_manager", "database_performance_analyzer", "log_analyzer"
+    ];
+    const isOrionProduct = orionModules.includes(this.product);
+
+    return items.filter(item => {
+      const text = item.title.toLowerCase();
+      for (const pattern of patterns) {
+        if (text.includes(pattern.toLowerCase())) return true;
+      }
+      if (isOrionProduct && text.includes("platform")) return true;
+      return false;
+    });
+  }
+
+  private async fetchAdvisoryDetails(items: ReturnType<SolarWindsAdvisoryFetcher["parseRssItems"]>): Promise<SecurityAdvisory[]> {
+    const advisories: SecurityAdvisory[] = [];
+    for (let i = 0; i < items.length; i += SolarWindsAdvisoryFetcher.MAX_CONCURRENT_PAGE_FETCHES) {
+      const batch = items.slice(i, i + SolarWindsAdvisoryFetcher.MAX_CONCURRENT_PAGE_FETCHES);
+      const results = await Promise.allSettled(batch.map(item => this.fetchAdvisoryPage(item)));
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) advisories.push(r.value);
+      }
+    }
     return advisories;
+  }
+
+  private async fetchAdvisoryPage(item: { title: string; link: string; description: string; pubDate: string; cveId: string }): Promise<SecurityAdvisory | null> {
+    try {
+      const response = await fetch(item.link, {
+        headers: { "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)" },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) return null;
+      const html = await response.text();
+
+      return {
+        id: item.cveId,
+        title: item.title,
+        severity: this.extractSeverityFromPage(html),
+        affectedVersions: this.extractSection(html, "Affected Products?"),
+        fixedVersions: this.extractSection(html, "Fixed Software Release"),
+        cveIds: [item.cveId],
+        publishedDate: this.parseRssDate(item.pubDate),
+        url: item.link,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Extract versions from a named <h3> section. Builder.io pages intersperse style
+   * classes beginning with ".build" — truncate at that marker and at the next <h3>
+   * so neighbouring sections don't contaminate the captured text.
+   */
+  private extractSection(html: string, labelPattern: string): string[] {
+    const match = html.match(new RegExp(`<h3[^>]*>\\s*${labelPattern}\\s*</h3>([\\s\\S]{0,1500})`, "i"));
+    if (!match) return [];
+    let block = match[1];
+    const nextH3 = block.search(/<h3[^>]*>/i);
+    if (nextH3 >= 0) block = block.slice(0, nextH3);
+    const buildMarker = block.indexOf(".build");
+    if (buildMarker >= 0) block = block.slice(0, buildMarker);
+    const text = block.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    return this.extractVersionFromFixedText(text);
+  }
+
+  private extractSeverityFromPage(html: string): SecurityAdvisory["severity"] {
+    const match = html.match(/<h3[^>]*>\s*Severity\s*<\/h3>([\s\S]{0,400})/i);
+    if (!match) return "unknown";
+    const text = match[1].replace(/<[^>]+>/g, " ");
+    return this.parseSeverity(text);
+  }
+
+  private parseRssDate(dateStr: string): string {
+    if (!dateStr) return new Date().toISOString().split("T")[0];
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+    return new Date().toISOString().split("T")[0];
   }
 
   private extractVersionFromFixedText(text: string): string[] {
@@ -527,38 +580,6 @@ export class SolarWindsAdvisoryFetcher extends VendorAdvisoryFetcher {
     if (lower.includes("medium") || lower.includes("moderate")) return "medium";
     if (lower.includes("low")) return "low";
     return "unknown";
-  }
-
-  private filterByProduct(advisories: SecurityAdvisory[]): SecurityAdvisory[] {
-    const patterns = SolarWindsAdvisoryFetcher.PRODUCT_PATTERNS[this.product];
-    if (!patterns) {
-      // Fallback: match product name directly
-      return advisories.filter(adv =>
-        adv.title.toLowerCase().includes(this.product.replace(/_/g, " ").toLowerCase())
-      );
-    }
-
-    // For Orion Platform, also include generic "Platform" advisories
-    const orionModules = [
-      "orion_platform", "network_performance_monitor", "server_and_application_monitor",
-      "network_configuration_manager", "netflow_traffic_analyzer", "ip_address_manager",
-      "virtualization_manager", "database_performance_analyzer", "log_analyzer"
-    ];
-    const isOrionProduct = orionModules.includes(this.product);
-
-    return advisories.filter(adv => {
-      const text = adv.title.toLowerCase();
-
-      // Check product patterns
-      for (const pattern of patterns) {
-        if (text.includes(pattern.toLowerCase())) return true;
-      }
-
-      // Orion modules also match generic "Platform" advisories
-      if (isOrionProduct && text.includes("platform")) return true;
-
-      return false;
-    });
   }
 
   private calculateBranchMsv(advisories: SecurityAdvisory[]): BranchMsv[] {

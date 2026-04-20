@@ -77,6 +77,9 @@ interface SitemapUrl {
 
 const CITRIX_PRODUCTS: Record<string, string[]> = {
   "netscaler": ["NetScaler", "Citrix ADC", "NetScaler ADC"],
+  // Legacy alias — Citrix renamed "Citrix ADC" back to "NetScaler" in 2022.
+  // Kept so callers (incl. catalog entries using vendor=citrix product=adc) still match.
+  "adc": ["NetScaler", "Citrix ADC", "NetScaler ADC"],
   "netscaler_gateway": ["NetScaler Gateway", "Citrix Gateway"],
   "xenserver": ["XenServer", "Citrix Hypervisor"],
   "xenapp": ["XenApp"],

@@ -38,6 +38,13 @@ export async function loadCatalog(): Promise<RouterCatalog> {
 }
 
 /**
+ * Reset the catalog singleton so it reloads from disk on next access
+ */
+export function resetCatalog(): void {
+  catalogInstance = null;
+}
+
+/**
  * Normalize a string for matching (lowercase, remove special chars)
  */
 function normalize(str: string): string {
@@ -429,15 +436,38 @@ export async function getCatalogStats(): Promise<{
 }
 
 /**
+ * Check catalog staleness and return a warning message if stale
+ * @param maxAgeDays - number of days before catalog is considered stale (default 30)
+ */
+export async function checkCatalogStaleness(maxAgeDays = 30): Promise<string | null> {
+  const catalog = await loadCatalog();
+  if (!catalog.lastUpdated) return null;
+
+  const lastUpdated = new Date(catalog.lastUpdated);
+  const now = new Date();
+  const ageDays = Math.floor((now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (ageDays > maxAgeDays) {
+    return `WARNING: Router catalog last updated ${ageDays} days ago (${catalog.lastUpdated}). Run 'msv router update --verbose' to refresh.`;
+  }
+  return null;
+}
+
+/**
  * Format router result for CLI output
  */
-export function formatRouterResult(result: RouterResult): string {
+export function formatRouterResult(result: RouterResult, stalenessWarning?: string | null): string {
   if (!result.success) {
     return `Error: ${result.error}`;
   }
 
   const lines: string[] = [];
   const { model, vendor, hwVersion, firmwareBranch, firmwareStatus, riskScore, matchConfidence } = result;
+
+  // Staleness warning at top
+  if (stalenessWarning) {
+    lines.push(`\n${stalenessWarning}`);
+  }
 
   // Header
   lines.push(`\n${model!.displayName}`);
