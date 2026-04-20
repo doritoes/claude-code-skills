@@ -203,8 +203,40 @@ function getConfig(): Config {
 // Software Resolution
 // =============================================================================
 
+// Operating systems are out of scope: MSV tracks applications. Without this intercept,
+// a query like "windows 10" strips its trailing number, leaving "windows" — which then
+// substring-matches `windows_powershell` and returns a nonsense result.
+const OS_QUERY_PATTERNS: Array<{ pattern: RegExp; family: string }> = [
+  { pattern: /^(windows|win)(\s+(server(\s+\d{4}(\s+r\d)?)?|xp|vista|me|nt|2000|\d+))?$/i, family: "Windows" },
+  { pattern: /^(mac\s*os(\s*x)?|osx|os\s*x)(\s+\w+)?$/i, family: "macOS" },
+  { pattern: /^linux$/i, family: "Linux" },
+  { pattern: /^(ios|ipados)(\s+[\d.]+)?$/i, family: "iOS/iPadOS" },
+  { pattern: /^android(\s+[\d.]+)?$/i, family: "Android" },
+];
+
+function detectOperatingSystem(normalized: string): string | null {
+  for (const { pattern, family } of OS_QUERY_PATTERNS) {
+    if (pattern.test(normalized)) return family;
+  }
+  return null;
+}
+
 function resolveSoftware(input: string, config: Config): SoftwareMapping | null {
   const normalized = input.toLowerCase().trim();
+
+  const osFamily = detectOperatingSystem(normalized);
+  if (osFamily) {
+    return {
+      id: `_os_${osFamily.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
+      displayName: input.trim(),
+      vendor: "",
+      product: "",
+      aliases: [],
+      platforms: [osFamily],
+      isOperatingSystem: true,
+    };
+  }
+
   const catalog = getSoftwareCatalogMap(config);
 
   // Direct match by ID
@@ -557,6 +589,49 @@ async function queryMSV(
     throw new Error(
       `Unknown software: "${softwareInput}". Use 'msv list' to see supported software.`
     );
+  }
+
+  // OPERATING SYSTEM HANDLING - Query is for the OS itself, not an application
+  if (software.isOperatingSystem) {
+    const now = new Date().toISOString();
+    const osFamily = software.platforms[0] || "operating system";
+    return {
+      software: softwareInput,
+      displayName: software.displayName,
+      platform: osFamily,
+      minimumSafeVersion: "N/A (Operating System)",
+      recommendedVersion: "Keep OS Patched",
+      latestVersion: null,
+      branches: [],
+      admiraltyRating: {
+        rating: "A2",
+        reliability: "A",
+        credibility: 2,
+        description: "Operating system — out of MSV scope",
+      },
+      justification: `"${softwareInput}" is an operating system, not an application. MSV tracks application vulnerabilities; OS patching is handled by vendor update channels (Windows Update/WSUS/SCCM, macOS Software Update, Linux package managers, mobile OS updates). Check endoflife.date for ${osFamily} lifecycle and EOL dates.`,
+      sources: ["N/A - OS Query"],
+      cveCount: 0,
+      exploitedCves: [],
+      queriedAt: now,
+      fromCache: false,
+      dataAge: calculateDataFreshness(now, now),
+      hasKevCves: false,
+      sourceResults: [{
+        source: "OS Query",
+        queried: false,
+        cveCount: 0,
+        note: "MSV tracks applications, not operating systems",
+      }],
+      action: {
+        action: "MONITOR",
+        symbol: "ℹ",
+        color: "\x1b[36m",  // Cyan
+        headline: "OPERATING SYSTEM — OUT OF MSV SCOPE",
+        message: `MSV tracks applications. For ${osFamily} patching use vendor update channels; see endoflife.date for lifecycle info.`,
+        urgency: "info",
+      },
+    };
   }
 
   // OS COMPONENT HANDLING - Products updated via Windows Update only

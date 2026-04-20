@@ -190,6 +190,8 @@ export interface SoftwareMapping {
   excludePatterns?: string[];
   /** True if this is a Windows OS component (updates via Windows Update only) */
   osComponent?: boolean;
+  /** True if the query matched an operating system itself (synthetic mapping — MSV is application-scoped) */
+  isOperatingSystem?: boolean;
   /** True if this software is End of Life (no longer receiving security patches) */
   eol?: boolean;
   /** Known latest version for display (manually maintained) */
