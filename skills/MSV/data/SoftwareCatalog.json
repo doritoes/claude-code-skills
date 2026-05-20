@@ -843,7 +843,9 @@
         "\\bpylint\\b",
         "\\bpython-ldap\\b",
         "\\bdjango\\b",
-        "\\bflask\\b"
+        "\\bflask\\b",
+        "\\bprotobuf\\b",
+        "\\bprotocolbuffers\\b"
       ],
       "latestVersion": "3.13.1",
       "eolProductId": "python"

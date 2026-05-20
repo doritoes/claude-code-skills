@@ -596,21 +596,6 @@ export class IntelligenceAggregator {
       }
     }
 
-    // NVD cache (check for any nvd-*.json files)
-    const nvdCachePath = resolve(this.dataDir, "msv-cache.json");
-    if (existsSync(nvdCachePath)) {
-      const cache = JSON.parse(readFileSync(nvdCachePath, "utf-8"));
-      const timestamp = cache.lastUpdated;
-      if (timestamp) {
-        const age = (now.getTime() - new Date(timestamp).getTime()) / (1000 * 60 * 60);
-        validations.push({
-          source: "NVD",
-          timestamp,
-          isCurrent: age < staleThresholdHours,
-        });
-      }
-    }
-
     return validations;
   }
 

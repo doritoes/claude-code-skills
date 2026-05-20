@@ -351,6 +351,64 @@ export class NvdClient {
   }
 
   /**
+   * Fetch all CVEs modified since the given date and cache each one individually.
+   * Used by the CTI report preflight to keep per-CVE NVD caches current without
+   * re-running msv check. Returns the number of CVEs fetched/cached.
+   *
+   * NVD requires lastModStartDate + lastModEndDate paired, max 120-day range.
+   * Auto-clamps sinceDate to 120 days ago if older.
+   */
+  async fetchModifiedSince(sinceDate: Date): Promise<number> {
+    const now = new Date();
+    const maxRangeDays = 120;
+    const minSince = new Date(now.getTime() - maxRangeDays * 24 * 60 * 60 * 1000);
+    const effectiveStart = sinceDate > minSince ? sinceDate : minSince;
+
+    const startISO = effectiveStart.toISOString();
+    const endISO = now.toISOString();
+
+    let totalFetched = 0;
+    let startIndex = 0;
+    const resultsPerPage = 2000; // NVD max
+
+    while (true) {
+      const params = new URLSearchParams({
+        lastModStartDate: startISO,
+        lastModEndDate: endISO,
+        resultsPerPage: String(resultsPerPage),
+        startIndex: String(startIndex),
+      });
+      const url = `${NVD_BASE_URL}?${params.toString()}`;
+
+      const response = await this.fetchWithRetry(url, `fetchModifiedSince(page ${startIndex})`);
+      const result: NvdApiResponse = await response.json();
+
+      if (!result.vulnerabilities || result.vulnerabilities.length === 0) break;
+
+      // Cache each CVE individually (same on-disk format as getCve)
+      for (const item of result.vulnerabilities) {
+        const cve = item.cve;
+        const cacheKey = `nvd-cve-${cve.id.replace(/[^a-zA-Z0-9-]/g, "_")}`;
+        const cachePath = resolve(this.cacheDir, `${cacheKey}.json`);
+        const cacheData: CacheFile<NvdCve> = {
+          version: 1,
+          lastUpdated: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + CACHE_DURATION_MS).toISOString(),
+          source: `${NVD_BASE_URL}?cveId=${cve.id}`,
+          data: cve,
+        };
+        writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
+        totalFetched++;
+      }
+
+      startIndex += result.vulnerabilities.length;
+      if (startIndex >= result.totalResults) break;
+    }
+
+    return totalFetched;
+  }
+
+  /**
    * Extract version information from CVE configurations
    */
   extractVersionInfo(cve: NvdCve, targetVendor?: string, targetProduct?: string): VersionInfo[] {

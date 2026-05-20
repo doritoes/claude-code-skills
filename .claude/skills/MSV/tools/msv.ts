@@ -726,6 +726,28 @@ async function queryMSV(
     const isPowerShell = software.product === "powershell" && software.vendor === "microsoft" && software.id === "powershell";
 
     if (isAdobeReader || isAdobeAcrobat || isPowerShell) {
+      // If caller supplied a concrete version, try to route to the matching variant
+      // by checking each variant's catalog versionPattern. This lets `check "PowerShell 7.6.0"`
+      // return the PowerShell 7 MSV instead of the generic null-MSV multi-track placeholder.
+      if (options.currentVersion) {
+        const catalog = getSoftwareCatalogMap(config);
+        for (const variantId of software.variants) {
+          const variant = catalog[variantId];
+          if (!variant || !variant.versionPattern) continue;
+          try {
+            const variantRegex = new RegExp(variant.versionPattern);
+            if (variantRegex.test(options.currentVersion)) {
+              logger.debug(
+                `Routing ${software.id} → ${variantId} based on currentVersion=${options.currentVersion}`
+              );
+              return queryMSV(variantId, options, config);
+            }
+          } catch {
+            // Invalid regex in catalog versionPattern — skip this variant
+          }
+        }
+      }
+
       logger.debug("Detected product with multiple tracks, gathering variant MSVs...");
 
       // Get variant info based on product type
@@ -2158,7 +2180,13 @@ async function cmdCheck(
     const { item, software } = resolved;
 
     try {
-      const msvResult = await queryMSV(item.software, { ...options, verbose: false }, config);
+      // Pass currentVersion through so multi-variant products (PowerShell, Adobe)
+      // can route to the matching variant instead of returning null MSV.
+      const msvResult = await queryMSV(
+        item.software,
+        { ...options, verbose: false, currentVersion: item.currentVersion ?? undefined },
+        config
+      );
 
       const compliance = checkCompliance(
         item.currentVersion,
@@ -3794,6 +3822,73 @@ async function cmdCti(
         console.log(`\x1b[2mFetching KEV data...\x1b[0m`);
         await kevClient.fetchCatalog(true);
         console.log(`\x1b[32mKEV data fetched.\x1b[0m\n`);
+      }
+
+      // Preflight refresh for VulnCheck KEV — same pattern as CISA KEV above.
+      // Without this, getDataValidation() reads the cache in parallel with
+      // getVulnCheckKevDelta()'s fetch, races, and displays last-run's timestamp.
+      if (options.vulncheckApiKey) {
+        const vcCacheDir = resolve(config.dataDir, "cache");
+        const vcCachePath = resolve(vcCacheDir, "vulncheck-kev-catalog.json");
+        const vulnCheckClient = new VulnCheckClient(
+          { apiKey: options.vulncheckApiKey, timeout: 60000 },
+          vcCacheDir
+        );
+
+        if (existsSync(vcCachePath)) {
+          try {
+            const cache = JSON.parse(readFileSync(vcCachePath, "utf-8"));
+            const cacheAge = (Date.now() - new Date(cache.lastUpdated).getTime()) / (1000 * 60 * 60);
+
+            if (cacheAge > 24 || options.forceRefresh) {
+              console.log(`\x1b[2mVulnCheck KEV data is ${Math.round(cacheAge)} hours old, refreshing...\x1b[0m`);
+              await vulnCheckClient.fetchKevCatalog(true);
+              console.log(`\x1b[32mVulnCheck KEV data refreshed.\x1b[0m\n`);
+            }
+          } catch {
+            // Cache corrupted, will be refreshed during report generation
+          }
+        } else {
+          console.log(`\x1b[2mFetching VulnCheck KEV data...\x1b[0m`);
+          await vulnCheckClient.fetchKevCatalog(true);
+          console.log(`\x1b[32mVulnCheck KEV data fetched.\x1b[0m\n`);
+        }
+      }
+
+      // Preflight refresh for NVD — fetch all CVEs modified since last CTI
+      // refresh via NVD's lastModStartDate query. Keeps per-CVE nvd-cve-*.json
+      // caches current without re-running `msv check`. Max 120-day window;
+      // older markers auto-clamp.
+      {
+        const nvdMarkerPath = resolve(config.dataDir, "nvd-cti-refresh.json");
+        const defaultSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        let nvdSinceDate: Date = defaultSince;
+
+        if (existsSync(nvdMarkerPath)) {
+          try {
+            const marker = JSON.parse(readFileSync(nvdMarkerPath, "utf-8"));
+            nvdSinceDate = new Date(marker.lastRefresh);
+          } catch {
+            nvdSinceDate = defaultSince;
+          }
+        }
+
+        const nvdAgeHours = (Date.now() - nvdSinceDate.getTime()) / (1000 * 60 * 60);
+        if (nvdAgeHours > 24 || options.forceRefresh) {
+          console.log(`\x1b[2mNVD data is ${Math.round(nvdAgeHours)} hours since last CTI refresh, fetching modified CVEs...\x1b[0m`);
+          const nvdClient = new NvdClient(config.dataDir, { verbose: false });
+          try {
+            const count = await nvdClient.fetchModifiedSince(nvdSinceDate);
+            writeFileSync(nvdMarkerPath, JSON.stringify({
+              lastRefresh: new Date().toISOString(),
+              cvesFetched: count,
+              sinceDate: nvdSinceDate.toISOString(),
+            }, null, 2));
+            console.log(`\x1b[32mNVD refreshed: ${count} modified CVEs.\x1b[0m\n`);
+          } catch (e) {
+            console.log(`\x1b[33mNVD refresh failed: ${(e as Error).message}\x1b[0m\n`);
+          }
+        }
       }
 
       // Load or create profile

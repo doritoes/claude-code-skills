@@ -4,7 +4,8 @@
   "description": "Minimum Safe Version (MSV) calculator for Windows software",
   "type": "module",
   "scripts": {
-    "test": "bun test",
+    "test": "bun run tools/run-tests.ts",
+    "test:bun": "bun test",
     "msv": "bun run tools/msv.ts"
   },
   "dependencies": {
