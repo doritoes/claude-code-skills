@@ -18,7 +18,7 @@ import { resolve } from "node:path";
 // =============================================================================
 
 const ATLASSIAN_CVE_API = "https://api.atlassian.com/vuln-transparency/v1/cves";
-const REQUEST_TIMEOUT_MS = 30000;
+const REQUEST_TIMEOUT_MS = 10000;
 
 // =============================================================================
 // Types
@@ -156,6 +156,9 @@ export class AtlassianAdvisoryFetcher {
         headers: {
           "Accept": "application/json",
           "User-Agent": "MSV-Skill/1.0 (PAI Infrastructure)",
+          // Force connection close so Bun correctly detects end-of-body when
+          // the server returns HTTP 200 with Content-Length: 0 on keep-alive.
+          "Connection": "close",
         },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
@@ -164,7 +167,13 @@ export class AtlassianAdvisoryFetcher {
         throw new Error(`Atlassian advisory fetch error: ${response.status} ${response.statusText}`);
       }
 
-      const rawData = await response.json() as AtlassianApiResponse;
+      // Read body as text first — server may return 200 with empty body (CL:0)
+      // when auth is required or data is unavailable; calling response.json()
+      // on an empty body hangs indefinitely on HTTP/1.1 keep-alive connections.
+      const bodyText = await response.text();
+      if (!bodyText.trim()) break;
+
+      const rawData = JSON.parse(bodyText) as AtlassianApiResponse;
       const vulns = this.parseVulnerabilities(rawData);
       allVulns.push(...vulns);
 

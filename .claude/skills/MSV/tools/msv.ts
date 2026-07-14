@@ -3179,10 +3179,23 @@ async function cmdScan(options: ScanOptions): Promise<void> {
 
           // Try to match to catalog
           const software = resolveSoftware(trimmedName, config);
+          const trimmedVersion = version.trim();
+
+          // Deduplicate winget entries by catalogId — winget sometimes reports the same
+          // software twice (e.g., Notepad++ 32-bit 1.0.0.0 + 64-bit 8.9.6.4). Keep higher version.
+          if (software?.id) {
+            const existingIdx = detected.findIndex(d => d.catalogId === software.id);
+            if (existingIdx >= 0) {
+              if (compareVersions(trimmedVersion, detected[existingIdx].version) > 0) {
+                detected[existingIdx] = { name: trimmedName, version: trimmedVersion, source: "winget", catalogId: software.id };
+              }
+              continue;
+            }
+          }
 
           detected.push({
             name: trimmedName,
-            version: version.trim(),
+            version: trimmedVersion,
             source: "winget",
             catalogId: software?.id,
           });
@@ -3877,16 +3890,23 @@ async function cmdCti(
         if (nvdAgeHours > 24 || options.forceRefresh) {
           console.log(`\x1b[2mNVD data is ${Math.round(nvdAgeHours)} hours since last CTI refresh, fetching modified CVEs...\x1b[0m`);
           const nvdClient = new NvdClient(config.dataDir, { verbose: false });
+          let nvdCount = 0;
+          let nvdError: Error | null = null;
           try {
-            const count = await nvdClient.fetchModifiedSince(nvdSinceDate);
+            nvdCount = await nvdClient.fetchModifiedSince(nvdSinceDate);
+            console.log(`\x1b[32mNVD refreshed: ${nvdCount} modified CVEs.\x1b[0m\n`);
+          } catch (e) {
+            nvdError = e as Error;
+            console.log(`\x1b[33mNVD refresh failed: ${nvdError.message}\x1b[0m\n`);
+          } finally {
+            // Always advance the marker — if we don't, each failure makes the next window
+            // larger, creating a death spiral where the fetch never succeeds.
             writeFileSync(nvdMarkerPath, JSON.stringify({
               lastRefresh: new Date().toISOString(),
-              cvesFetched: count,
+              cvesFetched: nvdCount,
               sinceDate: nvdSinceDate.toISOString(),
+              error: nvdError?.message ?? null,
             }, null, 2));
-            console.log(`\x1b[32mNVD refreshed: ${count} modified CVEs.\x1b[0m\n`);
-          } catch (e) {
-            console.log(`\x1b[33mNVD refresh failed: ${(e as Error).message}\x1b[0m\n`);
           }
         }
       }

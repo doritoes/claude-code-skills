@@ -666,9 +666,12 @@ msv import osquery software.json --report compliance.csv
 | **Router Firmware** | **DONE** | Medium | High - WFH security | ✅ Implemented |
 | **CTI Reports** | **DONE** | Medium | High - Actionable intelligence | ✅ Implemented |
 | **Test Suite** | **DONE** | Medium | High - Quality assurance | ✅ 9 test files |
-| **Community Release Fixes** | **MOSTLY DONE** | Low | High - Release readiness | 🟡 See Section 8 |
+| **Vendor Fetchers** | **DONE** | Medium | High - Multi-vendor MSV | ✅ 12/12 passing (v1.9.0) |
+| **Community Release Fixes** | **DONE** | Low | High - Release readiness | ✅ See Section 8 |
+| **Fallback Data Quality** | **HIGH** | Medium | High - Accuracy | 🔵 Next Priority |
 | **Wazuh/osquery Integration** | **HIGH** | Medium | High - Enterprise workflows | 🔵 Next Priority |
 | Electron Apps | HIGH | Medium | High - Enterprise tools | Planned |
+| New Vendor Fetchers | MEDIUM | Medium | Medium - Coverage expansion | Planned (Juniper, F5, Check Point) |
 | Browser Extensions | MEDIUM | High | Medium - Hard to inventory | Idea |
 | Microsoft Store | LOW | Low | Low - Auto-updates | Idea |
 | IoT Devices | LOW | High | Low - Scope creep | Idea |
@@ -904,13 +907,17 @@ These are improvements for future iterations.
 
 ---
 
-## Notes (Updated 2026-02-02)
+## Notes (Updated 2026-02-03)
 
 - ✅ AppThreat integration complete - enables offline queries, batch processing
 - ✅ Router firmware support complete - enables WFH security assessments
 - ✅ CTI Reports complete - TLP marking, BLUF format, zero-day handling
 - ✅ Test suite complete - 9 test files covering core functionality
-- **Wazuh/osquery integration is the recommended next step** - enables real enterprise workflows
+- ✅ **Vendor Advisory Fetchers complete** - 12/12 passing (v1.9.0)
+  - 6 with live API data: Firefox, Edge, VMware, Curl, Oracle, SonicWall
+  - 6 with fallback branches: Fortinet, Palo Alto, Cisco, Atlassian, Citrix, Adobe
+- **Next priority: Fallback data quality** - Prevent staleness of hardcoded versions
+- **Wazuh/osquery integration** - Enables real enterprise workflows
 - Electron app tracking could leverage existing Chromium KEV data
 - Router firmware tracking provides unique value for WFH security programs
 

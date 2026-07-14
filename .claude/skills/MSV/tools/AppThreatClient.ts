@@ -219,10 +219,6 @@ export class AppThreatClient {
     // Check age
     const ageHours = this.getDatabaseAgeHours();
     if (ageHours === null || ageHours > maxAgeHours) {
-      if (verbose) {
-        const ageStr = ageHours ? `${Math.round(ageHours)} hours old` : "age unknown";
-        console.log(`AppThreat database ${ageStr}, updating...`);
-      }
       return this.downloadDatabase(verbose);
     }
 
@@ -328,7 +324,7 @@ export class AppThreatClient {
 
     return new Promise((resolve) => {
       const pythonProcess = spawn("python", pythonArgs, {
-        stdio: verbose ? "inherit" : "pipe",
+        stdio: "pipe", // Always pipe — Python tracebacks (e.g. blocked DLLs) must not bleed into stdout
         shell: false, // Security: avoid shell injection
         windowsHide: true,
       });

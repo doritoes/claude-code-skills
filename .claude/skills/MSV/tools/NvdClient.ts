@@ -253,8 +253,9 @@ export class NvdClient {
           return response;
         }
 
-        // Rate limited - apply exponential backoff
-        if (response.status === 429 || response.status === 403) {
+        // Rate limited or transient server error - apply exponential backoff
+        if (response.status === 429 || response.status === 403 ||
+            response.status === 503 || response.status === 502 || response.status === 504) {
           const retryAfter = response.headers.get("Retry-After");
           const waitTime = retryAfter
             ? parseInt(retryAfter, 10) * 1000
@@ -360,7 +361,9 @@ export class NvdClient {
    */
   async fetchModifiedSince(sinceDate: Date): Promise<number> {
     const now = new Date();
-    const maxRangeDays = 120;
+    // NVD's lastModStartDate/End query returns the entire DB when the window exceeds ~13 days,
+    // producing a response body that times out. Cap to 10 days to stay well clear of that.
+    const maxRangeDays = 10;
     const minSince = new Date(now.getTime() - maxRangeDays * 24 * 60 * 60 * 1000);
     const effectiveStart = sinceDate > minSince ? sinceDate : minSince;
 
@@ -369,7 +372,9 @@ export class NvdClient {
 
     let totalFetched = 0;
     let startIndex = 0;
-    const resultsPerPage = 2000; // NVD max
+    // 500 instead of 2000: NVD's max page size produces a response body large enough to
+    // trigger a 30s timeout on wide date windows.
+    const resultsPerPage = 500;
 
     while (true) {
       const params = new URLSearchParams({
