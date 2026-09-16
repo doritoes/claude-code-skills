@@ -262,6 +262,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - One candidate ("Adrinfly BE7200") was excluded rather than cataloged: no verifiable
     manufacturer found in research, and MSV can't provide meaningful security guidance for a
     router with no traceable vendor security page or firmware lineage
+- **Best Buy cross-check found a third bug class: parenthetical model-number collision** -
+  checked Best Buy's wireless-router best-sellers (after excluding a DOCSIS modem with no WiFi
+  radio at all — ARRIS SURFboard SB8200 — that the search mislabeled as a "wireless router")
+  - **Bug:** `extractModelNumberToken()` (added in the fuzzy-match safety fix) scanned a
+    catalog entry's `model` field from the end for the last digit-containing token. For entries
+    formatted like `"Orbi 370 (RBE973)"` — a friendly number plus a parenthetical FCC-style
+    code — it grabbed `"(RBE973)"` instead of the actual discriminator `"370"`, so a plain
+    `"NETGEAR Orbi 370"` query scored only 36% against its own already-cataloged entry and was
+    rejected as no-match. Fixed by stripping parenthetical content before tokenizing (36% → 91%
+    → 100% after also adding a "netgear orbi 370" alias). All 421 tests still pass.
+  - Also fixed a missing-alias case on `tplink_deco_wb10800`: "TP-Link Deco 7 BE3600" (Best
+    Buy's exact listing title) didn't resolve because no alias combined both the "Deco 7"
+    nickname and "BE3600" model number in one phrase.
+  - Enriched an *existing* catalog entry (`tplink_archer_axe75`, seeded before this session with
+    `msv: "unknown"` and no CVEs tracked) with two CVEs found while researching a different
+    model: CVE-2025-15568 (authenticated RCE via the web module) and CVE-2026-0630 (OS command
+    injection, shared advisory with Archer BE230)
+  - Added 8 new models: ARRIS SURFboard G34 (DOCSIS 3.1 + WiFi 6 combo), TP-Link Archer BE3500,
+    NETGEAR RS100 (same CVE-2026-11814 advisory as RS300/R6700AX), TP-Link Deco XE75 Pro
+    (distinct from the already-cataloged plain Deco XE75), TP-Link Archer AXE7800 (distinct
+    from the smaller, already-cataloged Archer AXE75), ASUS RT-BE3600, TP-Link Archer BE5000,
+    and eero 7 (dual-band, distinct from the tri-band eero Pro 7)
 
 ### Changed
 - Version bumped to 1.3.1

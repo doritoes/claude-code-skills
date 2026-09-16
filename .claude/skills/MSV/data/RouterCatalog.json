@@ -26,7 +26,8 @@
             "netgear_r6700ax",
             "netgear_rs70",
             "netgear_rax5",
-            "netgear_rs300"
+            "netgear_rs300",
+            "netgear_rs100"
           ],
           "description": "High-performance WiFi routers"
         },
@@ -77,7 +78,8 @@
             "asus_rt_ax88u",
             "asus_rt_be82u",
             "asus_rt_ax3000_v2",
-            "asus_rt_ax88u_pro"
+            "asus_rt_ax88u_pro",
+            "asus_rt_be3600"
           ],
           "description": "Standard wireless routers"
         },
@@ -143,7 +145,10 @@
             "tplink_archer_be3200",
             "tplink_archer_be6100",
             "tplink_archer_ax3000_pro",
-            "tplink_archer_ax73"
+            "tplink_archer_ax73",
+            "tplink_archer_be3500",
+            "tplink_archer_axe7800",
+            "tplink_archer_be5000"
           ],
           "description": "Mid-range to high-end wireless routers"
         },
@@ -160,7 +165,8 @@
             "tplink_deco_w7200",
             "tplink_deco_wb10800",
             "tplink_deco_w8100",
-            "tplink_deco_wm9000"
+            "tplink_deco_wm9000",
+            "tplink_deco_xe75_pro"
           ],
           "description": "Mesh WiFi systems"
         },
@@ -576,7 +582,8 @@
             "eero_6_plus",
             "eero_outdoor_7",
             "eero_poe_6",
-            "eero_pro_7"
+            "eero_pro_7",
+            "eero_7"
           ],
           "description": "Cloud-managed mesh WiFi systems with auto-updates"
         }
@@ -717,7 +724,8 @@
           "models": [
             "arris_sbg6580",
             "arris_sbg7580",
-            "arris_sbg8300"
+            "arris_sbg8300",
+            "arris_g34"
           ],
           "description": "Cable modem/router combos (Motorola brand)"
         },
@@ -3011,6 +3019,7 @@
       "displayName": "NETGEAR Orbi 370 WiFi 7",
       "aliases": [
         "orbi 370",
+        "netgear orbi 370",
         "rbe973",
         "netgear wifi 7 mesh",
         "orbi wifi 7"
@@ -5209,9 +5218,11 @@
             "1.x": {
               "branchName": "1.x",
               "msv": "unknown",
+              "msvCves": ["CVE-2025-15568", "CVE-2026-0630"],
               "latest": "unknown",
               "downloadUrl": "https://www.tp-link.com/us/support/download/archer-axe75/",
-              "eol": false
+              "eol": false,
+              "eolNote": "CVE-2025-15568: authenticated command injection in the web module enabling RCE (affects v1.0/v1.6). CVE-2026-0630: OS command injection (shared advisory with Archer BE230). Found and added 2026-09 — neither CVE's exact fixed firmware version was confirmed in research; run 'msv router update tplink_archer_axe75' before relying on msv here."
             }
           },
           "kevCves": [],
@@ -7222,7 +7233,7 @@
       "family": "deco",
       "model": "Deco WB10800",
       "displayName": "TP-Link Deco WB10800 (Deco 7) BE3600 WiFi 7 Mesh System",
-      "aliases": ["deco wb10800", "deco 7", "tp-link deco 7", "deco be3600"],
+      "aliases": ["deco wb10800", "deco 7", "tp-link deco 7", "deco be3600", "tp-link deco 7 be3600"],
       "category": "mesh",
       "targetMarket": "consumer",
       "releaseYear": 2024,
@@ -7654,7 +7665,8 @@
       "displayName": "Starlink Mini Kit (Integrated WiFi 5 Router)",
       "aliases": [
         "starlink mini",
-        "starlink mini kit"
+        "starlink mini kit",
+        "starlink mini kit ac"
       ],
       "category": "wifi-router",
       "targetMarket": "consumer",
@@ -7687,7 +7699,8 @@
       "aliases": [
         "starlink standard 4x",
         "starlink standard 4 x",
-        "starlink router 3"
+        "starlink router 3",
+        "starlink standard 4x ax tri band"
       ],
       "category": "wifi-router",
       "targetMarket": "consumer",
@@ -7738,6 +7751,250 @@
               "latest": "unknown",
               "eol": false,
               "eolNote": "Built on current OpenWrt 23.05 (kernel 5.4.213), unlike the older Opal/GL-SFT1200 which is stuck on a legacy 18.06 base. No CVE found specific to GL-BE3600 in research (2026-09) — other GL.iNet CVEs found (CVE-2023-47463/47464/50919) are for different models. Note: this product is sometimes resold on marketplaces (e.g. Lowe's) under unrelated third-party storefront brand names (e.g. 'CYIKE') rather than GL.iNet — verify the actual manufacturer via the product description/specs, not the storefront name, before trusting a marketplace listing's branding."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "arris_g34": {
+      "id": "arris_g34",
+      "vendor": "arris",
+      "family": "surfboard",
+      "model": "G34",
+      "displayName": "ARRIS SURFboard G34 DOCSIS 3.1 Cable Modem & WiFi 6 Router Combo",
+      "aliases": [
+        "g34",
+        "surfboard g34",
+        "arris g34"
+      ],
+      "category": "modem-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2021,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.surfboard.com/products/wi-fi-cable-modems/g34/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found specific to G34 in research (2026-09). 32x8 DOCSIS 3.1, dual-concurrent AX3000 WiFi 6, four 1GbE ports. Managed via the SURFboard Central app."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_be3500": {
+      "id": "tplink_archer_be3500",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE3500",
+      "displayName": "TP-Link Archer BE3500 Dual-Band WiFi 7 Router",
+      "aliases": ["archer be3500", "be3500", "tp-link be3500"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be3500",
+      "hardwareVersions": {
+        "v1.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-be3500/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found specific to BE3500 in research (2026-09) — distinct from the separately-cataloged BE3200 and BE3600, different products despite similar naming."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1.6"
+    },
+    "netgear_rs100": {
+      "id": "netgear_rs100",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "RS100",
+      "displayName": "NETGEAR Nighthawk RS100 WiFi 7 Dual-Band Router",
+      "aliases": ["rs100", "nighthawk rs100", "netgear rs100"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:netgear:rs100",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.netgear.com/support/product/rs100",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "msvCves": ["CVE-2026-11814"],
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "CVE-2026-11814: command injection allowing a network-adjacent attacker-in-the-middle to compromise confidentiality/integrity — same August 2026 NETGEAR advisory that flagged netgear_rs300 and netgear_r6700ax. Exact fixed firmware version wasn't confirmed in research (2026-09); run 'msv router update netgear_rs100' or enable NETGEAR automatic updates."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_deco_xe75_pro": {
+      "id": "tplink_deco_xe75_pro",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco XE75 Pro",
+      "displayName": "TP-Link Deco XE75 Pro AXE5400 Tri-Band WiFi 6E Mesh System",
+      "aliases": ["deco xe75 pro", "tp-link deco xe75 pro"],
+      "category": "mesh",
+      "targetMarket": "prosumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax5400",
+      "cpePrefix": "cpe:2.3:h:tp-link:deco_xe75_pro",
+      "hardwareVersions": {
+        "v3.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/deco-xe75-pro/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE confirmed specific to XE75 Pro in research (2026-09) — CVE-2024-21833/21773/21821 were found for the separately-cataloged Deco X50/XE200 and Archer AX3000/AX5400/AXE75, not confirmed for XE75 Pro. Distinct from the base 'Deco XE75' (already cataloged) — the 'Pro' adds a 5th internal antenna and wired backhaul port."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v3.6"
+    },
+    "tplink_archer_axe7800": {
+      "id": "tplink_archer_axe7800",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AXE7800",
+      "displayName": "TP-Link Archer AXE7800 Tri-Band WiFi 6E Router",
+      "aliases": ["archer axe7800", "axe7800", "tp-link axe7800"],
+      "category": "wifi-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax6000",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_axe7800",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE confirmed specific to AXE7800 in research (2026-09) — distinct from the separately-cataloged, smaller Archer AXE75 (AX5400 vs this model's AX6000-class tri-band), which does have confirmed CVEs (CVE-2025-15568, CVE-2026-0630)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "asus_rt_be3600": {
+      "id": "asus_rt_be3600",
+      "vendor": "asus",
+      "family": "rt",
+      "model": "RT-BE3600",
+      "displayName": "ASUS RT-BE3600 Dual-Band WiFi 7 Router",
+      "aliases": ["rt-be3600", "asus be3600"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be5800",
+      "hardwareVersions": {
+        "a1": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.asus.com/us/supportonly/rt-be3600/helpdesk_bios/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "ASUS's support page for this model documents security fixes for an unsafe remote script execution mechanism and a heap buffer overflow during cache handling (hardware versions A1 and 2.0), but specific CVE identifiers weren't found in research (2026-09). Run 'msv router update asus_rt_be3600' or check ASUS's Product Security Advisory page before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "a1"
+    },
+    "tplink_archer_be5000": {
+      "id": "tplink_archer_be5000",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE5000",
+      "displayName": "TP-Link Archer BE5000 Dual-Band WiFi 7 Router",
+      "aliases": ["archer be5000", "be5000", "tp-link be5000"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be9300",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be5000",
+      "hardwareVersions": {
+        "v1": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-be5000/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "V1.60_GPL",
+              "eol": false,
+              "eolNote": "No CVE confirmed specific to BE5000 in research (2026-09) — a broad TP-Link command-injection advisory (CVE-2026-9254/16348/78541) explicitly names Archer BE800/BE3600/AX75, not BE5000."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1"
+    },
+    "eero_7": {
+      "id": "eero_7",
+      "vendor": "amazon",
+      "family": "eero",
+      "model": "eero 7",
+      "displayName": "Amazon eero 7 Dual-Band WiFi 7",
+      "aliases": [
+        "eero 7",
+        "amazon eero 7"
+      ],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be5800",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.eero.com/hc/en-us",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found in research (2026-09) — new device. Dual-band WiFi 7 (distinct from the tri-band, separately-cataloged eero Pro 7), supports internet plans up to 2.5 Gbps. Cloud-managed with automatic updates."
             }
           },
           "kevCves": []

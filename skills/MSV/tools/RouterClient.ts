@@ -147,7 +147,14 @@ const MIN_FUZZY_CONFIDENCE = 0.8;
  * "Dream Router 7" is not treated as a model number.
  */
 function extractModelNumberToken(input: string): string | null {
-  const tokens = input.split(/[\s\-_/]+/).filter(Boolean);
+  // Strip parenthetical asides first — catalog model fields like
+  // "Orbi 370 (RBE973)" pair a friendly number with an FCC-style code in
+  // parens. Scanning from the end for the last digit-containing token used
+  // to pick "(RBE973)" over "370", so a plain "NETGEAR Orbi 370" query got
+  // penalized against its own catalog entry (scored ~36% instead of a true
+  // match) because "370" vs "RBE973" look unrelated in isolation.
+  const withoutParens = input.replace(/\([^)]*\)/g, " ");
+  const tokens = withoutParens.split(/[\s\-_/]+/).filter(Boolean);
   for (let i = tokens.length - 1; i >= 0; i--) {
     if (/\d/.test(tokens[i]) && tokens[i].length >= 3) {
       return tokens[i];
