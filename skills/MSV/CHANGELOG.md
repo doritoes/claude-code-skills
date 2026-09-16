@@ -305,6 +305,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missing entry: EOL, MSV build 241108, CVE-2025-9377 (CVSS 7.2, authenticated OS command
   injection via Parental Control, actively exploited/botnet-recruited per TP-Link's own
   advisory).
+- **Cross-vendor CISA KEV sweep for 2026 CVEs** - filtered all 148 CVE-2026-* entries in the
+  live KEV feed to actual consumer/SOHO wireless-router vendors (excluding enterprise
+  firewall/VPN/network-management gear that also showed up: Cisco, Fortinet, Citrix, SonicWall,
+  Palo Alto, Check Point, Arista, N-able), then verified two vendor-adjacent entries by reading
+  their full descriptions rather than assuming router-relevance from vendor name alone — "Apple
+  Multiple Products" (CVE-2026-20700) is iOS/macOS/tvOS/watchOS/visionOS, not the discontinued
+  AirPort line; "Qualcomm Multiple Chipsets" (CVE-2026-21385) doesn't specify chipset family in
+  its description, so it wasn't claimed as router-relevant without more evidence
+  - Enriched `mikrotik_routeros` with the "MikroTrick" cluster: CVE-2026-86060 (SSH-path
+    privilege escalation) and CVE-2026-67277 (unauthenticated kernel memory disclosure + DoS via
+    btest) — both KEV-listed 2026-09-10, due date already past. A third CVE from the same
+    disclosed cluster, CVE-2026-67276, is NOT itself KEV-listed and was added to `msvCves` but
+    deliberately kept out of `kevCves`. Fixed in three parallel branches (6.49.21 LTS / 7.23.4
+    LTS / 7.24.2 Stable) as of 2026-09-03 — the catalog's single-branch schema can't represent
+    three parallel fix lines exactly, so `msv`/`latest` now list all three rather than picking
+    one arbitrarily. Updated a stale hardcoded test assertion (`RouterClient.test.ts`) that
+    still expected the old 2018-era MSV value.
+  - Enriched `ubiquiti_dream_router_7` with CVE-2026-34908/34909/34910 (each CVSS 10.0,
+    chainable to unauthenticated root RCE, UniFi Security Advisory SAB-064, KEV-listed
+    2026-06-23) — previously had zero CVEs tracked despite this being one of the more severe
+    router-relevant KEV clusters found all session
 
 ### Changed
 - Version bumped to 1.3.1

@@ -306,7 +306,7 @@ describe("RouterClient New Vendors (Phase 2)", () => {
     const result = await queryRouter({ input: "MikroTik RouterOS" });
     expect(result.success).toBe(true);
     expect(result.vendor?.id).toBe("mikrotik");
-    expect(result.firmwareBranch?.msv).toBe("6.40.5");
+    expect(result.firmwareBranch?.msv).toBe("7.24.2 (Stable) / 7.23.4 (7.x LTS) / 6.49.21 (6.x LTS)");
   });
 
   test("queries Zyxel firewall", async () => {

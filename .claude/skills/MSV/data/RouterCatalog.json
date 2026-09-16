@@ -2550,21 +2550,27 @@
           "firmwareBranches": {
             "stable": {
               "branchName": "stable",
-              "msv": "6.40.5",
-              "msvDate": "2018-04-23",
+              "msv": "7.24.2 (Stable) / 7.23.4 (7.x LTS) / 6.49.21 (6.x LTS)",
+              "msvDate": "2026-09-03",
               "msvCves": [
                 "CVE-2018-7445",
-                "CVE-2018-14847"
+                "CVE-2018-14847",
+                "CVE-2026-67276",
+                "CVE-2026-67277",
+                "CVE-2026-86060"
               ],
-              "latest": "7.16",
-              "latestDate": "2024-10-01",
+              "latest": "7.24.2 (Stable)",
+              "latestDate": "2026-09-03",
               "downloadUrl": "https://mikrotik.com/download",
-              "eol": false
+              "eol": false,
+              "eolNote": "'MikroTrick' cluster (found and added 2026-09-16, KEV-added 2026-09-10, due date already past as of this catalog update): CVE-2026-86060 (SSH login path privilege escalation via policy mask tampering) and CVE-2026-67277 (unauthenticated btest kernel memory disclosure + DoS) are both actively exploited per CISA KEV. CVE-2026-67276 is part of the same disclosed cluster but is NOT itself KEV-listed. All three fixed as of 2026-09-03 in 6.49.21 (6.x LTS), 7.23.4 (7.x LTS), and 7.24.2 (Stable) — this catalog's single-branch schema can't represent three parallel fix lines exactly, so msv/latest list all three; match to whichever branch your device is actually on."
             }
           },
           "kevCves": [
             "CVE-2018-7445",
-            "CVE-2018-14847"
+            "CVE-2018-14847",
+            "CVE-2026-67277",
+            "CVE-2026-86060"
           ],
           "note": "Keep RouterOS updated - both CVEs are from 2018"
         }
@@ -5614,12 +5620,16 @@
           "firmwareBranches": {
             "unifi": {
               "branchName": "unifi",
-              "msv": "unknown",
-              "latest": "unknown",
-              "eol": false
+              "msv": "5.0.8",
+              "msvDate": "2026-05-21",
+              "msvCves": ["CVE-2026-34908", "CVE-2026-34909", "CVE-2026-34910"],
+              "latest": "5.0.8",
+              "latestDate": "2026-05-21",
+              "eol": false,
+              "eolNote": "CVE-2026-34908/34909/34910 (each CVSS 10.0, found and added 2026-09-16, KEV-added 2026-06-23): improper access control + path traversal + command injection, chainable to unauthenticated remote code execution as root. Published as UniFi Security Advisory Bulletin SAB-064 (2026-05-21), fixed in UniFi OS Server 5.0.8. These affect UniFi OS broadly across the console/gateway line (this device runs UniFi OS); the fix version listed here is the officially patched UniFi OS Server release, not independently confirmed against a separate on-device build number for the Dream Router 7 specifically — verify via 'msv router update ubiquiti_dream_router_7' or the Ubiquiti console update screen."
             }
           },
-          "kevCves": [],
+          "kevCves": ["CVE-2026-34908", "CVE-2026-34909", "CVE-2026-34910"],
           "note": "Desktop 10G cloud gateway with WiFi 7, PoE switch, UniFi OS integration"
         }
       },
