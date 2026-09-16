@@ -8038,6 +8038,43 @@
         }
       },
       "defaultHwVersion": "v1"
+    },
+    "tplink_archer_c7": {
+      "id": "tplink_archer_c7",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer C7",
+      "displayName": "TP-Link Archer C7 AC1750 Dual-Band Router",
+      "aliases": [
+        "archer c7",
+        "tp-link archer c7",
+        "archer c7 eu",
+        "tplink c7"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2014,
+      "wifiStandard": "ac1750",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_c7",
+      "hardwareVersions": {
+        "v2": {
+          "supportStatus": "eol",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "241108",
+              "msvDate": "2025-09-03",
+              "msvCves": ["CVE-2025-9377"],
+              "latest": "241108",
+              "eol": true,
+              "eolNote": "Was previously referenced in the tplink.archer family's model list but had no actual catalog entry — a dangling reference discovered 2026-09-16 while cross-checking TP-Link's CISA KEV entries. TP-Link has declared this hardware EOL and recommends replacement; if kept, update to build 241108 or later."
+            }
+          },
+          "kevCves": ["CVE-2025-9377"],
+          "note": "CVE-2025-9377 (CVSS 7.2, KEV-listed since 2025-09-03): authenticated OS command injection via the Parental Control page, affects builds before 241108. Actively exploited in the wild — TP-Link has also warned this and related models are being recruited into a botnet targeting Microsoft 365 accounts."
+        }
+      },
+      "defaultHwVersion": "v2"
     }
   }
 }

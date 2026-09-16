@@ -295,6 +295,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     a crafted parental-control profile name)
   - Added Archer BE3600 Pro as its own entry; its CVE status wasn't assumed from the base
     model since it's confirmed different hardware
+- **Fixed a dangling catalog reference found via a CISA KEV vendor audit** - cross-checked all
+  6 TP-Link entries in the live CISA KEV feed (`data/kev-cache.json`, sourced from
+  `cisa.gov/.../known_exploited_vulnerabilities.json`) against the catalog. 5 of 6 were already
+  correctly tracked; CVE-2025-9377 names "Archer C7 (EU)" as affected, but `tplink_archer_c7`
+  was listed as a member of the `archer` family's `models` array with no actual model entry —
+  querying "TP-Link Archer C7" fuzzy-matched Archer C54 instead (87%, correctly flagged as
+  approximate, so at least not silently wrong, but still not the real answer). Added the
+  missing entry: EOL, MSV build 241108, CVE-2025-9377 (CVSS 7.2, authenticated OS command
+  injection via Parental Control, actively exploited/botnet-recruited per TP-Link's own
+  advisory).
 
 ### Changed
 - Version bumped to 1.3.1
