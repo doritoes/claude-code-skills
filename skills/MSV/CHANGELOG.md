@@ -284,6 +284,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (distinct from the already-cataloged plain Deco XE75), TP-Link Archer AXE7800 (distinct
     from the smaller, already-cataloged Archer AXE75), ASUS RT-BE3600, TP-Link Archer BE5000,
     and eero 7 (dual-band, distinct from the tri-band eero Pro 7)
+- **Target cross-check** - checked TP-Link Archer BE3600 Pro (the one real router in a sparse
+  Target best-sellers paste) and confirmed it's a genuinely distinct product from the
+  already-cataloged base Archer BE3600 (dedicated TP-Link product page, adds a second 2.5Gbps
+  port and 4 antennas vs the base model)
+  - Enriched the *existing* `tplink_archer_be3600` entry (seeded before this session with
+    `msv: "unknown"` and zero CVEs tracked) with three CVEs found while researching the Pro
+    variant: CVE-2026-9254 (unauthenticated OS command injection in parental control, root
+    privileges), CVE-2026-16348, and CVE-2026-78541 (authenticated stored command injection via
+    a crafted parental-control profile name)
+  - Added Archer BE3600 Pro as its own entry; its CVE status wasn't assumed from the base
+    model since it's confirmed different hardware
 
 ### Changed
 - Version bumped to 1.3.1

@@ -148,7 +148,8 @@
             "tplink_archer_ax73",
             "tplink_archer_be3500",
             "tplink_archer_axe7800",
-            "tplink_archer_be5000"
+            "tplink_archer_be5000",
+            "tplink_archer_be3600_pro"
           ],
           "description": "Mid-range to high-end wireless routers"
         },
@@ -5399,9 +5400,11 @@
             "1.x": {
               "branchName": "1.x",
               "msv": "unknown",
-              "latest": "unknown",
+              "msvCves": ["CVE-2026-9254", "CVE-2026-16348", "CVE-2026-78541"],
+              "latest": "Build 20241211",
               "downloadUrl": "https://www.tp-link.com/us/support/download/archer-be3600/",
-              "eol": false
+              "eol": false,
+              "eolNote": "CVE-2026-9254: unauthenticated OS command injection in the parental-control function (root privileges — advisory notes nearby attackers can fully compromise the device). CVE-2026-78541: authenticated stored command injection via a crafted profile name in parental control, triggered during daily cloud report generation. Advisory last updated 2026-08-24; found and added 2026-09 — exact fixed version beyond 'firmware updates released for all affected products' wasn't confirmed, so msv stays 'unknown'. Run 'msv router update tplink_archer_be3600' or check TP-Link FAQ 5264."
             }
           },
           "kevCves": [],
@@ -8001,6 +8004,40 @@
         }
       },
       "defaultHwVersion": "default"
+    },
+    "tplink_archer_be3600_pro": {
+      "id": "tplink_archer_be3600_pro",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE3600 Pro",
+      "displayName": "TP-Link Archer BE3600 Pro Dual-Band WiFi 7 Router",
+      "aliases": [
+        "archer be3600 pro",
+        "be3600 pro",
+        "tp-link be3600 pro"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be3600_pro",
+      "hardwareVersions": {
+        "v1": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/home-networking/wifi-router/archer-be3600-pro/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Genuinely distinct product from the separately-cataloged base 'Archer BE3600' — the Pro adds a second dedicated 2.5Gbps port (1x2.5G WAN + 1x2.5G LAN vs the base model's single 2.5G port) and 4 antennas. No CVE confirmed specific to the Pro variant in research (2026-09); the base BE3600 V1 has three confirmed CVEs (CVE-2026-9254/16348/78541, parental-control command injection) not verified as applicable here since it's different hardware. Run 'msv router update tplink_archer_be3600_pro' before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1"
     }
   }
 }
