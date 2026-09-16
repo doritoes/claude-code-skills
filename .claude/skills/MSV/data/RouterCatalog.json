@@ -112,7 +112,10 @@
             "tplink_archer_ax21",
             "tplink_archer_ax50",
             "tplink_archer_c7",
-            "tplink_archer_be900"
+            "tplink_archer_be900",
+            "tplink_archer_ax55",
+            "tplink_archer_ax55_pro",
+            "tplink_archer_be230"
           ],
           "description": "Mid-range to high-end wireless routers"
         },
@@ -846,6 +849,27 @@
       },
       "country": "USA",
       "securityNotes": "ISP gateway OEM. GigaCenter ONT line has 5 critical CVEs (Feb 2025) - CVE-2025-53913/53914/7635/54083/54084. Vendor stated EOL products will NOT be patched. GigaSpire line is newer. Firmware managed by ISP via Calix Support Cloud."
+    },
+    "glinet": {
+      "id": "glinet",
+      "displayName": "GL.iNet",
+      "securityUrl": "https://www.gl-inet.com/security-updates/",
+      "bugBounty": false,
+      "cnaStatus": false,
+      "trustRating": "medium",
+      "families": {
+        "travel": {
+          "displayName": "Travel Routers",
+          "category": "travel-router",
+          "targetMarket": "prosumer",
+          "models": [
+            "glinet_gl_sft1200"
+          ],
+          "description": "Pocket-sized OpenWrt-based travel routers"
+        }
+      },
+      "country": "China",
+      "securityNotes": "Email-based responsible disclosure (security@gl-inet.com) with a 90-day policy; publishes regular dated security advisories (multiple in 2024-2026 covering RCE, auth bypass, path traversal). No formal paid bug bounty program and not a CVE Numbering Authority. Devices run customized OpenWrt firmware; some older/budget models (e.g. Opal/GL-SFT1200) remain on a legacy OpenWrt 18.06 base with vendor-backported patches rather than tracking current upstream OpenWrt releases."
     }
   },
   "models": {
@@ -1366,6 +1390,7 @@
       "family": "rt",
       "model": "Multiple Routers",
       "displayName": "ASUS Routers (Multiple Models)",
+      "genericPlaceholder": true,
       "aliases": [
         "asus routers",
         "asus router"
@@ -1568,6 +1593,7 @@
       "family": "archer",
       "model": "Multiple Archer Devices",
       "displayName": "TP-Link Archer Devices (Multiple)",
+      "genericPlaceholder": true,
       "aliases": [
         "tplink archer",
         "archer router"
@@ -1603,6 +1629,7 @@
       "family": "legacy",
       "model": "Multiple Routers",
       "displayName": "TP-Link Routers (Multiple)",
+      "genericPlaceholder": true,
       "aliases": [
         "tplink routers"
       ],
@@ -2218,6 +2245,7 @@
       "family": "dir",
       "model": "Multiple Routers",
       "displayName": "D-Link Routers (Multiple)",
+      "genericPlaceholder": true,
       "aliases": [
         "dlink routers",
         "d-link routers"
@@ -2375,6 +2403,7 @@
       "family": "usg",
       "model": "Multiple Firewalls",
       "displayName": "Zyxel Firewalls (Multiple)",
+      "genericPlaceholder": true,
       "aliases": [
         "zyxel firewall",
         "zyxel usg",
@@ -6097,6 +6126,154 @@
         }
       },
       "defaultHwVersion": "v2"
+    },
+    "tplink_archer_ax55": {
+      "id": "tplink_archer_ax55",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AX55",
+      "displayName": "TP-Link Archer AX55 WiFi 6 AX3000 Router",
+      "aliases": [
+        "archer ax55",
+        "ax55",
+        "tp-link ax55"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2021,
+      "wifiStandard": "ax3000",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_ax55",
+      "hardwareVersions": {
+        "v4": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-ax55/v4/",
+          "firmwareBranches": {
+            "1.2.x": {
+              "branchName": "1.2.x",
+              "msv": "1.2.1 Build 20260527",
+              "msvDate": "2026-09-03",
+              "msvCves": ["CVE-2026-18167", "CVE-2026-18330"],
+              "latest": "1.2.1 Build 20260527",
+              "latestDate": "2026-05-27",
+              "downloadUrl": "https://www.tp-link.com/us/support/download/archer-ax55/v4/",
+              "eol": false,
+              "eolNote": "CVE-2026-18167 (EasyMesh stack buffer overflow, CVSS 7.7, requires Mesh mode enabled) and CVE-2026-18330 (hardcoded RSA-1024 key allows admin password decryption from a captured HTTP login session, CVSS 6.1) — both fixed in this version per TP-Link advisory published 2026-09-03. Other hardware versions (v1, v2.6) use independent firmware branches not researched here."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v4"
+    },
+    "tplink_archer_ax55_pro": {
+      "id": "tplink_archer_ax55_pro",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AX55 Pro",
+      "displayName": "TP-Link Archer AX55 Pro WiFi 6 AX3000 Router",
+      "aliases": [
+        "archer ax55 pro",
+        "ax55 pro",
+        "tp-link ax55 pro"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax3000",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_ax55_pro",
+      "hardwareVersions": {
+        "v1": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-ax55-pro/v1/",
+          "firmwareBranches": {
+            "1.2.x": {
+              "branchName": "1.2.x",
+              "msv": "1.2.2 Build 20230803",
+              "msvDate": "2023-08-03",
+              "latest": "1.2.2 Build 20230803",
+              "latestDate": "2023-08-03",
+              "downloadUrl": "https://www.tp-link.com/us/support/download/archer-ax55-pro/v1/",
+              "eol": false,
+              "eolNote": "No known CVEs found in research (2026-09) for this SKU specifically (distinct from the base Archer AX55, which has CVE-2026-18167/18330 — see tplink_archer_ax55). Verify against 'msv router update' before relying on this as a confirmed-clean baseline."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1"
+    },
+    "tplink_archer_be230": {
+      "id": "tplink_archer_be230",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE230",
+      "displayName": "TP-Link Archer BE230 WiFi 7 BE3600 Router",
+      "aliases": [
+        "archer be230",
+        "be230",
+        "tp-link be230"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be230",
+      "hardwareVersions": {
+        "v2": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-be230/",
+          "firmwareBranches": {
+            "1.3.x": {
+              "branchName": "1.3.x",
+              "msv": "1.3.1 Build 20260106",
+              "msvDate": "2026-01-06",
+              "msvCves": ["CVE-2026-0630", "CVE-2026-0631", "CVE-2026-22220", "CVE-2026-22225", "CVE-2026-22228", "CVE-2026-22229"],
+              "latest": "1.3.1 Build 20260106",
+              "latestDate": "2026-01-06",
+              "downloadUrl": "https://www.tp-link.com/us/support/download/archer-be230/",
+              "eol": false,
+              "eolNote": "Multiple authenticated command-injection CVEs (VPN modules/config import) and DoS CVEs (crafted config restore) — see TP-Link advisories FAQ 4935 and FAQ 4941. Some CVE numbers in the 22221-22227 range from the same bulletin apply to sibling models (Archer AXE75, Archer AX73, Deco BE25) rather than BE230 specifically and were excluded here."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v2"
+    },
+    "glinet_gl_sft1200": {
+      "id": "glinet_gl_sft1200",
+      "vendor": "glinet",
+      "family": "travel",
+      "model": "GL-SFT1200",
+      "displayName": "GL.iNet GL-SFT1200 (Opal) Travel Router",
+      "aliases": [
+        "gl-sft1200",
+        "opal",
+        "gl.inet opal",
+        "glinet opal",
+        "sft1200"
+      ],
+      "category": "travel-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2020,
+      "wifiStandard": "ac1200",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://dl.gl-inet.com/router/sft1200",
+          "firmwareBranches": {
+            "4.x": {
+              "branchName": "4.x (custom OpenWrt 18.06 base)",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Runs a customized OpenWrt 18.06 base — older than current upstream OpenWrt — with vendor-backported security patches rather than tracking upstream releases directly. No CPE prefix or specific CVE-to-firmware-version mapping found in research (2026-09); NVD does not appear to track GL.iNet products under a stable CPE. Check https://www.gl-inet.com/security-updates/ for current advisories and https://dl.gl-inet.com/router/sft1200 for the latest firmware before relying on this entry — treat msv as unverified, not a confirmed-safe floor."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
     }
   }
 }

@@ -150,6 +150,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ASUS RT-BE82U, TP-Link Archer BE900
   - Flagged Linksys EA7500 CVE-2023-46012 (CVSS 9.8, unauthenticated RCE via UPnP) as
     `"NO SAFE VERSION EXISTS"` — no vendor patch exists as of this research
+- **Router fuzzy-match safety, round 2** - a follow-up real-world test (Newegg router
+  best-sellers) found the previous fix incomplete: 5 catalog entries represent an unspecified
+  group of devices rather than one real product (e.g. `tplink_archer_devices`, seeded from a
+  2015 CVE bulletin that named "Archer" devices generically with no model number). These have no
+  model number for `penalizeForModelNumberMismatch()` to anchor against, so shared vendor/family
+  wording alone (e.g. "TP-Link Archer") was enough to fuzzy-match them against any Archer model
+  not yet in the catalog — e.g. querying "TP-Link Archer AX55" silently returned an 11-year-old
+  irrelevant CVE instead of "no match"
+  - Added `RouterModel.genericPlaceholder` and flagged the 5 affected entries
+    (`asus_routers_generic`, `tplink_archer_devices`, `tplink_multiple_routers`,
+    `dlink_multiple_routers`, `zyxel_firewalls`)
+  - `rankModels()` now skips the display-name and vendor+model fuzzy-scoring channels entirely
+    for flagged entries — they're reachable only via their own literal aliases (e.g.
+    "zyxel firewall"), never via partial similarity to an unrelated specific-model query
+- Router catalog expansion (+4 models/1 vendor) from the same Newegg test: TP-Link Archer AX55,
+  Archer AX55 Pro, Archer BE230, and GL.iNet (new vendor) GL-SFT1200 "Opal"
+  - Flagged Archer AX55 v4's CVE-2026-18167 (EasyMesh stack buffer overflow) and
+    CVE-2026-18330 (hardcoded RSA-1024 key exposing admin password) — both fixed in
+    firmware 1.2.1 Build 20260527
+  - Flagged Archer BE230's authenticated command-injection and DoS CVEs from TP-Link's
+    2026-01 advisory bulletin (CVE-2026-0630/0631/22220/22225/22228/22229)
 
 ### Changed
 - Version bumped to 1.3.1

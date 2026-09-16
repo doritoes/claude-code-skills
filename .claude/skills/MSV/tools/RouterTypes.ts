@@ -305,6 +305,19 @@ export interface RouterModel {
   /** Default hardware version if not specified */
   defaultHwVersion?: string;
 
+  /**
+   * True for catalog entries that represent an unspecified group of devices
+   * rather than one real product (e.g. "TP-Link Archer Devices (Multiple)",
+   * seeded from a CVE bulletin that named a family generically without a
+   * model number). These have no real model number to anchor
+   * penalizeForModelNumberMismatch() against, so — unlike real models —
+   * shared vendor/family wording alone can carry them past the fuzzy-match
+   * floor for a completely unrelated specific-model query. They should only
+   * ever be reached via their own literal aliases (e.g. "zyxel firewall"),
+   * never via display-name/vendor+model fuzzy scoring — see rankModels().
+   */
+  genericPlaceholder?: boolean;
+
   /** ISP gateway specific information (for ISP-branded devices) */
   ispGateway?: IspGatewayInfo;
 }

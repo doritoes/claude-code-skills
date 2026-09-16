@@ -219,20 +219,30 @@ function rankModels(
       methodForModel = "exact";
     }
 
-    // Check display name
-    const rawDisplayConf = calculateConfidence(query.input, model.displayName);
-    const displayConf =
-      rawDisplayConf === 1.0
-        ? 1.0
-        : penalizeForModelNumberMismatch(rawDisplayConf, inputModelToken, model.model);
-    if (displayConf > bestForModel) {
-      bestForModel = displayConf;
-      methodForModel = displayConf === 1.0 ? "exact" : "fuzzy";
+    // Check display name — skipped for generic placeholder entries (see
+    // RouterModel.genericPlaceholder): they have no real model number, so
+    // penalizeForModelNumberMismatch() can't discount a wrong specific-model
+    // query, and shared vendor/family wording alone (e.g. "TP-Link Archer")
+    // would otherwise be enough to fuzzy-match them against any unrelated
+    // Archer model that isn't in the catalog.
+    if (!model.genericPlaceholder) {
+      const rawDisplayConf = calculateConfidence(query.input, model.displayName);
+      const displayConf =
+        rawDisplayConf === 1.0
+          ? 1.0
+          : penalizeForModelNumberMismatch(rawDisplayConf, inputModelToken, model.model);
+      if (displayConf > bestForModel) {
+        bestForModel = displayConf;
+        methodForModel = displayConf === 1.0 ? "exact" : "fuzzy";
+      }
     }
 
-    // Check aliases
+    // Check aliases. Generic placeholders are reachable ONLY via a true
+    // (1.0-confidence) alias match — e.g. "zyxel firewall" — never via a
+    // partial/fuzzy alias score, for the same reason as above.
     for (const alias of model.aliases) {
       const rawAliasConf = calculateConfidence(query.input, alias);
+      if (model.genericPlaceholder && rawAliasConf !== 1.0) continue;
       const aliasConf =
         rawAliasConf === 1.0
           ? 1.0
@@ -243,14 +253,16 @@ function rankModels(
       }
     }
 
-    // Check vendor + model combo
-    const vendorModel = `${catalog.vendors[model.vendor]?.displayName || model.vendor} ${model.model}`;
-    const rawVmConf = calculateConfidence(query.input, vendorModel);
-    const vmConf =
-      rawVmConf === 1.0 ? 1.0 : penalizeForModelNumberMismatch(rawVmConf, inputModelToken, model.model);
-    if (vmConf > bestForModel) {
-      bestForModel = vmConf;
-      methodForModel = vmConf === 1.0 ? "exact" : "fuzzy";
+    // Check vendor + model combo — same generic-placeholder exclusion
+    if (!model.genericPlaceholder) {
+      const vendorModel = `${catalog.vendors[model.vendor]?.displayName || model.vendor} ${model.model}`;
+      const rawVmConf = calculateConfidence(query.input, vendorModel);
+      const vmConf =
+        rawVmConf === 1.0 ? 1.0 : penalizeForModelNumberMismatch(rawVmConf, inputModelToken, model.model);
+      if (vmConf > bestForModel) {
+        bestForModel = vmConf;
+        methodForModel = vmConf === 1.0 ? "exact" : "fuzzy";
+      }
     }
 
     if (bestForModel > 0) {
