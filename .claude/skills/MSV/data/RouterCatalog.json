@@ -69,7 +69,9 @@
             "asus_rt_ax55",
             "asus_rt_ax86u",
             "asus_rt_ax88u",
-            "asus_rt_be82u"
+            "asus_rt_be82u",
+            "asus_rt_ax3000_v2",
+            "asus_rt_ax88u_pro"
           ],
           "description": "Standard wireless routers"
         },
@@ -353,6 +355,15 @@
             "ubiquiti_airos"
           ],
           "description": "Outdoor wireless systems"
+        },
+        "amplifi": {
+          "displayName": "AmpliFi",
+          "category": "mesh",
+          "targetMarket": "consumer",
+          "models": [
+            "ubiquiti_amplifi_alien"
+          ],
+          "description": "Consumer mesh WiFi sub-brand (distinct from the enterprise UniFi line)"
         }
       },
       "country": "USA",
@@ -394,13 +405,38 @@
           "targetMarket": "consumer",
           "models": [
             "verizon_g1100",
-            "verizon_g3100"
+            "verizon_g3100",
+            "verizon_cr1000a",
+            "verizon_cr1000b"
           ],
           "description": "Verizon Fios home gateway devices"
         }
       },
       "country": "USA",
       "securityNotes": "ISP-managed firmware, multiple CVEs in older models, auto-update capability but not always timely"
+    },
+    "spectrum": {
+      "id": "spectrum",
+      "displayName": "Charter Spectrum",
+      "securityUrl": "https://www.spectrum.net/support/internet/modems-routers-wireless-adapters",
+      "bugBounty": false,
+      "cnaStatus": false,
+      "trustRating": "medium",
+      "families": {
+        "advanced-wifi": {
+          "displayName": "Advanced WiFi",
+          "category": "isp-gateway",
+          "targetMarket": "consumer",
+          "models": [
+            "spectrum_sax1v1k",
+            "spectrum_sbe1v1k",
+            "spectrum_rac2v1k"
+          ],
+          "description": "Charter Spectrum ISP-provided WiFi routers, multi-sourced from several ODMs (Askey confirmed for these models) rather than one manufacturer"
+        }
+      },
+      "country": "USA",
+      "securityNotes": "ISP-provided router-only devices (Spectrum separates modem and router — free DOCSIS modem, optional ~$5/month router rental). No Spectrum-specific security advisory page or bug bounty program found in research (2026-09); underlying ODM (Askey) firmware/CVEs weren't cross-referenced per-model here."
     },
     "att": {
       "id": "att",
@@ -3174,6 +3210,7 @@
       "aliases": [
         "hydra pro 6e",
         "mr7500",
+        "linksys mr7500",
         "linksys wifi 6e"
       ],
       "category": "wifi-router",
@@ -6268,6 +6305,327 @@
               "latest": "unknown",
               "eol": false,
               "eolNote": "Runs a customized OpenWrt 18.06 base — older than current upstream OpenWrt — with vendor-backported security patches rather than tracking upstream releases directly. No CPE prefix or specific CVE-to-firmware-version mapping found in research (2026-09); NVD does not appear to track GL.iNet products under a stable CPE. Check https://www.gl-inet.com/security-updates/ for current advisories and https://dl.gl-inet.com/router/sft1200 for the latest firmware before relying on this entry — treat msv as unverified, not a confirmed-safe floor."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "verizon_cr1000a": {
+      "id": "verizon_cr1000a",
+      "vendor": "verizon",
+      "family": "fios",
+      "model": "CR1000A",
+      "displayName": "Verizon Fios Router CR1000A (WiFi 6E)",
+      "aliases": [
+        "cr1000a",
+        "verizon cr1000a",
+        "fios cr1000a"
+      ],
+      "category": "isp-gateway",
+      "targetMarket": "consumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax5400",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "3.3.0.11",
+              "latest": "3.3.0.11",
+              "eol": false,
+              "eolNote": "No specific CVE found in research (2026-09) for CR1000A. OEM manufacturer not independently confirmed. ISP-managed/auto-updated firmware, which reduces exposure vs. user-managed devices, but verify against 'msv router update' before relying on this as a confirmed-clean baseline."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default",
+      "ispGateway": {
+        "provider": "verizon",
+        "ispModelName": "CR1000A",
+        "oemVendor": "unconfirmed",
+        "oemModel": "unconfirmed",
+        "autoUpdated": true,
+        "userManaged": false,
+        "bridgeModeAvailable": true,
+        "ispNotes": "Current-generation Fios WiFi 6E tri-band router."
+      }
+    },
+    "verizon_cr1000b": {
+      "id": "verizon_cr1000b",
+      "vendor": "verizon",
+      "family": "fios",
+      "model": "CR1000B",
+      "displayName": "Verizon Fios Router CR1000B (WiFi 6E)",
+      "aliases": [
+        "cr1000b",
+        "verizon cr1000b",
+        "fios cr1000b"
+      ],
+      "category": "isp-gateway",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "ax5400",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No specific firmware version or CVE data found in research (2026-09) — hardware revision of CR1000A, presumed similar firmware lineage but not confirmed. Run 'msv router update verizon_cr1000b' or check Verizon's support site before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default",
+      "ispGateway": {
+        "provider": "verizon",
+        "ispModelName": "CR1000B",
+        "oemVendor": "unconfirmed",
+        "oemModel": "unconfirmed",
+        "autoUpdated": true,
+        "userManaged": false,
+        "bridgeModeAvailable": true,
+        "ispNotes": "Hardware revision of the CR1000A Fios WiFi 6E router."
+      }
+    },
+    "spectrum_sax1v1k": {
+      "id": "spectrum_sax1v1k",
+      "vendor": "spectrum",
+      "family": "advanced-wifi",
+      "model": "SAX1V1K",
+      "displayName": "Spectrum Advanced WiFi Router SAX1V1K (WiFi 6)",
+      "aliases": [
+        "sax1v1k",
+        "spectrum sax1v1k",
+        "spectrum wifi 6 router"
+      ],
+      "category": "isp-gateway",
+      "targetMarket": "consumer",
+      "releaseYear": 2021,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "OEM: Askey (model RT5010W). No Spectrum-specific or Askey-specific CVE found in research (2026-09). ISP-managed/auto-updated firmware typically reduces exposure, but this entry is unverified — check https://www.spectrum.net/support/internet/modems-routers-wireless-adapters before relying on it."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default",
+      "ispGateway": {
+        "provider": "spectrum",
+        "ispModelName": "SAX1V1K",
+        "oemVendor": "Askey",
+        "oemModel": "RT5010W",
+        "autoUpdated": true,
+        "userManaged": false,
+        "bridgeModeAvailable": false,
+        "ispNotes": "Spectrum WiFi 6 router, offered as an optional ~$5/month rental separate from the (free) DOCSIS modem. Bridge mode availability not confirmed in research."
+      }
+    },
+    "spectrum_sbe1v1k": {
+      "id": "spectrum_sbe1v1k",
+      "vendor": "spectrum",
+      "family": "advanced-wifi",
+      "model": "SBE1V1K",
+      "displayName": "Spectrum Advanced WiFi Router SBE1V1K (WiFi 7)",
+      "aliases": [
+        "sbe1v1k",
+        "spectrum sbe1v1k",
+        "spectrum wifi 7 router"
+      ],
+      "category": "isp-gateway",
+      "targetMarket": "consumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be9300",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "OEM: Askey. Tri-band (2.4/5/6GHz) WiFi 7, has native OpenWrt support per community reports. No CVE found in research (2026-09) — check https://www.spectrum.net/support/internet/modems-routers-wireless-adapters and Askey advisories before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default",
+      "ispGateway": {
+        "provider": "spectrum",
+        "ispModelName": "SBE1V1K",
+        "oemVendor": "Askey",
+        "oemModel": "unconfirmed",
+        "autoUpdated": true,
+        "userManaged": false,
+        "bridgeModeAvailable": false,
+        "ispNotes": "Spectrum's current WiFi 7 tier router, rental separate from the DOCSIS modem."
+      }
+    },
+    "spectrum_rac2v1k": {
+      "id": "spectrum_rac2v1k",
+      "vendor": "spectrum",
+      "family": "advanced-wifi",
+      "model": "RAC2V1K",
+      "displayName": "Spectrum Advanced WiFi Router RAC2V1K (Wave 2)",
+      "aliases": [
+        "rac2v1k",
+        "spectrum rac2v1k"
+      ],
+      "category": "isp-gateway",
+      "targetMarket": "consumer",
+      "releaseYear": 2019,
+      "wifiStandard": "ac1900",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "OEM: Askey. Older 802.11ac Wave 2 dual-band model, predates the WiFi 6/6E/7 SAX/SBE lineup. No CVE found in research (2026-09)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default",
+      "ispGateway": {
+        "provider": "spectrum",
+        "ispModelName": "RAC2V1K",
+        "oemVendor": "Askey",
+        "oemModel": "unconfirmed",
+        "autoUpdated": true,
+        "userManaged": false,
+        "bridgeModeAvailable": false,
+        "ispNotes": "Older Wave 2 AC-class Spectrum rental router."
+      }
+    },
+    "asus_rt_ax3000_v2": {
+      "id": "asus_rt_ax3000_v2",
+      "vendor": "asus",
+      "family": "rt",
+      "model": "RT-AX3000 V2",
+      "displayName": "ASUS RT-AX3000 V2 WiFi 6 Router",
+      "aliases": [
+        "rt-ax3000 v2",
+        "rt-ax3000",
+        "asus ax3000"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax3000",
+      "cpePrefix": "cpe:2.3:h:asus:rt-ax3000",
+      "hardwareVersions": {
+        "v2": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.asus.com/supportonly/rt-ax3000/helpdesk_bios?model2Name=RT-AX3000",
+          "firmwareBranches": {
+            "3.0.0.4.x": {
+              "branchName": "3.0.0.4.x",
+              "msv": "3.0.0.4.388_23925",
+              "msvDate": "2023-09-27",
+              "msvCves": ["CVE-2023-28322", "CVE-2023-28321", "CVE-2023-28319", "CVE-2022-3964", "CVE-2022-48434", "CVE-2022-3109", "CVE-2019-10064"],
+              "latest": "3.0.0.4.388_23925",
+              "latestDate": "2023-09-27",
+              "downloadUrl": "https://www.asus.com/supportonly/rt-ax3000/helpdesk_bios?model2Name=RT-AX3000",
+              "eol": false,
+              "eolNote": "No firmware update found since 2023-09-27 as of this research (2026-09) — community forum threads (SNBForums) specifically ask whether this model still receives updates. Treat as possibly stale/under-supported; verify current status before purchase or continued use."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v2"
+    },
+    "asus_rt_ax88u_pro": {
+      "id": "asus_rt_ax88u_pro",
+      "vendor": "asus",
+      "family": "rt",
+      "model": "RT-AX88U Pro",
+      "displayName": "ASUS RT-AX88U Pro WiFi 6 AX6000 Router",
+      "aliases": [
+        "rt-ax88u pro",
+        "ax88u pro",
+        "asus ax88u pro"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax6000",
+      "cpePrefix": "cpe:2.3:h:asus:rt-ax88u_pro",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-gaming-routers/rt-ax88u-pro/helpdesk_bios/?model2Name=RT-AX88U-Pro",
+          "firmwareBranches": {
+            "3.0.0.6.x": {
+              "branchName": "3.0.0.6.x",
+              "msv": "3.0.0.6.102_21514",
+              "msvCves": ["CVE-2023-28322", "CVE-2023-28321", "CVE-2023-28319", "CVE-2022-3964", "CVE-2022-48434", "CVE-2022-3109", "CVE-2019-10064"],
+              "latest": "3.0.0.6.102_37421",
+              "latestDate": "2026-03-24",
+              "downloadUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-gaming-routers/rt-ax88u-pro/helpdesk_bios/?model2Name=RT-AX88U-Pro",
+              "eol": false
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "ubiquiti_amplifi_alien": {
+      "id": "ubiquiti_amplifi_alien",
+      "vendor": "ubiquiti",
+      "family": "amplifi",
+      "model": "Alien",
+      "displayName": "Ubiquiti AmpliFi Alien WiFi 6 Mesh Router",
+      "aliases": [
+        "amplifi alien",
+        "ubiquiti amplifi alien",
+        "ubiquiti networks amplifi alien",
+        "alien router"
+      ],
+      "category": "mesh",
+      "targetMarket": "prosumer",
+      "releaseYear": 2019,
+      "wifiStandard": "ax5400",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://help.amplifi.com/hc/en-us/articles/360017450154-Updating-or-Rolling-Back-the-AmpliFi-Firmware",
+          "firmwareBranches": {
+            "4.x": {
+              "branchName": "4.x",
+              "msv": "4.0.5",
+              "msvDate": "2023-11-29",
+              "msvCves": ["CVE-2023-4807"],
+              "latest": "4.0.5",
+              "latestDate": "2023-11-29",
+              "downloadUrl": "https://help.amplifi.com/hc/en-us/articles/360017450154-Updating-or-Rolling-Back-the-AmpliFi-Firmware",
+              "eol": false,
+              "eolNote": "Earlier firmware also fixed the FragAttacks WiFi vulnerabilities (CVE-2020-24586/24587/24588/26139-26147, 2020-2021 era) — superseded by the 4.0.5 floor here. AmpliFi is Ubiquiti's consumer mesh sub-brand, distinct from the enterprise UniFi line already in this catalog."
             }
           },
           "kevCves": []

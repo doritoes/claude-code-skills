@@ -171,6 +171,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     firmware 1.2.1 Build 20260527
   - Flagged Archer BE230's authenticated command-injection and DoS CVEs from TP-Link's
     2026-01 advisory bulletin (CVE-2026-0630/0631/22220/22225/22228/22229)
+- **Real eBay sold-listing data analysis** - parsed 1,920 actual eBay sold router listings
+  (manually copied by the user into a .docx after eBay blocked automated/API access), filtered
+  to a genuine 3-day window, and cross-checked the top sellers against the catalog
+  - Notable finding: Apple AirPort Extreme/Express (discontinued since 2018, no firmware
+    updates since 2019) was the single most-resold "router" in the sample — ~11% of all sold
+    listings, more than double the next closest vendor. The used-router market skews heavily
+    toward abandoned hardware that current retail best-seller lists never surface.
+  - Fixed a missing alias: "Linksys MR7500" didn't resolve to the already-cataloged
+    `linksys_hydra_pro_6e` (model field "Hydra Pro 6E (MR7500)") because no alias combined the
+    vendor prefix with the bare model number — added `"linksys mr7500"`
+  - Added a new ISP vendor, **Charter Spectrum** (3 models: SAX1V1K WiFi 6, SBE1V1K WiFi 7,
+    RAC2V1K Wave 2 — all OEM'd by Askey), which had zero catalog presence despite being a
+    top-5 US ISP
+  - Added Verizon Fios CR1000A/CR1000B (WiFi 6E), ASUS RT-AX3000 V2 (flagged as possibly
+    stale — no firmware update found since 2023-09-27), ASUS RT-AX88U Pro (AX6000), and
+    Ubiquiti's AmpliFi Alien mesh router (new `amplifi` family, distinct from the enterprise
+    UniFi line — flags CVE-2023-4807)
 
 ### Changed
 - Version bumped to 1.3.1
