@@ -572,7 +572,11 @@
           "models": [
             "eero_pro_6e",
             "eero_basic",
-            "eero_6"
+            "eero_6",
+            "eero_6_plus",
+            "eero_outdoor_7",
+            "eero_poe_6",
+            "eero_pro_7"
           ],
           "description": "Cloud-managed mesh WiFi systems with auto-updates"
         }
@@ -644,7 +648,9 @@
           "targetMarket": "consumer",
           "models": [
             "starlink_router_gen2",
-            "starlink_router_gen3"
+            "starlink_router_gen3",
+            "starlink_mini",
+            "starlink_standard_4x"
           ],
           "description": "WiFi routers for Starlink satellite internet"
         }
@@ -934,7 +940,8 @@
           "targetMarket": "prosumer",
           "models": [
             "glinet_gl_sft1200",
-            "glinet_gl_mt3000"
+            "glinet_gl_mt3000",
+            "glinet_gl_be3600"
           ],
           "description": "Pocket-sized OpenWrt-based travel routers"
         }
@@ -7498,6 +7505,239 @@
               "latest": "3.0.0.6.102",
               "eol": false,
               "eolNote": "No CVE found specific to this model in research (2026-09)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "eero_6_plus": {
+      "id": "eero_6_plus",
+      "vendor": "amazon",
+      "family": "eero",
+      "model": "eero 6+",
+      "displayName": "Amazon eero 6+ WiFi 6 (AX3000)",
+      "aliases": [
+        "eero 6+",
+        "eero 6 plus",
+        "amazon eero 6+",
+        "amazon eero 6 plus",
+        "r010001"
+      ],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.eero.com/hc/en-us",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Genuinely distinct product from the separately-cataloged 'eero 6' (model N010001, AX1800, 80MHz-only) — eero 6+ (model R010001) adds AX3000 and 160MHz channel support. No CVE found specific to this model in research (2026-09); cloud-managed with automatic updates."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "eero_outdoor_7": {
+      "id": "eero_outdoor_7",
+      "vendor": "amazon",
+      "family": "eero",
+      "model": "eero Outdoor 7",
+      "displayName": "Amazon eero Outdoor 7 WiFi 7 (IP66)",
+      "aliases": [
+        "eero outdoor 7",
+        "amazon eero outdoor 7",
+        "sn11111"
+      ],
+      "category": "mesh",
+      "targetMarket": "prosumer",
+      "releaseYear": 2026,
+      "wifiStandard": "be5800",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.eero.com/hc/en-us",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found in research (2026-09) — new device. Weatherproof IP66-rated outdoor mesh node, WiFi 7 dual-band (2.4/5GHz only, no 6GHz), single 2.5GbE PoE+ port, up to 15,000 sq ft coverage per node. Cloud-managed with automatic updates."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "eero_poe_6": {
+      "id": "eero_poe_6",
+      "vendor": "amazon",
+      "family": "eero",
+      "model": "eero PoE 6",
+      "displayName": "Amazon eero PoE 6 WiFi 6 Access Point",
+      "aliases": [
+        "eero poe 6",
+        "amazon eero poe 6",
+        "t011111"
+      ],
+      "category": "access-point",
+      "targetMarket": "prosumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.eero.com/hc/en-us",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found in research (2026-09). Ceiling/wall-mountable 802.3af PoE-powered access point (not a standalone router) — requires an eero gateway/base station elsewhere on the network. Supports 160MHz channels, up to 2000 sq ft coverage, 100+ devices. Cloud-managed with automatic updates."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "eero_pro_7": {
+      "id": "eero_pro_7",
+      "vendor": "amazon",
+      "family": "eero",
+      "model": "eero Pro 7",
+      "displayName": "Amazon eero Pro 7 Tri-Band WiFi 7",
+      "aliases": [
+        "eero pro 7",
+        "amazon eero pro 7",
+        "me10001"
+      ],
+      "category": "mesh",
+      "targetMarket": "prosumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be9300",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.eero.com/hc/en-us",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found in research (2026-09) — new device. Tri-band WiFi 7 with MLO support, 6GHz band, two 5GbE ports, supports internet plans up to 5 Gbps. Cloud-managed with automatic updates. 'ME10001' seen used as an informal model reference in retail listings, not independently confirmed as the official FCC ID."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "starlink_mini": {
+      "id": "starlink_mini",
+      "vendor": "starlink",
+      "family": "router",
+      "model": "Starlink Mini",
+      "displayName": "Starlink Mini Kit (Integrated WiFi 5 Router)",
+      "aliases": [
+        "starlink mini",
+        "starlink mini kit"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "ac1900",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://starlink.com/support",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Distinct hardware from the separately-cataloged Gen 2/Gen 3 routers — the Mini integrates the router INTO the dish unit itself (WiFi 5), rather than pairing the dish with a separate router box. Firmware is auto-updated by Starlink with no user opt-out. CVE-2023-49965 (XSS) was confirmed for the standalone 'Gen 2' router specifically, not confirmed applicable to the Mini's integrated firmware."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "starlink_standard_4x": {
+      "id": "starlink_standard_4x",
+      "vendor": "starlink",
+      "family": "router",
+      "model": "Starlink Standard 4X (Router 3)",
+      "displayName": "Starlink Standard 4X Kit (Router 3, Tri-Band)",
+      "aliases": [
+        "starlink standard 4x",
+        "starlink standard 4 x",
+        "starlink router 3"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2026,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://starlink.com/support",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Naming lineage unclear as of this research (2026-09): Starlink's current 'Standard 4X' kit ships the tri-band 'Router 3', while 'Standard 4' ships the smaller 'Router Mini'; it isn't confirmed whether either maps onto the separately-cataloged 'Gen 3'/'Standard Kit' entry (starlink_router_gen3, hardware codenames UTA-232/UTR-232) or is genuinely newer hardware. Treated as a distinct entry rather than assumed equivalent. Firmware is auto-updated by Starlink."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "glinet_gl_be3600": {
+      "id": "glinet_gl_be3600",
+      "vendor": "glinet",
+      "family": "travel",
+      "model": "GL-BE3600",
+      "displayName": "GL.iNet GL-BE3600 (Slate 7) WiFi 7 Travel Router",
+      "aliases": [
+        "gl-be3600",
+        "slate 7",
+        "gl.inet slate 7",
+        "glinet slate 7"
+      ],
+      "category": "travel-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be5800",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.gl-inet.com/en-us/products/gl-be3600",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Built on current OpenWrt 23.05 (kernel 5.4.213), unlike the older Opal/GL-SFT1200 which is stuck on a legacy 18.06 base. No CVE found specific to GL-BE3600 in research (2026-09) — other GL.iNet CVEs found (CVE-2023-47463/47464/50919) are for different models. Note: this product is sometimes resold on marketplaces (e.g. Lowe's) under unrelated third-party storefront brand names (e.g. 'CYIKE') rather than GL.iNet — verify the actual manufacturer via the product description/specs, not the storefront name, before trusting a marketplace listing's branding."
             }
           },
           "kevCves": []

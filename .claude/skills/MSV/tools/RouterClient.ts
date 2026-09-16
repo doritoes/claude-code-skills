@@ -50,6 +50,16 @@ export function resetCatalog(): void {
 function normalize(str: string): string {
   return str
     .toLowerCase()
+    // "+" is a real model-distinguishing character for some products (e.g.
+    // "eero 6+" is a genuinely different, faster product than "eero 6" —
+    // AX3000/160MHz vs AX1800/80MHz). Stripping it outright (as the final
+    // [^a-z0-9] pass below does) made "eero 6+" and "eero 6" normalize to
+    // the identical string "eero6", so a query for one silently returned a
+    // false EXACT match (1.0 confidence, no warning — worse than the fuzzy
+    // cases, since exact/alias matches bypass the confidence floor
+    // entirely) for the other. Spelling it out as "plus" instead preserves
+    // the distinction and also matches a user typing "eero 6 plus".
+    .replace(/\+/g, "plus")
     .replace(/[-_\s]+/g, "")
     .replace(/[^a-z0-9]/g, "");
 }

@@ -233,6 +233,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     real CVE advisory but couldn't confirm the affected/fixed model list included this exact
     SKU (e.g. CVE-2024-21833 was found for "Archer and Deco series" broadly, not confirmed
     against Deco W7200 specifically)
+- **Lowe's cross-check found a new bug class: normalization collision** - checked 7 real
+  router models against the catalog (Lowe's "wireless router" search results, after excluding
+  non-router items the search mislabeled — a thermostat gateway, a USB WiFi adapter, a Faraday
+  cage router cover, and several obscure mobile-hotspot dongles)
+  - **Bug:** `normalize()` stripped `+` along with other punctuation, so "eero 6+" and "eero 6"
+    both collapsed to the identical string `"eero6"`. This made a query for one return the
+    other as a false **exact** match (1.0 confidence) — worse than the earlier fuzzy-match bugs,
+    because exact/alias matches bypass the confidence floor entirely and print no warning at
+    all. eero 6+ (model R010001, AX3000, 160MHz) and eero 6 (model N010001, AX1800, 80MHz-only)
+    are genuinely different products. Fixed by spelling `+` out as `"plus"` before stripping
+    punctuation, so "eero 6+" and "eero 6 plus" now normalize identically to each other and
+    distinctly from "eero 6" — and a query for the (until now uncataloged) eero 6+ correctly
+    fell through to the fuzzy-match warning path instead of a silent wrong match. Checked the
+    catalog for other `+`-containing names (Belkin's "N+"/"AC+" marketing suffixes) — none at
+    risk of the same collision.
+  - Added the real eero 6+, plus 3 more eero models not yet cataloged: eero Outdoor 7
+    (WiFi 7, IP66 weatherproof, PoE+), eero PoE 6 (WiFi 6 ceiling/wall access point — new
+    `access-point` category use for this vendor), eero Pro 7 (tri-band WiFi 7 flagship)
+  - Added 2 Starlink models: Mini (integrates the router into the dish itself, distinct
+    hardware from the separately-cataloged Gen 2/Gen 3) and Standard 4X/"Router 3" (tri-band;
+    documented the current naming ambiguity around Starlink's Standard/Standard 4/Standard 4X
+    lineup honestly rather than assuming equivalence to the existing Gen 3 entry)
+  - Added GL.iNet GL-BE3600 ("Slate 7", WiFi 7 travel router, current OpenWrt 23.05 base) and
+    noted in its own entry that marketplaces sometimes resell it under unrelated storefront
+    brand names (observed: "CYIKE" on Lowe's) — a reminder to verify the actual manufacturer
+    from the product description, not the storefront-displayed brand
+  - One candidate ("Adrinfly BE7200") was excluded rather than cataloged: no verifiable
+    manufacturer found in research, and MSV can't provide meaningful security guidance for a
+    router with no traceable vendor security page or firmware lineage
 
 ### Changed
 - Version bumped to 1.3.1
