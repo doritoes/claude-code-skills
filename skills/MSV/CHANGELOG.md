@@ -188,6 +188,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     stale — no firmware update found since 2023-09-27), ASUS RT-AX88U Pro (AX6000), and
     Ubiquiti's AmpliFi Alien mesh router (new `amplifi` family, distinct from the enterprise
     UniFi line — flags CVE-2023-4807)
+- **Amazon best-seller cross-check** - checked the top 16 Amazon wireless-router best-sellers
+  against the catalog; 8 were already covered by the prior three rounds (good validation of
+  the earlier real-world testing), 8 were gaps
+  - Two more missing-alias bugs of the same shape as MR7500: "Amazon eero 6" didn't resolve to
+    the already-cataloged `eero_6` (missing "amazon eero 6" alias), and "TP-Link Deco 7 Pro"
+    didn't resolve to the newly-added `tplink_deco_be63` (missing "tp-link deco 7 pro" alias —
+    "Deco 7 Pro" is the Amazon 3-pack bundle name for the Deco BE63)
+  - Added TP-Link Deco BE63 (WiFi 7 tri-band mesh, sold as "Deco 7 Pro"), Deco S4 (AC1900
+    mesh), Archer BE400/BE6500 (flags CVE-2025-14631, an unauthenticated DoS via a single
+    malformed 802.11 frame), Archer A6 (flags CVE-2026-9030/9031), Archer A54 (flags two
+    unauthenticated stack-overflow RCE CVEs, 2022-25072 and 2023-44448)
+  - Added GL.iNet GL-MT3000 "Beryl AX" (WiFi 6 travel router, current OpenWrt-based firmware
+    unlike the older Opal/GL-SFT1200 which is stuck on a legacy 18.06 base)
+  - Added NETGEAR R6700AX (WiFi 6 AX1800; flags CVE-2021-45602 with a confirmed fixed version,
+    plus two newer 2026 CVEs referenced in NETGEAR's advisories without a confirmed fix version
+    yet)
+  - Several new entries have `msv: "unknown"` where research found real CVEs but no
+    confirmed fixed-firmware version — documented honestly in each `eolNote` with a pointer to
+    verify via `msv router update` rather than guessing a version number
 
 ### Changed
 - Version bumped to 1.3.1

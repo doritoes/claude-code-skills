@@ -22,7 +22,8 @@
             "netgear_rax50",
             "netgear_rax40",
             "netgear_rs200",
-            "netgear_cax30"
+            "netgear_cax30",
+            "netgear_r6700ax"
           ],
           "description": "High-performance WiFi routers"
         },
@@ -117,7 +118,10 @@
             "tplink_archer_be900",
             "tplink_archer_ax55",
             "tplink_archer_ax55_pro",
-            "tplink_archer_be230"
+            "tplink_archer_be230",
+            "tplink_archer_be400",
+            "tplink_archer_a6",
+            "tplink_archer_a54"
           ],
           "description": "Mid-range to high-end wireless routers"
         },
@@ -127,7 +131,9 @@
           "targetMarket": "consumer",
           "models": [
             "tplink_deco_m5",
-            "tplink_deco_x60"
+            "tplink_deco_x60",
+            "tplink_deco_be63",
+            "tplink_deco_s4"
           ],
           "description": "Mesh WiFi systems"
         },
@@ -899,7 +905,8 @@
           "category": "travel-router",
           "targetMarket": "prosumer",
           "models": [
-            "glinet_gl_sft1200"
+            "glinet_gl_sft1200",
+            "glinet_gl_mt3000"
           ],
           "description": "Pocket-sized OpenWrt-based travel routers"
         }
@@ -4039,6 +4046,7 @@
       "displayName": "Amazon eero 6 WiFi 6",
       "aliases": [
         "eero 6",
+        "amazon eero 6",
         "m110311",
         "eero ax1800",
         "eero wifi 6"
@@ -6626,6 +6634,252 @@
               "downloadUrl": "https://help.amplifi.com/hc/en-us/articles/360017450154-Updating-or-Rolling-Back-the-AmpliFi-Firmware",
               "eol": false,
               "eolNote": "Earlier firmware also fixed the FragAttacks WiFi vulnerabilities (CVE-2020-24586/24587/24588/26139-26147, 2020-2021 era) — superseded by the 4.0.5 floor here. AmpliFi is Ubiquiti's consumer mesh sub-brand, distinct from the enterprise UniFi line already in this catalog."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_deco_be63": {
+      "id": "tplink_deco_be63",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco BE63",
+      "displayName": "TP-Link Deco BE63 Tri-Band WiFi 7 Mesh System",
+      "aliases": [
+        "deco be63",
+        "tp-link deco be63",
+        "deco 7 pro",
+        "tp-link deco 7 pro",
+        "deco be11000"
+      ],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be9300",
+      "cpePrefix": "cpe:2.3:h:tp-link:deco_be63",
+      "hardwareVersions": {
+        "v2.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/deco-be63/v3.60/",
+          "firmwareBranches": {
+            "1.3.x": {
+              "branchName": "1.3.x",
+              "msv": "1.3.2",
+              "msvDate": "2026-04",
+              "latest": "1.3.2",
+              "latestDate": "2026-04",
+              "downloadUrl": "https://www.tp-link.com/us/support/download/deco-be63/v3.60/",
+              "eol": false,
+              "eolNote": "No CVE found specific to Deco BE63 in research (2026-09) — CVE-2026-17176 (OS command injection) applies to the related but distinct Deco BE11000, not BE63. Sold under 'Deco 7 Pro' as an Amazon 3-pack bundle name."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v2.6"
+    },
+    "tplink_deco_s4": {
+      "id": "tplink_deco_s4",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco S4",
+      "displayName": "TP-Link Deco S4 AC1900 Mesh System",
+      "aliases": [
+        "deco s4",
+        "tp-link deco s4"
+      ],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2021,
+      "wifiStandard": "ac1900",
+      "cpePrefix": "cpe:2.3:h:tp-link:deco_s4",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/deco-s4/",
+          "firmwareBranches": {
+            "1.x": {
+              "branchName": "1.x",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE or firmware version data found specific to Deco S4 in research (2026-09) — TP-Link Deco security advisories found were for different models (M4, BE25, BE11000). Run 'msv router update tplink_deco_s4' or check TP-Link's security advisory page before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_be400": {
+      "id": "tplink_archer_be400",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE400",
+      "displayName": "TP-Link Archer BE400 Dual-Band WiFi 7 Router (BE6500)",
+      "aliases": [
+        "archer be400",
+        "be400",
+        "tp-link be400",
+        "be6500"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be9300",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be400",
+      "hardwareVersions": {
+        "v1": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/faq/4871/",
+          "firmwareBranches": {
+            "1.1.x": {
+              "branchName": "1.1.x",
+              "msv": "unknown",
+              "msvCves": ["CVE-2025-14631"],
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "CVE-2025-14631 (CVSS 7.1): unauthenticated NULL pointer dereference DoS via a single malformed 802.11 frame, regardless of WPA2/WPA3 config — affects firmware 1.1.0 Build 20250710 rel.14914 and older on hardware V1. A fix is available per TP-Link's advisory (FAQ 4871) but the exact fixed version string wasn't confirmed in research (2026-09) — verify you're above that build and run 'msv router update tplink_archer_be400' before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1"
+    },
+    "tplink_archer_a6": {
+      "id": "tplink_archer_a6",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer A6",
+      "displayName": "TP-Link Archer A6 AC1200 Router",
+      "aliases": [
+        "archer a6",
+        "tp-link a6"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2018,
+      "wifiStandard": "ac1200",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_a6",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/faq/5234/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "msvCves": ["CVE-2026-9030", "CVE-2026-9031"],
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "TP-Link security advisory FAQ 5234 (2026): CVE-2026-9030 is an authenticated DoS in the httpd service (async systool instruction handling). Exact fixed firmware version wasn't confirmed in research (2026-09) — TP-Link recommends applying available updates or documented workarounds. Verify via 'msv router update tplink_archer_a6'."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_a54": {
+      "id": "tplink_archer_a54",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer A54",
+      "displayName": "TP-Link Archer A54 AC1200 Router",
+      "aliases": [
+        "archer a54",
+        "tp-link a54"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2020,
+      "wifiStandard": "ac1200",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_a54",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "msvCves": ["CVE-2022-25072", "CVE-2023-44448"],
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Two unauthenticated stack-based buffer overflow RCE CVEs found (DM_Fillobjbystr/dm_fillObjByStr in libcmm.so) affecting firmware referenced as US_V1_210111. No confirmed fixed version found in research (2026-09) — run 'msv router update tplink_archer_a54' or check TP-Link's support page before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "glinet_gl_mt3000": {
+      "id": "glinet_gl_mt3000",
+      "vendor": "glinet",
+      "family": "travel",
+      "model": "GL-MT3000",
+      "displayName": "GL.iNet GL-MT3000 (Beryl AX) Travel Router",
+      "aliases": [
+        "gl-mt3000",
+        "beryl ax",
+        "gl.inet beryl ax",
+        "glinet beryl ax",
+        "mt3000"
+      ],
+      "category": "travel-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.gl-inet.com/security-updates/",
+          "firmwareBranches": {
+            "4.x": {
+              "branchName": "4.x",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "Multiple CVEs found across firmware history (CVE-2024-39225 through -39229, CVE-2025-62526) but no single confirmed 'fixed as of' floor version in research (2026-09). GL.iNet publishes dated security advisories — check https://www.gl-inet.com/security-updates/ and run 'msv router update glinet_gl_mt3000' before relying on this entry. Runs current OpenWrt-based firmware (unlike the older Opal/GL-SFT1200, which is stuck on a legacy 18.06 base)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_r6700ax": {
+      "id": "netgear_r6700ax",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "R6700AX",
+      "displayName": "NETGEAR Nighthawk R6700AX WiFi 6 Router (AX1800)",
+      "aliases": [
+        "r6700ax",
+        "nighthawk r6700ax",
+        "netgear r6700ax"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2020,
+      "wifiStandard": "ax1800",
+      "cpePrefix": "cpe:2.3:h:netgear:r6700ax",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.netgear.com/support/product/R6700AX.aspx",
+          "firmwareBranches": {
+            "1.0.x": {
+              "branchName": "1.0.x",
+              "msv": "1.0.10.110",
+              "msvDate": "2022-01-01",
+              "msvCves": ["CVE-2021-45602"],
+              "latest": "1.0.10.110",
+              "eol": false,
+              "eolNote": "1.0.10.110 fixes CVE-2021-45602 (authenticated command injection). Two more recent CVEs — CVE-2026-9212 (authentication bypass) and CVE-2026-11814 (command injection, MEDIUM) — are referenced in NETGEAR's June/August 2026 security advisories without a specific fixed version confirmed in research (2026-09). Run 'msv router update netgear_r6700ax' or check kb.netgear.com before treating 1.0.10.110 as sufficient."
             }
           },
           "kevCves": []
