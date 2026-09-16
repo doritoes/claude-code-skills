@@ -58,6 +58,7 @@ export type WifiStandard =
   | "ac1900" // 802.11ac AC1900
   | "ac2600" // 802.11ac AC2600
   | "ac1600" // 802.11ac AC1600
+  | "ac2200" // 802.11ac AC2200 (tri-band)
   | "ac3000" // 802.11ac AC3000
   | "ac5300" // 802.11ac AC5300
   | "ax1500" // 802.11ax AX1500 (WiFi 6)
@@ -452,6 +453,11 @@ export interface RouterResult {
 
   /** How the match was made */
   matchMethod?: "exact" | "alias" | "fuzzy" | "cpe";
+
+  /** Set when matchMethod is "fuzzy" — the query didn't hit a true catalog
+   *  entry, so this result may be for the wrong product. Always check this
+   *  before trusting a fuzzy result's MSV/CVE data. */
+  matchWarning?: string;
 
   /** CVE timeline information for KEV CVEs */
   cveTimeline?: CveTimeline[];

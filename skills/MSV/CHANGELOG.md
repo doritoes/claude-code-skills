@@ -126,6 +126,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `versionPattern` to firewall products for format validation
   - Added `eolProductId` field to critical entries (Chrome, Edge, Firefox, Python, OpenSSL, Tomcat)
 
+### Fixed
+- **Router fuzzy-match safety** - `msv router query` could silently return the wrong product's
+  MSV/CVE data with a misleadingly high confidence label (found via a real-world test querying
+  eBay-resale-popular router models: NETGEAR "CAX30" matched Huawei "AX3" at 84% "exact" confidence
+  via a coincidental substring; "RS200" — a 2026 WiFi 7 flagship — matched "R7000" — a 2013 AC1900
+  model — at 90% "alias" confidence via a shared "NETGEAR Nighthawk" prefix)
+  - `calculateConfidence()`'s substring "contains" bonus now requires the shorter string to be at
+    least 4 characters and 40%+ of the longer string's length, so short model numbers can't
+    coincidentally match inside unrelated ones
+  - The model-number "exact" match channel now requires true whole-string equality instead of
+    substring containment
+  - Added a model-number-token penalty so shared vendor/family wording (e.g. "NETGEAR Nighthawk")
+    can no longer mask an unrelated model number in whole-string similarity scoring
+  - Raised the confidence floor for non-equal (fuzzy) matches to 80%; below that, `findModel()`
+    returns no match instead of guessing, and the new `rankCandidates()` supplies "did you mean"
+    suggestions for the error message
+  - `matchMethod` is now `"exact"`/`"alias"` only for true 1.0-confidence equality; every other
+    match is `"fuzzy"` and surfaces a loud `matchWarning` banner (text and JSON output) instead of
+    a quiet one-line confidence footnote
+- Router catalog expansion (+7 models) closing real-world coverage gaps found by the same test:
+  NETGEAR RAX40, NETGEAR Orbi RBK12, NETGEAR Nighthawk RS200, NETGEAR CAX30, Linksys EA7500,
+  ASUS RT-BE82U, TP-Link Archer BE900
+  - Flagged Linksys EA7500 CVE-2023-46012 (CVSS 9.8, unauthenticated RCE via UPnP) as
+    `"NO SAFE VERSION EXISTS"` — no vendor patch exists as of this research
+
 ### Changed
 - Version bumped to 1.3.1
 - Improved error messages with consistent format and helpful hints

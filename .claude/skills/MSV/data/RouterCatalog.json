@@ -1,6 +1,6 @@
 {
-  "version": "2.16.0",
-  "lastUpdated": "2026-03-08",
+  "version": "2.17.0",
+  "lastUpdated": "2026-09-16",
   "vendors": {
     "netgear": {
       "id": "netgear",
@@ -19,7 +19,10 @@
           "models": [
             "netgear_r7000",
             "netgear_r8000",
-            "netgear_rax50"
+            "netgear_rax50",
+            "netgear_rax40",
+            "netgear_rs200",
+            "netgear_cax30"
           ],
           "description": "High-performance WiFi routers"
         },
@@ -30,7 +33,8 @@
           "models": [
             "netgear_orbi_370",
             "netgear_orbi_rbk852",
-            "netgear_orbi_rbk50"
+            "netgear_orbi_rbk50",
+            "netgear_orbi_rbk12"
           ],
           "description": "Whole-home mesh WiFi systems"
         },
@@ -64,7 +68,8 @@
           "models": [
             "asus_rt_ax55",
             "asus_rt_ax86u",
-            "asus_rt_ax88u"
+            "asus_rt_ax88u",
+            "asus_rt_be82u"
           ],
           "description": "Standard wireless routers"
         },
@@ -106,7 +111,8 @@
           "models": [
             "tplink_archer_ax21",
             "tplink_archer_ax50",
-            "tplink_archer_c7"
+            "tplink_archer_c7",
+            "tplink_archer_be900"
           ],
           "description": "Mid-range to high-end wireless routers"
         },
@@ -463,6 +469,15 @@
             "linksys_atlas_max_6e"
           ],
           "description": "Premium WiFi 6E mesh systems"
+        },
+        "ea": {
+          "displayName": "Max-Stream EA Series",
+          "category": "wifi-router",
+          "targetMarket": "consumer",
+          "models": [
+            "linksys_ea7500"
+          ],
+          "description": "Legacy AC-generation Max-Stream routers"
         }
       },
       "country": "USA",
@@ -2867,8 +2882,8 @@
           "firmwareBranches": {
             "1.x": {
               "branchName": "1.x",
-              "msv": "1.0.9.90",
-              "msvDate": "2023-04-15",
+              "msv": "1.2.14.114",
+              "msvDate": "2026-09-16",
               "latest": "1.0.11.136",
               "latestDate": "2025-06-20",
               "downloadUrl": "https://www.netgear.com/support/product/RAX50.aspx#download",
@@ -5816,6 +5831,272 @@
         }
       },
       "defaultHwVersion": "default"
+    },
+    "netgear_rax40": {
+      "id": "netgear_rax40",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "RAX40",
+      "displayName": "NETGEAR Nighthawk RAX40 AX1800",
+      "aliases": [
+        "rax40",
+        "nighthawk ax4",
+        "netgear ax4",
+        "netgear nighthawk rax40"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2019,
+      "wifiStandard": "ax1800",
+      "cpePrefix": "cpe:2.3:h:netgear:rax40",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.netgear.com/support/product/RAX40.aspx",
+          "firmwareBranches": {
+            "1.0.x": {
+              "branchName": "1.0.x",
+              "msv": "1.0.3.94",
+              "msvDate": "2021-09-01",
+              "msvCves": ["CVE-2022-48196", "CVE-2021-38526", "CVE-2020-26898", "CVE-2019-20647", "CVE-2019-20644"],
+              "latest": "1.0.6.106",
+              "latestDate": "2024-01-01",
+              "downloadUrl": "https://www.netgear.com/support/product/RAX40.aspx#download",
+              "eol": false,
+              "eolNote": "Firmware 1.0.5.104 and 1.0.6.106 shipped additional unspecified 'security fixes' beyond the named CVEs above — update to 1.0.6.106 rather than relying on the 1.0.3.94 floor."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_orbi_rbk12": {
+      "id": "netgear_orbi_rbk12",
+      "vendor": "netgear",
+      "family": "orbi",
+      "model": "RBK12",
+      "displayName": "NETGEAR Orbi RBK12 AC2200 Tri-Band Mesh (RBR20 + RBS20)",
+      "aliases": [
+        "rbk12",
+        "orbi rbk12",
+        "netgear orbi rbk12",
+        "rbr20",
+        "rbs20",
+        "orbi ac2200"
+      ],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2018,
+      "wifiStandard": "ac2200",
+      "cpePrefix": "cpe:2.3:h:netgear:rbr20",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.netgear.com/support/product/RBK12.aspx",
+          "firmwareBranches": {
+            "2.x": {
+              "branchName": "2.x",
+              "msv": "2.7.3.22",
+              "latest": "2.7.6.6",
+              "latestDate": "2026-01-13",
+              "downloadUrl": "https://www.netgear.com/support/product/RBK12.aspx#download",
+              "eol": false,
+              "eolNote": "No CVE-specific MSV threshold found in research (2026-09) — msv is a recent stable baseline, not a confirmed-safe floor. Run 'msv router update netgear_orbi_rbk12' to pull live NVD/KEV data before relying on this."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "linksys_ea7500": {
+      "id": "linksys_ea7500",
+      "vendor": "linksys",
+      "family": "ea",
+      "model": "EA7500",
+      "displayName": "Linksys EA7500 Max-Stream AC1900",
+      "aliases": [
+        "ea7500",
+        "linksys ea7500",
+        "max-stream ea7500",
+        "linksys max-stream ac1900"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2016,
+      "wifiStandard": "ac1900",
+      "cpePrefix": "cpe:2.3:h:linksys:ea7500",
+      "hardwareVersions": {
+        "v3": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.linksys.com/support-article?articleNum=207490",
+          "firmwareBranches": {
+            "3.x": {
+              "branchName": "3.x",
+              "msv": "NO SAFE VERSION EXISTS",
+              "msvDate": "2023-10-18",
+              "msvCves": ["CVE-2023-46012"],
+              "latest": "3.0.1.207964",
+              "latestDate": "2023-06-01",
+              "eol": false,
+              "eolNote": "CVE-2023-46012 (CVSS 9.8, unauthenticated RCE via UPnP IGD SOAP handling) has NO vendor patch as of last research (2026-09) — affects all firmware up to and including the latest release. Mitigate by disabling UPnP or replacing the device; do not expose the admin/UPnP interface to untrusted networks."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v3"
+    },
+    "asus_rt_be82u": {
+      "id": "asus_rt_be82u",
+      "vendor": "asus",
+      "family": "rt",
+      "model": "RT-BE82U",
+      "displayName": "ASUS RT-BE82U WiFi 7 BE6500 Dual-Band Router",
+      "aliases": [
+        "rt-be82u",
+        "be82u",
+        "asus be82u"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:asus:rt-be82u",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-wifi-routers/rt-be82u/helpdesk_bios/",
+          "firmwareBranches": {
+            "3.0.0.6.x": {
+              "branchName": "3.0.0.6.x",
+              "msv": "3.0.0.6.102_38059",
+              "msvDate": "2025-03-21",
+              "latest": "3.0.0.6.102_39254",
+              "latestDate": "2026-03-27",
+              "downloadUrl": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-wifi-routers/rt-be82u/helpdesk_bios/",
+              "eol": false
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_rs200": {
+      "id": "netgear_rs200",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "RS200",
+      "displayName": "NETGEAR Nighthawk RS200 WiFi 7 Dual-Band Router",
+      "aliases": [
+        "rs200",
+        "nighthawk rs200",
+        "netgear rs200",
+        "netgear nighthawk rs200",
+        "rs200v2"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2026,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:netgear:rs200",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.netgear.com/support/product/rs200v2",
+          "firmwareBranches": {
+            "1.0.x": {
+              "branchName": "1.0.x",
+              "msv": "1.0.6.22",
+              "latest": "1.0.6.22",
+              "latestDate": "2026-01-01",
+              "downloadUrl": "https://support.netgear.com/support/product/rs200v2",
+              "eol": false,
+              "eolNote": "No known CVEs as of last research (2026-09) — new device, NETGEAR's first dual-band WiFi 7 Nighthawk."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_cax30": {
+      "id": "netgear_cax30",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "CAX30",
+      "displayName": "NETGEAR Nighthawk CAX30 AX6 Cable Modem Router (DOCSIS 3.1)",
+      "aliases": [
+        "cax30",
+        "nighthawk cax30",
+        "netgear cax30",
+        "cax30s"
+      ],
+      "category": "modem-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2021,
+      "wifiStandard": "ax5400",
+      "cpePrefix": "cpe:2.3:h:netgear:cax30",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.netgear.com/support/product/cax30",
+          "firmwareBranches": {
+            "2.x": {
+              "branchName": "2.x",
+              "msv": "1.4.11.2",
+              "msvDate": "2023-01-02",
+              "msvCves": ["CVE-2023-44445"],
+              "latest": "2.2.2.2",
+              "latestDate": "2026-01-01",
+              "downloadUrl": "https://www.netgear.com/support/product/cax30",
+              "eol": false,
+              "eolNote": "Firmware also fixed an unauthenticated admin-interface auth bypass (NETGEAR PSV-2023-0138) in 1.4.11.2. The 2.x branch supersedes legacy 1.4.x; assumed to include this fix but not independently confirmed in research (2026-09) — run 'msv router update netgear_cax30' to verify against live NVD/KEV data."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_be900": {
+      "id": "tplink_archer_be900",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE900",
+      "displayName": "TP-Link Archer BE900 WiFi 7 BE19000 Router",
+      "aliases": [
+        "archer be900",
+        "be900",
+        "tp-link be900",
+        "archer be900 v2"
+      ],
+      "category": "wifi-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be19000",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be900",
+      "hardwareVersions": {
+        "v2": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-be900/v2.60/",
+          "firmwareBranches": {
+            "1.x": {
+              "branchName": "1.x",
+              "msv": "1.3.1",
+              "latest": "1.3.1",
+              "latestDate": "2026-01-01",
+              "downloadUrl": "https://www.tp-link.com/us/support/download/archer-be900/v2.60/",
+              "eol": false,
+              "eolNote": "No known CVEs found in research (2026-09)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v2"
     }
   }
 }

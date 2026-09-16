@@ -94,11 +94,17 @@ function calculateConfidence(input: string, target: string): number {
   // Exact match
   if (normInput === normTarget) return 1.0;
 
-  // Contains match
+  // Contains match — gated so a short string can't cheaply "match" by
+  // coincidental substring containment (e.g. model number "AX3" is a
+  // literal substring of the unrelated model number "CAX30", which used to
+  // score ~84% confidence). Require the shorter string to carry real
+  // signal: at least 4 chars and at least 40% of the longer string's length.
   if (normTarget.includes(normInput) || normInput.includes(normTarget)) {
     const longer = Math.max(normInput.length, normTarget.length);
     const shorter = Math.min(normInput.length, normTarget.length);
-    return 0.8 + (0.15 * shorter) / longer;
+    if (shorter >= 4 && shorter / longer >= 0.4) {
+      return 0.8 + (0.15 * shorter) / longer;
+    }
   }
 
   // Levenshtein distance
@@ -110,74 +116,183 @@ function calculateConfidence(input: string, target: string): number {
 }
 
 /**
- * Find the best matching model for a query
+ * Minimum confidence a non-exact (fuzzy) match must clear to be returned at
+ * all. Below this, findModel() reports no match rather than silently
+ * substituting a different product — see rankCandidates() for the
+ * "did you mean" suggestions used in that case.
+ *
+ * Raised from an effective 0.5 after a real-world catalog test (2026-09-16)
+ * found the old floor let unrelated products through with misleadingly high
+ * confidence labels (e.g. a query for NETGEAR "RS200" — a 2026 WiFi 7
+ * flagship — silently returned "R7000" — a 2013 AC1900 model — data at 90%
+ * "alias" confidence). See docs/FutureExpansion.md Section 9.
  */
-export async function findModel(
-  query: RouterQuery
-): Promise<{ model: RouterModel; confidence: number; method: string } | null> {
-  const catalog = await loadCatalog();
+const MIN_FUZZY_CONFIDENCE = 0.8;
+
+/**
+ * Extract the token most likely to be a router's distinguishing model
+ * number (e.g. "RS200" out of "NETGEAR Nighthawk RS200"). Only considers
+ * tokens containing a digit, and only ones with enough length to be a
+ * meaningful discriminator — a bare version digit like the "7" in
+ * "Dream Router 7" is not treated as a model number.
+ */
+function extractModelNumberToken(input: string): string | null {
+  const tokens = input.split(/[\s\-_/]+/).filter(Boolean);
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    if (/\d/.test(tokens[i]) && tokens[i].length >= 3) {
+      return tokens[i];
+    }
+  }
+  return null;
+}
+
+/**
+ * Discount a fuzzy confidence score when the candidate's model number
+ * doesn't meaningfully match the query's model-number token, even if the
+ * surrounding vendor/family words do.
+ *
+ * Router products are distinguished primarily by their model number, not by
+ * shared vendor/family naming — "NETGEAR Nighthawk RS200" and "NETGEAR
+ * Nighthawk R7000" share 17 of ~21 normalized characters ("netgearnighthawk"),
+ * which let whole-string Levenshtein similarity alone score ~90% even though
+ * RS200 and R7000 are unrelated products from different eras. Comparing the
+ * model-number tokens in isolation (here: "rs200" vs "r7000", ~60% similar)
+ * catches that and drags the overall score below MIN_FUZZY_CONFIDENCE.
+ *
+ * Compares against the CANDIDATE's own extracted model-number token, not its
+ * full (possibly long, multi-word) `model.model` string — e.g. for "ROG
+ * Rapture GT-BE98 Pro" the discriminator is "BE98", not the whole string.
+ * Comparing a short input token against a long descriptive string instead
+ * would unfairly fail the length-ratio gate in calculateConfidence()'s
+ * contains-bonus and wrongly penalize a genuinely matching query like "ROG
+ * GT-BE98 Pro" (missing only the word "Rapture").
+ */
+function penalizeForModelNumberMismatch(
+  rawConfidence: number,
+  inputModelToken: string | null,
+  candidateModelString: string
+): number {
+  if (!inputModelToken) return rawConfidence;
+  const candidateModelToken = extractModelNumberToken(candidateModelString);
+  if (!candidateModelToken) return rawConfidence;
+  const tokenScore = calculateConfidence(inputModelToken, candidateModelToken);
+  if (tokenScore < 0.75) {
+    return rawConfidence * 0.4;
+  }
+  return rawConfidence;
+}
+
+/**
+ * Score every catalog model against a query, sorted best-first. Used by both
+ * findModel() (which applies the confidence floor) and rankCandidates()
+ * (which doesn't, so it can suggest near-misses when nothing clears it).
+ *
+ * matchMethod is "exact"/"alias" only for true 1.0-confidence string
+ * equality; every other match — however high its score — is "fuzzy". The
+ * old code labeled some non-equal matches "exact"/"alias" whenever their
+ * score crossed 0.95, which is how a completely wrong cross-vendor match
+ * (NETGEAR "CAX30" -> Huawei "AX3") could print as "exact".
+ */
+function rankModels(
+  query: RouterQuery,
+  catalog: RouterCatalog
+): Array<{ model: RouterModel; confidence: number; method: "exact" | "alias" | "fuzzy" }> {
   const normInput = normalize(query.input);
+  const inputModelToken = extractModelNumberToken(query.input);
+  const scored: Array<{ model: RouterModel; confidence: number; method: "exact" | "alias" | "fuzzy" }> = [];
 
-  let bestMatch: RouterModel | null = null;
-  let bestConfidence = 0;
-  let matchMethod = "fuzzy";
-
-  // Check each model
   for (const model of Object.values(catalog.models)) {
     // Vendor filter if specified
     if (query.vendor && normalize(query.vendor) !== normalize(model.vendor)) {
       continue;
     }
 
-    // Check model number (exact)
+    let bestForModel = 0;
+    let methodForModel: "exact" | "alias" | "fuzzy" = "fuzzy";
+
+    // Check model number (whole-string equality only — NOT substring
+    // containment, which previously let a short model number match
+    // whenever it happened to appear inside an unrelated one)
     const normModel = normalize(model.model);
-    if (normInput === normModel || normInput.includes(normModel)) {
-      const conf = calculateConfidence(query.input, model.model);
-      if (conf > bestConfidence) {
-        bestMatch = model;
-        bestConfidence = conf;
-        matchMethod = "exact";
-      }
+    if (normInput === normModel) {
+      bestForModel = 1.0;
+      methodForModel = "exact";
     }
 
     // Check display name
-    const displayConf = calculateConfidence(query.input, model.displayName);
-    if (displayConf > bestConfidence) {
-      bestMatch = model;
-      bestConfidence = displayConf;
-      matchMethod = displayConf > 0.95 ? "exact" : "fuzzy";
+    const rawDisplayConf = calculateConfidence(query.input, model.displayName);
+    const displayConf =
+      rawDisplayConf === 1.0
+        ? 1.0
+        : penalizeForModelNumberMismatch(rawDisplayConf, inputModelToken, model.model);
+    if (displayConf > bestForModel) {
+      bestForModel = displayConf;
+      methodForModel = displayConf === 1.0 ? "exact" : "fuzzy";
     }
 
     // Check aliases
     for (const alias of model.aliases) {
-      const aliasConf = calculateConfidence(query.input, alias);
-      if (aliasConf > bestConfidence) {
-        bestMatch = model;
-        bestConfidence = aliasConf;
-        matchMethod = "alias";
+      const rawAliasConf = calculateConfidence(query.input, alias);
+      const aliasConf =
+        rawAliasConf === 1.0
+          ? 1.0
+          : penalizeForModelNumberMismatch(rawAliasConf, inputModelToken, model.model);
+      if (aliasConf > bestForModel) {
+        bestForModel = aliasConf;
+        methodForModel = aliasConf === 1.0 ? "alias" : "fuzzy";
       }
     }
 
     // Check vendor + model combo
     const vendorModel = `${catalog.vendors[model.vendor]?.displayName || model.vendor} ${model.model}`;
-    const vmConf = calculateConfidence(query.input, vendorModel);
-    if (vmConf > bestConfidence) {
-      bestMatch = model;
-      bestConfidence = vmConf;
-      matchMethod = vmConf > 0.95 ? "exact" : "fuzzy";
+    const rawVmConf = calculateConfidence(query.input, vendorModel);
+    const vmConf =
+      rawVmConf === 1.0 ? 1.0 : penalizeForModelNumberMismatch(rawVmConf, inputModelToken, model.model);
+    if (vmConf > bestForModel) {
+      bestForModel = vmConf;
+      methodForModel = vmConf === 1.0 ? "exact" : "fuzzy";
+    }
+
+    if (bestForModel > 0) {
+      scored.push({ model, confidence: bestForModel, method: methodForModel });
     }
   }
 
-  // Require minimum confidence
-  if (bestConfidence < 0.5 || !bestMatch) {
-    return null;
-  }
+  scored.sort((a, b) => b.confidence - a.confidence);
+  return scored;
+}
 
-  return {
-    model: bestMatch,
-    confidence: bestConfidence,
-    method: matchMethod,
-  };
+/**
+ * Find the best matching model for a query. Returns null if nothing reaches
+ * true equality (exact/alias) or clears MIN_FUZZY_CONFIDENCE — see
+ * rankCandidates() for "did you mean" suggestions in that case.
+ */
+export async function findModel(
+  query: RouterQuery
+): Promise<{ model: RouterModel; confidence: number; method: string } | null> {
+  const catalog = await loadCatalog();
+  const ranked = rankModels(query, catalog);
+  const top = ranked[0];
+
+  if (!top) return null;
+  if (top.method === "fuzzy" && top.confidence < MIN_FUZZY_CONFIDENCE) return null;
+
+  return top;
+}
+
+/**
+ * Top N near-misses for a query, regardless of confidence floor — used to
+ * build "did you mean" suggestions when findModel() finds nothing
+ * confident enough to return.
+ */
+export async function rankCandidates(
+  query: RouterQuery,
+  limit = 3
+): Promise<Array<{ model: RouterModel; confidence: number; method: string }>> {
+  const catalog = await loadCatalog();
+  return rankModels(query, catalog)
+    .filter((r) => r.confidence >= 0.3)
+    .slice(0, limit);
 }
 
 /**
@@ -304,9 +419,16 @@ export async function queryRouter(query: RouterQuery): Promise<RouterResult> {
   // Find model
   const match = await findModel(query);
   if (!match) {
+    const candidates = await rankCandidates(query);
+    const suggestion =
+      candidates.length > 0
+        ? ` Closest catalog entries (none confident enough to use): ${candidates
+            .map((c) => `${c.model.displayName} (${Math.round(c.confidence * 100)}%)`)
+            .join(", ")}.`
+        : "";
     return {
       success: false,
-      error: `No matching router found for "${query.input}". Try a more specific query like "NETGEAR R7000" or "TP-Link Archer AX21".`,
+      error: `No matching router found for "${query.input}".${suggestion} Try a more specific query like "NETGEAR R7000" or "TP-Link Archer AX21", or check 'msv router models <vendor>' — this model may not be in the catalog yet.`,
     };
   }
 
@@ -354,6 +476,10 @@ export async function queryRouter(query: RouterQuery): Promise<RouterResult> {
     riskScore,
     matchConfidence: confidence,
     matchMethod: method as "exact" | "alias" | "fuzzy" | "cpe",
+    matchWarning:
+      method === "fuzzy"
+        ? `"${query.input}" is not an exact catalog entry — this is the closest match (${Math.round(confidence * 100)}% similarity) and may be the wrong product.`
+        : undefined,
   };
 }
 
@@ -474,7 +600,11 @@ export function formatRouterResult(result: RouterResult, stalenessWarning?: stri
   lines.push("=".repeat(model!.displayName.length));
 
   // Match info
-  if (matchConfidence && matchConfidence < 1) {
+  if (result.matchWarning) {
+    lines.push(`\n${"⚠".repeat(3)} APPROXIMATE MATCH — NOT A CONFIRMED CATALOG ENTRY ${"⚠".repeat(3)}`);
+    lines.push(result.matchWarning);
+    lines.push(`The data below may describe a different product than what you asked about.`);
+  } else if (matchConfidence && matchConfidence < 1) {
     lines.push(`Match confidence: ${Math.round(matchConfidence * 100)}% (${result.matchMethod})`);
   }
 

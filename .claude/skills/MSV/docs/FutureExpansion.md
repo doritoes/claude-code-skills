@@ -669,6 +669,8 @@ msv import osquery software.json --report compliance.csv
 | **Vendor Fetchers** | **DONE** | Medium | High - Multi-vendor MSV | ✅ 12/12 passing (v1.9.0) |
 | **Community Release Fixes** | **DONE** | Low | High - Release readiness | ✅ See Section 8 |
 | **Fallback Data Quality** | **HIGH** | Medium | High - Accuracy | 🔵 Next Priority |
+| **Router Fuzzy-Match Safety** | **HIGH** | Low | High - Prevents wrong-CVE data | ✅ Implemented 2026-09-16 |
+| **Router Catalog Expansion** | **HIGH** | Medium | High - Real-world coverage | ✅ 7 models added 2026-09-16 |
 | **Wazuh/osquery Integration** | **HIGH** | Medium | High - Enterprise workflows | 🔵 Next Priority |
 | Electron Apps | HIGH | Medium | High - Enterprise tools | Planned |
 | New Vendor Fetchers | MEDIUM | Medium | Medium - Coverage expansion | Planned (Juniper, F5, Check Point) |
@@ -904,6 +906,47 @@ These are improvements for future iterations.
 | Documentation files | 6 | ✅ Comprehensive |
 | CTI components | 4 | Generator, Formatter, Types, Aggregator |
 | Router components | 4 | Client, NvdClient, Updater, Types |
+
+---
+
+## 9. Router Catalog Coverage & Fuzzy-Match Safety - Real-World Test Finding
+
+**Status: ✅ Resolved 2026-09-16.** Vendor advisory fetchers were checked first (`bun run tools/tests/test-all-fetchers.ts` — 14/14 PASS, no router-specific fetchers exist yet, router MSV data comes from `RouterNvdClient`/NVD, not vendor scrapers). Then the 7 missing models below were added to `data/RouterCatalog.json` (catalog now at v2.17.0), and `RouterClient.ts`'s `findModel`/`rankModels` was reworked: the model-number "exact" channel now requires true whole-string equality instead of substring containment, `calculateConfidence`'s contains-bonus is gated against short spurious substrings, a `MIN_FUZZY_CONFIDENCE = 0.8` floor now applies to non-equal matches (with `rankCandidates()` supplying "did you mean" suggestions when nothing clears it), and `matchMethod` is only ever `"exact"`/`"alias"` for true 1.0-confidence equality — everything else is `"fuzzy"` and now prints a loud `matchWarning` banner (also present in JSON output) instead of a quiet one-line footnote. All 133 RouterClient tests plus the full 421-test suite (`bun run tools/run-tests.ts`) pass. Re-running the exact queries from the original finding: RS200, CAX30, RAX40, RBK12, EA7500, RT-BE82U, and Archer BE900 now all resolve as true catalog matches with no approximate-match warning; the CAX30→Huawei and RS200→R7000 cross-vendor/cross-generation mismatches specifically no longer occur.
+
+**Test Date:** 2026-09-16
+**Method:** Sourced a top-10 list of currently popular wireless router models (market-research proxy, since eBay sold-listing scraping was blocked - see below) and ran each through `msv router query`.
+**Scope:** Router catalog completeness + fuzzy-match confidence handling
+
+### Summary
+
+Only 3 of 10 real-world router models tested were actually present in `RouterCatalog.json`. For the other 7, `RouterClient`'s fuzzy matcher returned a confident-looking result for a **different product** instead of reporting "not found." In two cases the substituted result was badly wrong and would have given a user a materially incorrect security posture if trusted at face value:
+
+| Queried Model | Matched To | Confidence | Problem |
+|---|---|---|---|
+| NETGEAR Nighthawk RS200 (2026 WiFi 7 flagship) | NETGEAR R7000 (2013, AC1900) | 90%, labeled "alias" | Different generation entirely; R7000's KEV CVEs (2016-2017) got attached to an RS200 query |
+| NETGEAR CAX30 (DOCSIS 3.1 modem/router combo) | Huawei WiFi AX3 | 84%, labeled "exact" | Wrong vendor. A "CAX30" query should never resolve to a Huawei product under any confidence label, let alone "exact" |
+| Linksys EA7500 (AC1900) | Linksys Velop MX4200 (WiFi 6 mesh) | 69%, labeled "alias" | Unrelated product line; lowest-confidence match still printed as if usable |
+| NETGEAR Orbi RBK12 | NETGEAR Orbi RBK852 | 88%, "fuzzy" | Different Orbi tier/generation |
+| ASUS RT-BE82U | ASUS RT-BE88U | 91%, "fuzzy" | Plausible sibling model, but silently substituted |
+| NETGEAR RAX40 | NETGEAR RAX50 | 92%, "fuzzy" | Plausible sibling model, but silently substituted |
+| TP-Link Archer BE900 | TP-Link Archer BE9700 | 94%, "fuzzy" | Plausible sibling model, but silently substituted |
+
+The CLI does print "Match confidence: N% (fuzzy/alias)" above the result, but nothing stops a query for a nonexistent model from returning a fully-formed report (MSV, KEV CVEs, risk score) that reads identically to a real match. The RS200→R7000 and CAX30→Huawei cases in particular show the matcher will present a wrong product as "exact"/high-confidence rather than declining to answer.
+
+### Fix Required (2 parts)
+
+**1. Fuzzy-match safety (pipeline fix, do first - low effort, high impact):**
+- Introduce a confidence floor (e.g. <85%) below which the CLI refuses to return a substituted result and instead reports "No catalog match for '<query>' - closest candidates: X (69%), Y (54%)..." so the user chooses.
+- Stop labeling cross-vendor or cross-generation substitutions as "exact"/"alias" - those terms should be reserved for true string/alias matches, not fuzzy string-distance guesses. Wire the CAX30→Huawei mislabel as the regression test case.
+- Add a warning banner whenever a fuzzy/alias match is used at all, not just the confidence footnote, so it can't be missed in scripted/piped output (JSON/CSV formats too).
+
+**2. Catalog expansion (do after #1, so gaps fail loud instead of silently mismatching):**
+- Add the 7 missing real-world models above: NETGEAR RS200, CAX30, RAX40, Orbi RBK12; Linksys EA7500, MX8500 (confirm - MX8500 matched correctly but wasn't previously catalogued as such); ASUS RT-BE82U; TP-Link Archer BE900.
+- These came from current Amazon/Newegg bestseller data and eBay's own "popular models" listings for NETGEAR/TP-Link/ASUS/Linksys (2026-09-16) - i.e., real resale-market demand, not arbitrary picks. Treat this list as a starting seed for closing the gap between "KEV-priority legacy models" (the original Phase 1-2 seed per `RouterFirmwarePlan.md`) and "what's actually being bought/sold secondhand today."
+
+### Related: eBay sold-listing data source is currently unavailable
+
+Not an MSV bug, but relevant context for anyone trying to feed MSV from real eBay "sold in last 24h" data: `WebFetch` gets a 403 from eBay's bot detection, and the Browser skill (`$PAI_DIR/skills/Browser/`) isn't actually installed in this environment (missing `package.json`/deps, `bun run Browse.ts` fails with "Failed to start browser session"). A real integration would need either the official eBay Browse/Marketplace Insights API (OAuth app credentials, not currently configured) or a working Playwright install - not scraping workarounds. Filed here rather than as its own section since it blocks a specific real-world use case (router MSV checks from actual resale volume) rather than being a router-catalog issue per se.
 
 ---
 
