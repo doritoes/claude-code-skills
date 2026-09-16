@@ -23,7 +23,10 @@
             "netgear_rax40",
             "netgear_rs200",
             "netgear_cax30",
-            "netgear_r6700ax"
+            "netgear_r6700ax",
+            "netgear_rs70",
+            "netgear_rax5",
+            "netgear_rs300"
           ],
           "description": "High-performance WiFi routers"
         },
@@ -35,7 +38,9 @@
             "netgear_orbi_370",
             "netgear_orbi_rbk852",
             "netgear_orbi_rbk50",
-            "netgear_orbi_rbk12"
+            "netgear_orbi_rbk12",
+            "netgear_orbi_rbe262",
+            "netgear_orbi_rbe363"
           ],
           "description": "Whole-home mesh WiFi systems"
         },
@@ -93,6 +98,15 @@
             "asus_zenwifi_xt8"
           ],
           "description": "Mesh WiFi systems"
+        },
+        "tuf": {
+          "displayName": "TUF Gaming",
+          "category": "gaming-router",
+          "targetMarket": "prosumer",
+          "models": [
+            "asus_tuf_gaming_be9400"
+          ],
+          "description": "Budget-oriented gaming router sub-brand"
         }
       },
       "country": "Taiwan",
@@ -121,7 +135,15 @@
             "tplink_archer_be230",
             "tplink_archer_be400",
             "tplink_archer_a6",
-            "tplink_archer_a54"
+            "tplink_archer_a54",
+            "tplink_archer_c54",
+            "tplink_archer_ax1500",
+            "tplink_archer_ax4400",
+            "tplink_archer_ax1300",
+            "tplink_archer_be3200",
+            "tplink_archer_be6100",
+            "tplink_archer_ax3000_pro",
+            "tplink_archer_ax73"
           ],
           "description": "Mid-range to high-end wireless routers"
         },
@@ -133,7 +155,12 @@
             "tplink_deco_m5",
             "tplink_deco_x60",
             "tplink_deco_be63",
-            "tplink_deco_s4"
+            "tplink_deco_s4",
+            "tplink_deco_w4500",
+            "tplink_deco_w7200",
+            "tplink_deco_wb10800",
+            "tplink_deco_w8100",
+            "tplink_deco_wm9000"
           ],
           "description": "Mesh WiFi systems"
         },
@@ -593,7 +620,8 @@
           "targetMarket": "consumer",
           "models": [
             "google_nest_wifi_pro",
-            "google_wifi_original"
+            "google_wifi_original",
+            "google_nest_wifi_router"
           ],
           "description": "Google Home integrated mesh WiFi systems with auto-updates"
         }
@@ -3974,6 +4002,7 @@
       "aliases": [
         "starlink gen 3",
         "starlink standard kit",
+        "starlink standard kit ax",
         "uta-232",
         "utr-232"
       ],
@@ -6880,6 +6909,595 @@
               "latest": "1.0.10.110",
               "eol": false,
               "eolNote": "1.0.10.110 fixes CVE-2021-45602 (authenticated command injection). Two more recent CVEs — CVE-2026-9212 (authentication bypass) and CVE-2026-11814 (command injection, MEDIUM) — are referenced in NETGEAR's June/August 2026 security advisories without a specific fixed version confirmed in research (2026-09). Run 'msv router update netgear_r6700ax' or check kb.netgear.com before treating 1.0.10.110 as sufficient."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_c54": {
+      "id": "tplink_archer_c54",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer C54",
+      "displayName": "TP-Link Archer C54 AC1200 Router",
+      "aliases": ["archer c54", "tp-link c54"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2019,
+      "wifiStandard": "ac1200",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_c54",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found specific to Archer C54 in research (2026-09) — distinct from the separately-cataloged Archer A54, which does have confirmed CVEs (CVE-2022-25072, CVE-2023-44448). Run 'msv router update tplink_archer_c54' before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_ax1500": {
+      "id": "tplink_archer_ax1500",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AX1500",
+      "displayName": "TP-Link Archer AX1500 WiFi 6 Router",
+      "aliases": ["archer ax1500", "tp-link ax1500"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2021,
+      "wifiStandard": "ax1500",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_ax1500",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "1.3.11",
+              "msvCves": ["CVE-2025-9961"],
+              "latest": "1.3.11",
+              "eol": false,
+              "eolNote": "CVE-2025-9961: CWMP (TR-069) stack-based buffer overflow enabling RCE, affects hardware v1/v1.20/v1.26/v1.60/v1.80/v2.60/v3.6 on firmware before 1.3.11. Requires an authenticated MITM position between the router and its Auto Configuration Server; CWMP is disabled by default which limits exposure. Fixed in 1.3.11."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_ax4400": {
+      "id": "tplink_archer_ax4400",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AX4400",
+      "displayName": "TP-Link Archer AX4400 WiFi 6 Router",
+      "aliases": ["archer ax4400", "tp-link ax4400"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2021,
+      "wifiStandard": "ax5400",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_ax4400",
+      "hardwareVersions": {
+        "v3.6": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "V1_211222",
+              "eol": false,
+              "eolNote": "No CVE confirmed specific to AX4400 in research (2026-09) — CVE-2024-21833/21821 affect the separately-numbered Archer AX3000/AX5400/AXE75, not AX4400."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v3.6"
+    },
+    "tplink_archer_ax1300": {
+      "id": "tplink_archer_ax1300",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AX1300",
+      "displayName": "TP-Link Archer AX1300 WiFi 6 Router",
+      "aliases": ["archer ax1300", "tp-link ax1300"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax1500",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_ax1300",
+      "hardwareVersions": {
+        "v1.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-ax1300/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "1.4.1",
+              "msvCves": ["CVE-2026-9151"],
+              "latest": "1.4.1",
+              "eol": false,
+              "eolNote": "CVE-2026-9151: authenticated OS command injection via a crafted VPN client config import (also affects Archer AX12/AX17/AX18 v1). Fixed in 1.4.1. Mitigation if unpatched: disable the VPN client feature."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1.6"
+    },
+    "tplink_archer_be3200": {
+      "id": "tplink_archer_be3200",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE3200",
+      "displayName": "TP-Link Archer BE3200 WiFi 7 Router",
+      "aliases": ["archer be3200", "be3200", "tp-link be3200"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be3200",
+      "hardwareVersions": {
+        "v1.6": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found specific to BE3200 in research (2026-09) — distinct from the separately-cataloged Archer BE3600, a different product despite the similar name/number."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1.6"
+    },
+    "tplink_archer_be6100": {
+      "id": "tplink_archer_be6100",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer BE6100",
+      "displayName": "TP-Link Archer BE6100 WiFi 7 Router",
+      "aliases": ["archer be6100", "be6100", "tp-link be6100"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be9300",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_be6100",
+      "hardwareVersions": {
+        "v1.6": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "1.1.1",
+              "eol": false,
+              "eolNote": "No CVE confirmed specific to BE6100 in research (2026-09) — a broad TP-Link command-injection advisory (CVE-2026-9254/16348/78541) explicitly names Archer BE3600 and BE800, not BE6100."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1.6"
+    },
+    "tplink_archer_ax3000_pro": {
+      "id": "tplink_archer_ax3000_pro",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AX3000 Pro",
+      "displayName": "TP-Link Archer AX3000 Pro WiFi 6 Router",
+      "aliases": ["archer ax3000 pro", "tp-link ax3000 pro"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE confirmed specific to the 'Pro' SKU in research (2026-09) — the base (non-Pro) Archer AX3000 has confirmed CVEs (CVE-2024-21833 command injection, CVE-2024-21821) fixed in 1.1.2 Build 20231115, but applicability to AX3000 Pro specifically was not confirmed. Community reports note the plain AX3000 V2 hardware may not have received updates since 2023. Run 'msv router update tplink_archer_ax3000_pro' or check TP-Link's support page before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "tplink_archer_ax73": {
+      "id": "tplink_archer_ax73",
+      "vendor": "tplink",
+      "family": "archer",
+      "model": "Archer AX73",
+      "displayName": "TP-Link Archer AX73 WiFi 6 Router",
+      "aliases": ["archer ax73", "tp-link ax73"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2020,
+      "wifiStandard": "ax5400",
+      "cpePrefix": "cpe:2.3:h:tp-link:archer_ax73",
+      "hardwareVersions": {
+        "v2": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/archer-ax73/v2.60/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "1.3.1 Build 20260430",
+              "msvCves": ["CVE-2026-22226"],
+              "latest": "1.3.1 Build 20260430",
+              "eol": false,
+              "eolNote": "CVE-2026-22226 (CVSS 8.5): OS command injection in the VPN server configuration module, exploitable after admin authentication. Fixed in 1.3.1 Build 20260430."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v2"
+    },
+    "tplink_deco_w4500": {
+      "id": "tplink_deco_w4500",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco W4500",
+      "displayName": "TP-Link Deco W4500 AX1500 Mesh System",
+      "aliases": ["deco w4500", "tp-link deco w4500"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax1500",
+      "hardwareVersions": {
+        "v1.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/deco-w4500/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found specific to Deco W4500 in research (2026-09). TP-Link's Archer/Deco family CVE-2024-21833 was found in searches but the affected model list found did not confirm W4500."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1.6"
+    },
+    "tplink_deco_w7200": {
+      "id": "tplink_deco_w7200",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco W7200",
+      "displayName": "TP-Link Deco W7200 Tri-Band WiFi 6 Mesh System",
+      "aliases": ["deco w7200", "tp-link deco w7200"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "v2.6": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "1.2.1",
+              "eol": false,
+              "eolNote": "CVE-2024-21833 (OS command injection, CVSS 8.8) is documented as affecting 'Archer and Deco series routers' broadly via improper country-parameter sanitization, but research (2026-09) did not confirm whether W7200 specifically is on the affected/fixed list. Verify via 'msv router update tplink_deco_w7200' before relying on this entry."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v2.6"
+    },
+    "tplink_deco_wb10800": {
+      "id": "tplink_deco_wb10800",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco WB10800",
+      "displayName": "TP-Link Deco WB10800 (Deco 7) BE3600 WiFi 7 Mesh System",
+      "aliases": ["deco wb10800", "deco 7", "tp-link deco 7", "deco be3600"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be5800",
+      "hardwareVersions": {
+        "v2.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/deco-wb10800/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found specific to Deco WB10800/'Deco 7' in research (2026-09). Sold under the 'Deco 7 BE3600' marketing name — distinct from the separately-cataloged 'Deco 7 Pro' (Deco BE63, a higher tri-band tier)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v2.6"
+    },
+    "tplink_deco_w8100": {
+      "id": "tplink_deco_w8100",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco W8100",
+      "displayName": "TP-Link Deco W8100 AX2700 Mesh System",
+      "aliases": ["deco w8100", "tp-link deco w8100"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "v1.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/deco-w8100/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "1.8.4",
+              "eol": false,
+              "eolNote": "No CVE found specific to Deco W8100 in research (2026-09)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1.6"
+    },
+    "tplink_deco_wm9000": {
+      "id": "tplink_deco_wm9000",
+      "vendor": "tplink",
+      "family": "deco",
+      "model": "Deco WM9000",
+      "displayName": "TP-Link Deco WM9000 Outdoor/Indoor AX3000 Mesh System",
+      "aliases": ["deco wm9000", "tp-link deco wm9000"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2023,
+      "wifiStandard": "ax3000",
+      "hardwareVersions": {
+        "v1.6": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.tp-link.com/us/support/download/deco-wm9000/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "1.8.4",
+              "eol": false,
+              "eolNote": "No CVE found specific to Deco WM9000 in research (2026-09). IP65 weatherproof indoor/outdoor mesh system."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "v1.6"
+    },
+    "netgear_rs70": {
+      "id": "netgear_rs70",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "RS70",
+      "displayName": "NETGEAR Nighthawk RS70 WiFi 7 Router (BE3100)",
+      "aliases": ["rs70", "nighthawk rs70", "netgear rs70"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be5800",
+      "cpePrefix": "cpe:2.3:h:netgear:rs70",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE confirmed specific to RS70 in research (2026-09) — CVE-2026-11738 was found referencing other NETGEAR Nighthawk models (RAXE500, RS700, R7000) but not RS70 specifically."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_rax5": {
+      "id": "netgear_rax5",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "RAX5",
+      "displayName": "NETGEAR Nighthawk RAX5 WiFi 6 Router (AX1600)",
+      "aliases": ["rax5", "nighthawk rax5", "netgear rax5"],
+      "category": "wifi-router",
+      "targetMarket": "consumer",
+      "releaseYear": 2022,
+      "wifiStandard": "ax1500",
+      "cpePrefix": "cpe:2.3:h:netgear:rax5",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "1.0.2.26",
+              "msvCves": ["CVE-2026-9210", "CVE-2026-9211"],
+              "latest": "1.0.2.26",
+              "eol": false,
+              "eolNote": "CVE-2026-9210: insufficient input validation allowing an authenticated local admin to make unauthorized modifications. CVE-2026-9211 referenced alongside it without full technical detail found. Firmware 1.0.2.26 addresses these per NETGEAR's advisory."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_rs300": {
+      "id": "netgear_rs300",
+      "vendor": "netgear",
+      "family": "nighthawk",
+      "model": "RS300",
+      "displayName": "NETGEAR Nighthawk RS300 WiFi 7 Tri-Band Router (BE9300)",
+      "aliases": ["rs300", "nighthawk rs300", "netgear rs300"],
+      "category": "wifi-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2024,
+      "wifiStandard": "be9300",
+      "cpePrefix": "cpe:2.3:h:netgear:rs300",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.netgear.com/support/product/rs300",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "1.2.7.2",
+              "msvCves": ["CVE-2026-11814"],
+              "latest": "1.2.7.2",
+              "eol": false,
+              "eolNote": "CVE-2026-11814: command injection allowing a network-adjacent attacker who can intercept/modify local traffic to compromise confidentiality and integrity (MEDIUM severity) — the same advisory that flagged netgear_r6700ax. RS300 is listed among affected models; 1.2.7.2 is the latest known firmware."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_orbi_rbe262": {
+      "id": "netgear_orbi_rbe262",
+      "vendor": "netgear",
+      "family": "orbi",
+      "model": "RBE262",
+      "displayName": "NETGEAR Orbi 260 Series WiFi 7 Mesh System (RBE262/RBE263)",
+      "aliases": ["rbe262", "rbe263", "orbi 260", "orbi rbe262", "orbi rbe263", "netgear orbi 260"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be5800",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://community.netgear.com/kb/en-home-orbi-firmware-releases/",
+          "firmwareBranches": {
+            "12.1.x": {
+              "branchName": "12.1.x",
+              "msv": "12.1.3.12",
+              "msvCves": ["CVE-2026-0405", "CVE-2026-62655"],
+              "latest": "12.1.3.12",
+              "eol": false,
+              "eolNote": "CVE-2026-0405: authentication bypass allowing local-network users to reach the admin web interface. CVE-2026-62655: DoS via stack overflow. Both fixed in the shared RBE260/360/370-series firmware 12.1.3.12. RBE262 = router-only, RBE263 = router + 2 satellites (same hardware/firmware)."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "netgear_orbi_rbe363": {
+      "id": "netgear_orbi_rbe363",
+      "vendor": "netgear",
+      "family": "orbi",
+      "model": "RBE363",
+      "displayName": "NETGEAR Orbi 360 Series WiFi 7 Mesh System BE5000 (RBE363)",
+      "aliases": ["rbe363", "orbi 360", "orbi rbe363", "netgear orbi 360", "be5000"],
+      "category": "mesh",
+      "targetMarket": "prosumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be9300",
+      "cpePrefix": "cpe:2.3:h:netgear:rbe363",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.netgear.com/support/product/rbe363",
+          "firmwareBranches": {
+            "12.1.x": {
+              "branchName": "12.1.x",
+              "msv": "12.1.3.12",
+              "msvCves": ["CVE-2026-0405", "CVE-2026-62655"],
+              "latest": "12.1.3.12",
+              "eol": false,
+              "eolNote": "Same CVEs and fixed firmware as the 260-series (netgear_orbi_rbe262) — shared RBE260/360/370-series release train per NETGEAR's community firmware announcement."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "google_nest_wifi_router": {
+      "id": "google_nest_wifi_router",
+      "vendor": "google",
+      "family": "nest",
+      "model": "Nest WiFi Router",
+      "displayName": "Google Nest WiFi Router (GA00595-US)",
+      "aliases": ["nest wifi router", "google nest wifi router", "ga00595"],
+      "category": "mesh",
+      "targetMarket": "consumer",
+      "releaseYear": 2019,
+      "wifiStandard": "ac2200",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://support.google.com/googlenest/",
+          "firmwareBranches": {
+            "current": {
+              "branchName": "current",
+              "msv": "unknown",
+              "latest": "unknown",
+              "eol": false,
+              "eolNote": "No CVE found specific to this model in research (2026-09) — distinct from the newer 'Nest WiFi Pro' (WiFi 6E, already cataloged) and the original 2016 'Google WiFi' (also cataloged). This is the 2019 second-generation 'Nest Wifi' router puck. Auto-updated, cloud-managed."
+            }
+          },
+          "kevCves": []
+        }
+      },
+      "defaultHwVersion": "default"
+    },
+    "asus_tuf_gaming_be9400": {
+      "id": "asus_tuf_gaming_be9400",
+      "vendor": "asus",
+      "family": "tuf",
+      "model": "TUF-BE9400",
+      "displayName": "ASUS TUF Gaming BE9400 Tri-Band WiFi 7 Router",
+      "aliases": ["tuf gaming be9400", "tuf-be9400", "asus tuf be9400", "be9400"],
+      "category": "gaming-router",
+      "targetMarket": "prosumer",
+      "releaseYear": 2025,
+      "wifiStandard": "be9300",
+      "hardwareVersions": {
+        "default": {
+          "supportStatus": "supported",
+          "supportUrl": "https://www.asus.com/us/networking-iot-servers/wifi-routers/asus-gaming-routers/tuf-gaming-be9400/helpdesk_download?model2Name=TUF-Gaming-BE9400",
+          "firmwareBranches": {
+            "3.0.0.6.x": {
+              "branchName": "3.0.0.6.x",
+              "msv": "unknown",
+              "latest": "3.0.0.6.102",
+              "eol": false,
+              "eolNote": "No CVE found specific to this model in research (2026-09)."
             }
           },
           "kevCves": []

@@ -207,6 +207,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Several new entries have `msv: "unknown"` where research found real CVEs but no
     confirmed fixed-firmware version — documented honestly in each `eolNote` with a pointer to
     verify via `msv router update` rather than guessing a version number
+- **Walmart best-seller cross-check (largest round yet: 20 models + 1 alias fix)** - checked
+  21 Walmart wireless-router candidates against the catalog. All 21 were gaps, and several were
+  a strong validation of the fuzzy-match safety fix from earlier rounds: "NETGEAR RS70"
+  fuzzy-matched RS700S at 93%, "NETGEAR RS300" matched RS200 at 92%, "Google Nest WiFi Router"
+  matched Nest WiFi Pro at 86%, and "TP-Link Archer BE3200" matched BE3600 at 94% — all
+  different real products with different CVE profiles, all correctly shown with the loud
+  approximate-match warning instead of silently returned as confident data
+  - One more missing-alias case: "Starlink Standard Kit AX" didn't resolve to the
+    already-cataloged `starlink_router_gen3` (displayName "Starlink Standard Kit Router Gen 3")
+    — added "starlink standard kit ax" alias
+  - Added 8 TP-Link Archer models (C54, AX1500, AX4400, AX1300, BE3200, BE6100, AX3000 Pro,
+    AX73), 5 TP-Link Deco mesh models (W4500, W7200, WB10800/"Deco 7", W8100, WM9000 outdoor),
+    3 NETGEAR Nighthawk models (RS70, RAX5, RS300), 2 NETGEAR Orbi mesh models (RBE262/263
+    "260 series", RBE363 "360 series"/BE5000), 1 new Google Nest model (2019 Nest WiFi Router,
+    distinct from both the original 2016 Google WiFi and the newer Nest WiFi Pro), and a new
+    ASUS sub-brand family "tuf" for the TUF Gaming BE9400
+  - Confirmed CVEs with fixed versions: Archer AX1500 (CVE-2025-9961, CWMP RCE, fixed 1.3.11),
+    Archer AX1300 (CVE-2026-9151, VPN command injection, fixed 1.4.1), Archer AX73
+    (CVE-2026-22226, VPN command injection CVSS 8.5, fixed 1.3.1 Build 20260430), NETGEAR RAX5
+    (CVE-2026-9210/9211, fixed 1.0.2.26), NETGEAR RS300 (CVE-2026-11814, same advisory as
+    R6700AX), NETGEAR Orbi 260/360 series (CVE-2026-0405 auth bypass + CVE-2026-62655 DoS,
+    shared RBE260/360/370 firmware train, fixed 12.1.3.12)
+  - Several entries again use msv: "unknown" with an honest eolNote where research found a
+    real CVE advisory but couldn't confirm the affected/fixed model list included this exact
+    SKU (e.g. CVE-2024-21833 was found for "Archer and Deco series" broadly, not confirmed
+    against Deco W7200 specifically)
 
 ### Changed
 - Version bumped to 1.3.1
