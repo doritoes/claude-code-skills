@@ -272,9 +272,9 @@ Track vulnerabilities in browser extensions:
 
 | Vendor | Priority | Data Source | Notes |
 |--------|----------|-------------|-------|
-| **Juniper JunOS** | HIGH | NVD API + fallback | DONE - 8 branches (25.2R1 to 21.4R3) |
-| **Ivanti** | HIGH | Ivanti RSS feed | DONE - Connect Secure, Policy Secure, ZTA, EPMM |
-| **Check Point** | HIGH | NVD API + fallback | DONE - 8 branches (R82 to R77.30), sk articles |
+| **Ivanti** | HIGH | Ivanti RSS feed | DONE - Connect Secure, Policy Secure, ZTA, EPMM (confirmed live 2026-09-16) |
+
+~~**Juniper JunOS**~~ and ~~**Check Point**~~ were marked DONE here in v1.9.0/v1.10.0 but have since been **retired** — see the table below. `VendorAdvisory.ts` returns `null` (no fetcher) for both vendors; CVE data is still covered by NVD/VulnCheck/KEV in the main pipeline.
 
 ### MEDIUM: Future Vendor Advisory Fetchers (Roadmap)
 
@@ -284,12 +284,15 @@ These vendors lack public machine-readable advisory feeds. Monitor for CSAF/API 
 |--------|--------|---------|-------------------|
 | **F5 BIG-IP** | Deferred | No public API — my.f5.com is JS-rendered Salesforce portal | NVD/VulnCheck/KEV cover F5 CVEs |
 | **Adobe** | Deferred | No CSAF feed (404 on .well-known/csaf), helpx index times out | NVD/VulnCheck/KEV cover Adobe CVEs |
+| **Juniper JunOS** | Retired | Native feeds dead — Salesforce migration put advisories behind auth | NVD/VulnCheck/KEV cover Juniper CVEs |
+| **Check Point** | Retired | No public API or RSS feed | NVD/VulnCheck/KEV cover Check Point CVEs |
 
 **What would unblock these:**
 - F5: If F5 publishes CSAF at `.well-known/csaf/` or provides a public API
 - Adobe: If Adobe publishes CSAF or makes the APSB bulletin index machine-readable
+- Juniper/Check Point: If either vendor publishes a public CSAF feed or API
 
-**Trigger:** `check if F5 or Adobe now have CSAF feeds`
+**Trigger:** `check if F5, Adobe, Juniper, or Check Point now have CSAF feeds`
 
 ---
 

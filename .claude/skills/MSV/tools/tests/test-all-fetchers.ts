@@ -26,8 +26,14 @@ import { AtlassianAdvisoryFetcher } from "../AtlassianAdvisoryFetcher";
 import { CitrixAdvisoryFetcher } from "../CitrixAdvisoryFetcher";
 import { OracleAdvisoryFetcher } from "../OracleAdvisoryFetcher";
 import { getVendorFetcher } from "../VendorAdvisory";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const CACHE_DIR = "../data/cache";
+// Resolve relative to this file's location, not process.cwd() — this script is
+// invoked as `bun run tools/tests/test-all-fetchers.ts` from the skill root, so a
+// cwd-relative "../data/cache" would land in a stray sibling directory
+// (.claude/skills/data/cache) instead of the skill's own data/cache.
+const CACHE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "data", "cache");
 const RESET = "\x1b[0m";
 const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";

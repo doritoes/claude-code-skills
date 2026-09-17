@@ -1089,14 +1089,22 @@ async function queryMSV(
           recommendedVersion = sortedByMsv[sortedByMsv.length - 1].msv;  // Highest safe version (best protection)
         }
 
-        // Collect CVEs from filtered advisories
+        // Collect CVEs from filtered advisories. An advisory was kept above if ANY
+        // of its fixedVersions matched versionPattern (multi-product CSAF bulletins
+        // bundle several branches' fixed versions in one array) — so re-select the
+        // matching entry here rather than blindly taking index [0], which may belong
+        // to a different product/branch than the one being queried.
+        const advVersionRegex = software.versionPattern ? new RegExp(software.versionPattern) : null;
         for (const adv of filteredAdvisories) {
+          const matchedFixedVersion = advVersionRegex
+            ? (adv.fixedVersions.find(v => advVersionRegex.test(v)) ?? adv.fixedVersions[0])
+            : adv.fixedVersions[0];
           for (const cveId of adv.cveIds) {
             if (!exploitedCves.find(c => c.cve === cveId)) {
               exploitedCves.push({
                 cve: cveId,
                 description: adv.title,
-                fixedVersion: adv.fixedVersions[0],
+                fixedVersion: matchedFixedVersion,
                 inCisaKev: false,
                 hasPoC: false,
               });
@@ -1546,12 +1554,22 @@ async function queryMSV(
         if (version) {
           if (!sources.includes("NVD")) sources.push("NVD");
 
+          // Filter by version pattern if specified (prevents data contamination) —
+          // this per-CVE NVD lookup is the one enrichment path that previously
+          // bypassed the versionPattern check applied everywhere else (AppThreat,
+          // NVD-by-CPE, vendor advisory), letting sub-component/wrong-branch fixed
+          // versions (e.g. a JDBC driver version on a PostgreSQL server CVE) through.
+          const versionRegex = software.versionPattern ? new RegExp(software.versionPattern) : null;
+          const versionOk = !versionRegex || versionRegex.test(version);
+
           // Only use NVD MSV if no vendor advisory
-          if (!hasVendorAdvisory && !minimumSafeVersion) {
+          if (!hasVendorAdvisory && !minimumSafeVersion && versionOk) {
             // For NVD data, we only get a single version (highest fixed)
             // Use it as both min and recommended since we don't have branch data
             minimumSafeVersion = version;
             recommendedVersion = version;
+          } else if (!versionOk) {
+            logger.debug(`Rejected NVD MSV "${version}" — doesn't match versionPattern "${software.versionPattern}"`);
           }
 
           evidence.push({
@@ -1563,7 +1581,7 @@ async function queryMSV(
           // Update CVEs with fixed version info
           for (const detail of details) {
             const cve = exploitedCves.find((c) => c.cve === detail.cve);
-            if (cve && detail.fixedVersion) {
+            if (cve && detail.fixedVersion && (!versionRegex || versionRegex.test(detail.fixedVersion))) {
               cve.fixedVersion = detail.fixedVersion;
               cve.cvssScore = detail.cvssScore || cve.cvssScore;
             }

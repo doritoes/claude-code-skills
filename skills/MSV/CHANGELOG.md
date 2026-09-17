@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CVE fixed-version cross-contamination (data-quality audit, 2026-09-16)** — a new `tools/ux-audit.ts` tool queried all 205 catalog products and found MSV/CVE fixed-version data bleeding across products/sub-components/branches. Root cause: three of four CVE-enrichment code paths in `queryMSV()` applied `software.versionPattern` filtering, but a fourth (per-CVE NVD backfill lookup) did not, and the vendor-advisory ingestion path filtered advisories at the wrong granularity (kept an advisory if *any* of its `fixedVersions` matched, then blindly used index `[0]` regardless of whether that specific value matched). Fixed both gaps in `msv.ts`.
+  - Acronis Cyber Protect showed MSV `"40173"` (an internal build number, not a real version) — also had no `versionPattern` at all, so nothing filtered it; added `^1[5-9]\.`
+  - Cisco ASA/FTD/AnyConnect, PostgreSQL, nginx, SolarWinds Web Help Desk, and Adobe Commerce all showed CVE fixed-versions belonging to a different product/branch (e.g. a PostgreSQL CVE reporting the JDBC driver's version instead of the server's) — all now filtered correctly, verified clean against live data
+  - Progress MOVEit Transfer's catalog `latestVersion` was stale (`2024.1`, two years old) — updated to `2026.0.3` (verified via web search + pipeline's own recomputed data)
+  - Full before/after: 7 CRITICAL / 15 WARNING → see audit output for final counts
+- **`tools/tests/test-all-fetchers.ts` cache-path bug** — `CACHE_DIR` was resolved relative to `process.cwd()` instead of the script's own location, so running it (as documented, from the skill root) silently read/wrote cache to a stray sibling directory (`.claude/skills/data/cache/`, 78 orphaned files back to March) instead of the real skill cache. Caused a false Atlassian fetcher timeout. Fixed to resolve relative to `import.meta.url`; orphaned directory deleted (confirmed with Seth first).
+- **`ROADMAP.md` stale fetcher status** — Juniper JunOS and Check Point were marked "DONE" but were retired (no public API/feed) as of the v1.11.0 fetcher integrity cleanup; roadmap now reflects actual state.
+
 ### Added
 - **`msv warm` command** - Cache warming for proactive MSV pre-fetching
   - Pre-fetch MSV data for catalog entries before they're needed

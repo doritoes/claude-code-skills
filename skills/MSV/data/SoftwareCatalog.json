@@ -3933,7 +3933,8 @@
       ],
       "notes": "Backup and security. Agent vulnerabilities.",
       "lastChecked": "2026-02-03",
-      "latestVersion": "16 Update 3"
+      "latestVersion": "16 Update 3",
+      "versionPattern": "^1[5-9]\\."
     },
     {
       "id": "ivanti_epmm",
@@ -3974,8 +3975,8 @@
         "server"
       ],
       "notes": "CRITICAL: Managed file transfer. Mass exploitation in 2023 (Cl0p ransomware).",
-      "lastChecked": "2026-02-03",
-      "latestVersion": "2024.1"
+      "lastChecked": "2026-09-16",
+      "latestVersion": "2026.0.3"
     },
     {
       "id": "beyond_trust_remote",
