@@ -132,6 +132,24 @@ function configureLogger(verbose: boolean): void {
 }
 
 // =============================================================================
+// AppThreat corruption guard (per-run)
+// =============================================================================
+
+/**
+ * Set once the AppThreat SQLite DB is detected to be corrupt/malformed during a
+ * run. After the first failure we skip AppThreat for the remaining software
+ * instead of throwing (and warning) on every single catalog match.
+ */
+let appThreatDisabledForRun = false;
+
+/** True if a SQLite error message indicates on-disk corruption, not a logic error. */
+function isAppThreatCorruptionError(message: string): boolean {
+  return /malformed|not a database|disk image|database corrupt|SQLITE_CORRUPT|SQLITE_NOTADB/i.test(
+    message,
+  );
+}
+
+// =============================================================================
 // Software Catalog
 // =============================================================================
 
@@ -1034,11 +1052,17 @@ async function queryMSV(
           const { resolve: resolvePath } = await import("node:path");
           const files = readdirSync(config.dataDir);
           for (const file of files) {
-            if (file.startsWith("vendor-") && file.endsWith(".json")) {
+            // vendor-*.json = outer VendorAdvisoryResult cache.
+            // mozilla-*.json = Mozilla core-fetcher cache (separate file, previously
+            // not cleared — so --force kept serving stale/poisoned core data).
+            const isVendorCache =
+              file.endsWith(".json") &&
+              (file.startsWith("vendor-") || file.startsWith("mozilla-"));
+            if (isVendorCache) {
               try { unlinkSync(resolvePath(config.dataDir, file)); } catch { /* ignore */ }
             }
           }
-          logger.debug("Cleared vendor advisory cache for --force refresh");
+          logger.debug("Cleared vendor advisory cache (incl. core caches) for --force refresh");
         } catch {
           // Cache clear failed - continue with potentially cached data
         }
@@ -1136,7 +1160,7 @@ async function queryMSV(
   // 1.5. Query AppThreat SQLite database (offline, fast)
   // Only query if we don't have vendor advisory data and CPE is available
   let appThreatQueried = false;
-  if (!hasVendorAdvisory && software.cpe23) {
+  if (!hasVendorAdvisory && software.cpe23 && !appThreatDisabledForRun) {
     const appThreatClient = new AppThreatClient();
     if (appThreatClient.isDatabaseAvailable()) {
       logger.debug("Querying AppThreat database (offline)...");
@@ -1230,12 +1254,22 @@ async function queryMSV(
         appThreatClient.close();
       } catch (error) {
         const appThreatErr = error instanceof Error ? error.message : String(error);
-        logger.warn(`AppThreat query failed: ${appThreatErr}`);
+        if (isAppThreatCorruptionError(appThreatErr)) {
+          // Corrupt/truncated DB: fail once for the whole run, not per-software.
+          appThreatDisabledForRun = true;
+          logger.warn(
+            `AppThreat database is corrupt (${appThreatErr}). ` +
+              `Skipping offline CVE data for this run; online sources (CISA KEV, NVD) still queried. ` +
+              `To repair: msv db update`,
+          );
+        } else {
+          logger.warn(`AppThreat query failed: ${appThreatErr}`);
+        }
         sourceResults.push({
           source: "AppThreat",
           queried: true,
           cveCount: 0,
-          note: "query failed",
+          note: isAppThreatCorruptionError(appThreatErr) ? "db corrupt" : "query failed",
         });
       }
     } else {

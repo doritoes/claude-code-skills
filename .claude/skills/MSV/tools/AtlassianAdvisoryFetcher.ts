@@ -105,6 +105,35 @@ const ATLASSIAN_PRODUCTS: Record<string, string[]> = {
   "sourcetree": ["Sourcetree"],
 };
 
+// Exact product names accepted by the API's `products=` filter (from GET /v1/products).
+// The /cves endpoint now REQUIRES a products filter — a bare request hangs with no
+// response (WAF drops param-less requests), which previously manifested as a timeout.
+// Pass each as a REPEATED query param (products=A&products=B); comma-separated hangs.
+const ATLASSIAN_ALL_API_PRODUCTS: string[] = [
+  "Bamboo Data Center", "Bamboo Server",
+  "Bitbucket Data Center", "Bitbucket Server",
+  "Confluence Data Center", "Confluence Server",
+  "Crowd Data Center", "Crowd Server",
+  "Crucible Data Center", "Crucible Server",
+  "Fisheye Data Center", "Fisheye Server",
+  "Jira Core Data Center", "Jira Core Server",
+  "Jira Service Management Data Center", "Jira Service Management Server",
+  "Jira Software Data Center", "Jira Software Server",
+  "Sourcetree for Mac", "Sourcetree for Windows",
+];
+
+const ATLASSIAN_API_PRODUCTS: Record<string, string[]> = {
+  "jira": ["Jira Core Data Center", "Jira Core Server", "Jira Software Data Center", "Jira Software Server"],
+  "jira_service_management": ["Jira Service Management Data Center", "Jira Service Management Server"],
+  "confluence": ["Confluence Data Center", "Confluence Server"],
+  "bamboo": ["Bamboo Data Center", "Bamboo Server"],
+  "bitbucket": ["Bitbucket Data Center", "Bitbucket Server"],
+  "crowd": ["Crowd Data Center", "Crowd Server"],
+  "fisheye": ["Fisheye Data Center", "Fisheye Server"],
+  "crucible": ["Crucible Data Center", "Crucible Server"],
+  "sourcetree": ["Sourcetree for Mac", "Sourcetree for Windows"],
+};
+
 // =============================================================================
 // Atlassian Advisory Fetcher
 // =============================================================================
@@ -147,10 +176,12 @@ export class AtlassianAdvisoryFetcher {
     let nextPageId: string | undefined;
     let pageCount = 0;
 
+    const productsQuery = this.buildProductsQuery();
+
     do {
       const url = nextPageId
-        ? `${ATLASSIAN_CVE_API}?page_id=${encodeURIComponent(nextPageId)}`
-        : ATLASSIAN_CVE_API;
+        ? `${ATLASSIAN_CVE_API}?${productsQuery}&page_id=${encodeURIComponent(nextPageId)}`
+        : `${ATLASSIAN_CVE_API}?${productsQuery}`;
 
       const response = await fetch(url, {
         headers: {
@@ -326,6 +357,28 @@ export class AtlassianAdvisoryFetcher {
     if (lower.includes("medium") || lower.includes("moderate")) return "medium";
     if (lower.includes("low")) return "low";
     return "medium";
+  }
+
+  /**
+   * Resolve this.product to the exact API product names for the `products=` filter.
+   * "all" → every known product; a known key → its mapped names; otherwise a
+   * case-insensitive substring match against the known list, falling back to all.
+   */
+  private resolveApiProducts(): string[] {
+    if (this.product === "all") return ATLASSIAN_ALL_API_PRODUCTS;
+    const mapped = ATLASSIAN_API_PRODUCTS[this.product];
+    if (mapped) return mapped;
+    const matches = ATLASSIAN_ALL_API_PRODUCTS.filter(n =>
+      n.toLowerCase().includes(this.product),
+    );
+    return matches.length > 0 ? matches : ATLASSIAN_ALL_API_PRODUCTS;
+  }
+
+  /** Build the required repeated `products=` query string (comma-separated hangs). */
+  private buildProductsQuery(): string {
+    return this.resolveApiProducts()
+      .map(p => `products=${encodeURIComponent(p)}`)
+      .join("&");
   }
 
   /**

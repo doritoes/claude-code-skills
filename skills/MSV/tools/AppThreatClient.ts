@@ -17,7 +17,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, mkdirSync, renameSync, rmSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 
@@ -226,41 +226,169 @@ export class AppThreatClient {
   }
 
   /**
-   * Download/update the database using vdb CLI or oras directly
+   * Download/update the database atomically.
+   *
+   * Strategy: pull + extract into an isolated STAGING directory, validate the
+   * result, then atomically rename the files over the live database. An
+   * interrupted or killed download/extract can therefore never corrupt the live
+   * DB — the worst case is a discarded staging directory and the previous
+   * (valid) DB staying in place.
+   *
+   * This replaces a prior in-place design where `vdb --download-image` wrote
+   * data.vdb6 directly and a 3-minute timeout killed it mid-extraction, leaving
+   * a truncated ("database disk image is malformed") live file.
    */
   private async downloadDatabase(verbose: boolean = false): Promise<boolean> {
-    const { spawn, execSync } = await import("node:child_process");
-    const { mkdirSync } = await import("node:fs");
+    const staging = join(DEFAULT_VDB_DIR, `.staging-${process.pid}-${Date.now()}`);
 
-    // First, try using vdb CLI
-    const vdbResult = await this.tryVdbCli(verbose);
-    if (vdbResult) return true;
+    try {
+      try {
+        mkdirSync(staging, { recursive: true });
+      } catch {
+        if (verbose) console.error("Could not create staging directory for AppThreat download.");
+        return false;
+      }
 
-    // If vdb fails, try oras directly (more likely to be available)
-    const orasResult = await this.tryOrasDownload(verbose);
-    if (orasResult) return true;
+      // Pull into staging only (never the live dir).
+      //  - vdb honors the VDB_HOME env var, so it downloads + extracts into staging.
+      //  - oras pulls the compressed layers, which we then extract ourselves.
+      let pulled = await this.tryVdbCli(staging, verbose);
+      if (!pulled) pulled = await this.tryOrasDownload(staging, verbose);
 
-    // Both methods failed - provide clear installation guidance
-    if (verbose) {
-      console.error("\n" + "=".repeat(60));
-      console.error("AppThreat Database Installation Required");
-      console.error("=".repeat(60));
-      console.error("\nOption 1: Install vdb CLI (recommended)");
-      console.error("  pip install appthreat-vulnerability-db[oras]");
-      console.error("  vdb --download-image");
-      console.error("\nOption 2: Install oras CLI and download manually");
-      console.error("  winget install oras");
-      console.error("  # or: choco install oras");
-      console.error("  oras pull ghcr.io/appthreat/vdbxz-app:latest");
-      console.error("\nOption 3: Use pipx (isolated environment)");
-      console.error("  pipx install appthreat-vulnerability-db[oras]");
-      console.error("  vdb --download-image");
-      console.error("\nThe database will be stored in:");
-      console.error(`  ${DEFAULT_VDB_DIR}`);
-      console.error("=".repeat(60) + "\n");
+      if (!pulled) {
+        this.printInstallInstructions(verbose);
+        return false;
+      }
+
+      // Validate the staged DB before it goes anywhere near the live files.
+      if (!this.validateDatabaseDir(staging, verbose)) {
+        if (verbose) {
+          console.error(
+            "Downloaded AppThreat database failed validation — discarding, keeping existing DB.",
+          );
+        }
+        return false;
+      }
+
+      // Atomic swap into place (same filesystem → rename is atomic).
+      this.swapIntoPlace(staging, verbose);
+      if (verbose) console.log("AppThreat database updated and validated.");
+      return true;
+    } finally {
+      try {
+        rmSync(staging, { recursive: true, force: true });
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+  }
+
+  /** Print manual install/download guidance when all automated paths fail. */
+  private printInstallInstructions(verbose: boolean): void {
+    if (!verbose) return;
+    console.error("\n" + "=".repeat(60));
+    console.error("AppThreat Database Installation Required");
+    console.error("=".repeat(60));
+    console.error("\nOption 1: Install vdb CLI (recommended)");
+    console.error("  pip install appthreat-vulnerability-db[oras]");
+    console.error("  vdb --download-image");
+    console.error("\nOption 2: Install oras CLI and download manually");
+    console.error("  winget install oras");
+    console.error("  # or: choco install oras");
+    console.error("  oras pull ghcr.io/appthreat/vdbxz-app:latest");
+    console.error("\nOption 3: Use pipx (isolated environment)");
+    console.error("  pipx install appthreat-vulnerability-db[oras]");
+    console.error("  vdb --download-image");
+    console.error("\nThe database will be stored in:");
+    console.error(`  ${DEFAULT_VDB_DIR}`);
+    console.error("=".repeat(60) + "\n");
+  }
+
+  /**
+   * Validate a staged database directory before swapping it into place.
+   * Catches truncated/corrupt extracts (SQLite throws while scanning) and
+   * incomplete extracts (row counts short of vdb.meta's expected totals).
+   */
+  private validateDatabaseDir(dir: string, verbose: boolean): boolean {
+    const dataPath = join(dir, DATA_FILE);
+    const indexPath = join(dir, INDEX_FILE);
+
+    if (!existsSync(dataPath) || !existsSync(indexPath)) {
+      if (verbose) console.error("Staged database is missing data/index file.");
+      return false;
     }
 
-    return false;
+    // Expected row counts from the staged meta (completeness check). Optional.
+    let expectedData = 0;
+    let expectedIndex = 0;
+    try {
+      const meta = JSON.parse(readFileSync(join(dir, META_FILE), "utf8"));
+      expectedData = Number(meta.cve_data_count) || 0;
+      expectedIndex = Number(meta.cve_index_count) || 0;
+    } catch {
+      /* meta is optional — fall back to a non-empty check */
+    }
+
+    let dataDb: Database | null = null;
+    let indexDb: Database | null = null;
+    try {
+      dataDb = new Database(dataPath, { readonly: true });
+      indexDb = new Database(indexPath, { readonly: true });
+
+      // count(*) scans the whole table b-tree — a truncated file throws here.
+      const dataCount = (dataDb.query("SELECT count(*) AS n FROM cve_data").get() as { n: number }).n;
+      const indexCount = (indexDb.query("SELECT count(*) AS n FROM cve_index").get() as { n: number }).n;
+
+      if (dataCount <= 0 || indexCount <= 0) {
+        if (verbose) console.error(`Staged database is empty (data=${dataCount}, index=${indexCount}).`);
+        return false;
+      }
+      if (expectedData && dataCount < expectedData) {
+        if (verbose) console.error(`Staged cve_data incomplete: ${dataCount}/${expectedData}.`);
+        return false;
+      }
+      if (expectedIndex && indexCount < expectedIndex) {
+        if (verbose) console.error(`Staged cve_index incomplete: ${indexCount}/${expectedIndex}.`);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      if (verbose) {
+        console.error(
+          `Staged database failed to open/query: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      return false;
+    } finally {
+      try { dataDb?.close(); } catch { /* ignore */ }
+      try { indexDb?.close(); } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Atomically move validated staged files over the live database.
+   * Each rename is atomic on the same filesystem; on Windows a rename over an
+   * open/existing target can fail, so we remove-then-rename as a fallback.
+   */
+  private swapIntoPlace(stagingDir: string, verbose: boolean): void {
+    this.close(); // release any open handles on the live files first
+    for (const f of [INDEX_FILE, DATA_FILE, META_FILE]) {
+      const src = join(stagingDir, f);
+      if (!existsSync(src)) continue;
+      const dst = join(DEFAULT_VDB_DIR, f);
+      try {
+        renameSync(src, dst);
+      } catch {
+        try {
+          rmSync(dst, { force: true });
+          renameSync(src, dst);
+        } catch (e) {
+          if (verbose) {
+            console.error(`Failed to swap ${f}: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -278,10 +406,16 @@ export class AppThreatClient {
     } catch { /* already dead */ }
   }
 
-  private async tryVdbCli(verbose: boolean): Promise<boolean> {
+  private async tryVdbCli(targetDir: string, verbose: boolean): Promise<boolean> {
     const { spawn } = await import("node:child_process");
 
-    const DB_DOWNLOAD_TIMEOUT_MS = 180_000; // 3 min timeout — vdb download pulls ~650K CVEs
+    // Generous timeout: a normal pull downloads ~310MB and extracts ~5.4GB, which
+    // easily exceeds 3 minutes. A kill is now SAFE — vdb writes into the staging
+    // dir (via VDB_HOME), never the live DB — so we can afford to wait.
+    const DB_DOWNLOAD_TIMEOUT_MS = 600_000; // 10 min
+
+    // Point vdb at the staging dir so it never touches the live database.
+    const env = { ...process.env, VDB_HOME: targetDir };
 
     // First try the vdb command directly
     const vdbResult = await new Promise<boolean>((resolve) => {
@@ -289,10 +423,11 @@ export class AppThreatClient {
         stdio: verbose ? "inherit" : "pipe",
         shell: false, // Security: avoid shell injection
         windowsHide: true,
+        env,
       });
 
       const timer = setTimeout(() => {
-        if (verbose) console.log("vdb CLI timed out after 3 minutes, killing...");
+        if (verbose) console.log("vdb CLI timed out, killing (staging discarded)...");
         this.forceKillProcess(vdbProcess);
         resolve(false);
       }, DB_DOWNLOAD_TIMEOUT_MS);
@@ -309,7 +444,7 @@ export class AppThreatClient {
     });
 
     if (vdbResult) {
-      if (verbose) console.log("AppThreat database updated successfully via vdb");
+      if (verbose) console.log("AppThreat database downloaded via vdb (staged)");
       return true;
     }
 
@@ -327,10 +462,11 @@ export class AppThreatClient {
         stdio: "pipe", // Always pipe — Python tracebacks (e.g. blocked DLLs) must not bleed into stdout
         shell: false, // Security: avoid shell injection
         windowsHide: true,
+        env,
       });
 
       const timer = setTimeout(() => {
-        if (verbose) console.log("Python vdb module timed out after 3 minutes, killing...");
+        if (verbose) console.log("Python vdb module timed out, killing (staging discarded)...");
         this.forceKillProcess(pythonProcess);
         resolve(false);
       }, DB_DOWNLOAD_TIMEOUT_MS);
@@ -338,7 +474,7 @@ export class AppThreatClient {
       pythonProcess.on("close", (code) => {
         clearTimeout(timer);
         if (code === 0) {
-          if (verbose) console.log("AppThreat database updated successfully via Python");
+          if (verbose) console.log("AppThreat database downloaded via Python (staged)");
           resolve(true);
         } else {
           resolve(false);
@@ -353,31 +489,23 @@ export class AppThreatClient {
   }
 
   /**
-   * Try to download using oras CLI directly
+   * Try to download using oras CLI directly.
+   * oras pulls the COMPRESSED layers (data.vdb6.tar.xz, data.index.vdb6.tar.xz)
+   * into the target dir; we then extract them ourselves into usable .vdb6 files.
+   * (Previously this pulled the layers but never extracted them, so oras alone
+   * could not produce a working database.)
    */
-  private async tryOrasDownload(verbose: boolean): Promise<boolean> {
+  private async tryOrasDownload(targetDir: string, verbose: boolean): Promise<boolean> {
     const { spawn } = await import("node:child_process");
-    const { mkdirSync, existsSync, renameSync, rmSync } = await import("node:fs");
-    const { join } = await import("node:path");
 
-    // Ensure target directory exists
-    if (!existsSync(DEFAULT_VDB_DIR)) {
-      try {
-        mkdirSync(DEFAULT_VDB_DIR, { recursive: true });
-      } catch {
-        return false;
-      }
-    }
+    const ORAS_TIMEOUT_MS = 600_000; // 10 min — large download + we own the extract
 
-    const ORAS_TIMEOUT_MS = 120_000; // 120s for oras (larger download)
-
-    return new Promise((resolve) => {
+    const pulled = await new Promise<boolean>((resolve) => {
       if (verbose) console.log("Attempting download via oras CLI...");
 
-      // oras pull downloads to current directory, so we need to cd first
       const orasProcess = spawn(
         "oras",
-        ["pull", "ghcr.io/appthreat/vdbxz-app:latest", "--output", DEFAULT_VDB_DIR],
+        ["pull", "ghcr.io/appthreat/vdbxz-app:latest", "--output", targetDir],
         {
           stdio: verbose ? "inherit" : "pipe",
           shell: false, // Security: avoid shell injection
@@ -386,22 +514,67 @@ export class AppThreatClient {
       );
 
       const timer = setTimeout(() => {
-        if (verbose) console.log("oras download timed out after 120s, killing...");
+        if (verbose) console.log("oras download timed out, killing (staging discarded)...");
         this.forceKillProcess(orasProcess);
         resolve(false);
       }, ORAS_TIMEOUT_MS);
 
       orasProcess.on("close", (code) => {
         clearTimeout(timer);
-        if (code === 0) {
-          if (verbose) console.log("AppThreat database downloaded successfully via oras");
-          resolve(true);
-        } else {
-          resolve(false);
-        }
+        resolve(code === 0);
       });
 
       orasProcess.on("error", () => {
+        clearTimeout(timer);
+        resolve(false);
+      });
+    });
+
+    if (!pulled) return false;
+
+    // Extract the compressed layers into usable .vdb6 files (inside staging).
+    const layers = [
+      join(targetDir, `${DATA_FILE}.tar.xz`),
+      join(targetDir, `${INDEX_FILE}.tar.xz`),
+    ];
+    for (const layer of layers) {
+      if (!existsSync(layer)) {
+        if (verbose) console.error(`Expected layer missing after oras pull: ${layer}`);
+        return false;
+      }
+      if (!(await this.extractTarXz(layer, targetDir, verbose))) {
+        if (verbose) console.error(`Failed to extract layer: ${layer}`);
+        return false;
+      }
+    }
+    if (verbose) console.log("AppThreat layers extracted via oras + tar (staged)");
+    return true;
+  }
+
+  /** Extract a .tar.xz archive into destDir using the system tar. */
+  private async extractTarXz(archive: string, destDir: string, verbose: boolean): Promise<boolean> {
+    const { spawn } = await import("node:child_process");
+    const EXTRACT_TIMEOUT_MS = 600_000; // 10 min
+
+    return new Promise((resolve) => {
+      const proc = spawn("tar", ["-xf", archive, "-C", destDir], {
+        stdio: verbose ? "inherit" : "pipe",
+        shell: false, // Security: avoid shell injection
+        windowsHide: true,
+      });
+
+      const timer = setTimeout(() => {
+        if (verbose) console.log("tar extraction timed out, killing (staging discarded)...");
+        this.forceKillProcess(proc);
+        resolve(false);
+      }, EXTRACT_TIMEOUT_MS);
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        resolve(code === 0);
+      });
+
+      proc.on("error", () => {
         clearTimeout(timer);
         resolve(false);
       });

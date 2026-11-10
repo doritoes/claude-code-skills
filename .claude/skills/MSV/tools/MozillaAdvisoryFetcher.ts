@@ -42,7 +42,7 @@ export interface MozillaAdvisory {
   impact: "critical" | "high" | "moderate" | "low";
   title: string;
   products: string[];        // ["Firefox 133", "Firefox ESR 128.5"]
-  fixedVersions: Map<string, string>;  // product -> version
+  fixedVersions: Record<string, string>;  // product -> version (plain object: JSON/cache-safe; a Map serializes to {})
   vulnerabilities: MozillaVulnerability[];
 }
 
@@ -266,12 +266,12 @@ export class MozillaAdvisoryFetcher {
     const products = parsed.fixed_in || [];
 
     // Build fixed versions map
-    const fixedVersions = new Map<string, string>();
+    const fixedVersions: Record<string, string> = {};
     for (const productStr of products) {
       for (const [product, pattern] of Object.entries(PRODUCT_PATTERNS)) {
         const match = productStr.match(pattern);
         if (match && match[1]) {
-          fixedVersions.set(product, match[1]);
+          fixedVersions[product] = match[1];
         }
       }
     }
